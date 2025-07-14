@@ -55,6 +55,14 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
   /// @param newThreshold The new threshold value.
   event DelegateeEligibilityThresholdScoreSet(uint256 oldThreshold, uint256 newThreshold);
 
+  /// @notice The data structure accepted as an argument to `updateDelegateeScores`.
+  /// @param delegatee The address of the delegatee whose score is being updated.
+  /// @param newScore The new score to be assigned to the delegatee.
+  struct DelegateeScoreUpdate {
+    address delegatee;
+    uint256 newScore;
+  }
+
   /// @notice Error thrown when a non-score oracle address tries to call the `updateDelegateeScore`
   /// function.
   error BinaryEligibilityOracleEarningPowerCalculator__Unauthorized(bytes32 reason, address caller);
@@ -157,6 +165,23 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
     return (_amountStaked, true);
   }
 
+  /// @notice Determines if a delegatee is eligible based on their score.
+  /// @dev A delegatee is considered eligible if their score is greater than or equal to the
+  /// eligibility threshold.
+  /// @param _delegatee The address of the delegatee to check.
+  /// @return bool Returns true if the delegatee is eligible, false otherwise.
+  function isDelegateeEligible(address _delegatee) external view returns (bool) {
+    return _isDelegateeEligible(_delegatee);
+  }
+
+  /// @notice Checks if the oracle's last update is considered stale.
+  /// @dev An oracle is considered stale if the time since its last update exceeds the
+  /// STALE_ORACLE_WINDOW.
+  /// @return bool Returns true if the oracle is stale, false otherwise.
+  function isOracleStale() external view returns (bool) {
+    return _isOracleStale();
+  }
+
   /// @notice Updates the eligibility score of a delegatee.
   /// @dev This function can only be called by the authorized `scoreOracle` address.
   /// @dev If the delegatee's score is locked, the update will be reverted.
@@ -164,16 +189,32 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
   /// @param _delegatee The address of the delegatee whose score is being updated.
   /// @param _newScore The new score to be assigned to the delegatee.
   function updateDelegateeScore(address _delegatee, uint256 _newScore) public {
-    if (msg.sender != scoreOracle) {
-      revert BinaryEligibilityOracleEarningPowerCalculator__Unauthorized("not oracle", msg.sender);
-    }
-    if (delegateeScoreLockStatus[_delegatee]) {
-      revert BinaryEligibilityOracleEarningPowerCalculator__DelegateeScoreLocked(_delegatee);
-    }
-    if (isOraclePaused) {
-      revert BinaryEligibilityOracleEarningPowerCalculator__DisallowedWhilePaused();
-    }
+    _revertIfNotScoreOracle();
+    _revertIfPaused();
+    _revertIfDelegateeScoreLocked(_delegatee);
     _updateDelegateeScore(_delegatee, _newScore);
+    lastOracleUpdateTime = block.timestamp;
+  }
+
+  /// @notice Updates the eligibility scores of multiple delegatees in a single transaction.
+  /// @dev This function can only be called by the authorized `scoreOracle` address.
+  /// @dev If the oracle is paused, the update will be reverted.
+  /// @dev If any of the delegatees' scores is locked, the update will be reverted.
+  /// @dev Updates are processed sequentially. If the same delegatee appears multiple times in the
+  /// array, the last update will be applied.
+  /// @dev An empty array can be passed in by the oracle in order to update the
+  /// `lastOracleUpdateTime` keeping the oracle fresh without updating any scores.
+  /// @param _delegateeScoreUpdates An array of DelegateeScoreUpdate structs containing delegatee
+  /// addresses and their new scores.
+  function updateDelegateeScores(DelegateeScoreUpdate[] calldata _delegateeScoreUpdates) public {
+    _revertIfNotScoreOracle();
+    _revertIfPaused();
+    uint256 _delegateesLength = _delegateeScoreUpdates.length;
+    for (uint256 _i = 0; _i < _delegateesLength; _i++) {
+      DelegateeScoreUpdate calldata _update = _delegateeScoreUpdates[_i];
+      _revertIfDelegateeScoreLocked(_update.delegatee);
+      _updateDelegateeScore(_update.delegatee, _update.newScore);
+    }
     lastOracleUpdateTime = block.timestamp;
   }
 
@@ -264,7 +305,7 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
     _setOraclePauseGuardian(_newOraclePauseGuardian);
   }
 
-  /// @notice Checks if the oracle's last update is considered stale.
+  /// @notice Internal function that checks if the oracle's last update is considered stale.
   /// @dev An oracle is considered stale if the time since its last update exceeds the
   /// STALE_ORACLE_WINDOW.
   /// @return bool Returns true if the oracle is stale, false otherwise.
@@ -272,7 +313,7 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
     return block.timestamp - lastOracleUpdateTime > STALE_ORACLE_WINDOW;
   }
 
-  /// @notice Determines if a delegatee is eligible based on their score.
+  /// @notice Internal function that determines if a delegatee is eligible based on their score.
   /// @dev A delegatee is considered eligible if their score is greater than or equal to the
   /// eligibility threshold.
   /// @param _delegatee The address of the delegatee to check.
@@ -327,5 +368,27 @@ contract BinaryEligibilityOracleEarningPowerCalculator is Ownable, IEarningPower
       delegateeEligibilityThresholdScore, _newDelegateeScoreEligibilityThreshold
     );
     delegateeEligibilityThresholdScore = _newDelegateeScoreEligibilityThreshold;
+  }
+
+  /// @notice Internal function to revert when the function is not called by the score oracle.
+  function _revertIfNotScoreOracle() internal view {
+    if (msg.sender != scoreOracle) {
+      revert BinaryEligibilityOracleEarningPowerCalculator__Unauthorized("not oracle", msg.sender);
+    }
+  }
+
+  /// @notice Internal function to revert when the oracle is paused.
+  function _revertIfPaused() internal view {
+    if (isOraclePaused) {
+      revert BinaryEligibilityOracleEarningPowerCalculator__DisallowedWhilePaused();
+    }
+  }
+
+  /// @notice Internal function to revert when delegatee score is locked.
+  /// @param _delegatee The address of the delegatee whose score lock status is being checked.
+  function _revertIfDelegateeScoreLocked(address _delegatee) internal view {
+    if (delegateeScoreLockStatus[_delegatee]) {
+      revert BinaryEligibilityOracleEarningPowerCalculator__DelegateeScoreLocked(_delegatee);
+    }
   }
 }

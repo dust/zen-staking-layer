@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.23;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test, console2, Vm} from "forge-std/Test.sol";
 import {
   BinaryEligibilityOracleEarningPowerCalculator as EarningPowerCalculator,
   Ownable
@@ -32,6 +32,69 @@ contract EarningPowerCalculatorTest is Test {
       delegateeScoreEligibilityThreshold,
       updateEligibilityDelay
     );
+  }
+
+  function _boundToRealisticDelegateeScoreUpdateLength(uint256 _length)
+    internal
+    pure
+    returns (uint256)
+  {
+    // Use conservative bounds to prevent overflow
+    return bound(_length, 1, 100);
+  }
+
+  function _boundScoreAboveThreshold(uint256 _score) internal view returns (uint256) {
+    return bound(_score, calculator.delegateeEligibilityThresholdScore(), type(uint256).max);
+  }
+
+  function _boundScoreBelowThreshold(uint256 _score) internal view returns (uint256) {
+    return bound(_score, 0, calculator.delegateeEligibilityThresholdScore() - 1);
+  }
+
+  function _generateValidDelegateeScoreUpdates(uint256 _length, uint256 _seed)
+    internal
+    pure
+    returns (EarningPowerCalculator.DelegateeScoreUpdate[] memory)
+  {
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory updates =
+      new EarningPowerCalculator.DelegateeScoreUpdate[](_length);
+
+    for (uint256 i = 0; i < _length; i++) {
+      // Generate unique addresses using seed and index
+      // Ensure addresses are never zero and always unique
+      address delegatee =
+        address(uint160(uint256(keccak256(abi.encodePacked(_seed, i, "delegatee")))));
+      if (delegatee == address(0)) delegatee = address(uint160(i + 1));
+
+      uint256 score = uint256(keccak256(abi.encodePacked(_seed, i, "score")));
+
+      updates[i] =
+        EarningPowerCalculator.DelegateeScoreUpdate({delegatee: delegatee, newScore: score});
+    }
+    return updates;
+  }
+
+  function _setUpdatesWithScore(
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates,
+    uint256 _newScore
+  ) internal pure {
+    for (uint256 i = 0; i < _updates.length; i++) {
+      _updates[i].newScore = _newScore;
+    }
+  }
+
+  function _cloneUpdatesWithScore(
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _baseUpdates,
+    uint256 _newScore
+  ) internal pure returns (EarningPowerCalculator.DelegateeScoreUpdate[] memory) {
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _cloned =
+      new EarningPowerCalculator.DelegateeScoreUpdate[](_baseUpdates.length);
+
+    for (uint256 i = 0; i < _baseUpdates.length; i++) {
+      _cloned[i].delegatee = _baseUpdates[i].delegatee;
+      _cloned[i].newScore = _newScore;
+    }
+    return _cloned;
   }
 }
 
@@ -525,6 +588,282 @@ contract UpdateDelegateeScore is EarningPowerCalculatorTest {
   }
 }
 
+contract UpdateDelegateeScores is EarningPowerCalculatorTest {
+  function testFuzz_EmptyDelegateeUpdateArrayOnlyBumpsLastOracleUpdateTime(uint256 _randomTimestamp)
+    public
+  {
+    vm.warp(_randomTimestamp);
+
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      new EarningPowerCalculator.DelegateeScoreUpdate[](0);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+
+    assertEq(calculator.lastOracleUpdateTime(), _randomTimestamp);
+    assertEq(entries.length, 0);
+  }
+
+  function testFuzz_UpdateSingleDelegateeScoreOnce(address _delegatee, uint256 _newScore) public {
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      new EarningPowerCalculator.DelegateeScoreUpdate[](1);
+    _updates[0].delegatee = _delegatee;
+    _updates[0].newScore = _newScore;
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+
+    assertEq(calculator.delegateeScores(_delegatee), _newScore);
+    assertEq(calculator.lastOracleUpdateTime(), block.timestamp);
+  }
+
+  function testFuzz_UpdateSingleDelegateeScoreMultipleTimes(
+    uint256 _length,
+    uint256 _seed,
+    address _delegatee
+  ) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    for (uint256 _i = 0; _i < _length; _i++) {
+      _updates[_i].delegatee = _delegatee;
+    }
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+    assertEq(calculator.delegateeScores(_delegatee), _updates[_length - 1].newScore);
+    assertEq(calculator.lastOracleUpdateTime(), block.timestamp);
+  }
+
+  function testFuzz_UpdatesMultipleDelegateeScoreOnce(uint256 _length, uint256 _seed) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+
+    for (uint256 _i = 0; _i < _updates.length; _i++) {
+      assertEq(calculator.delegateeScores(_updates[_i].delegatee), _updates[_i].newScore);
+    }
+    assertEq(calculator.lastOracleUpdateTime(), block.timestamp);
+  }
+
+  function testFuzz_UpdateMultipleDelegateesScoreMultipleTimes(
+    uint256 _length,
+    uint256 _seed,
+    address _delegatee1,
+    address _delegatee2
+  ) public {
+    vm.assume(_delegatee1 != _delegatee2);
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    for (uint256 _i = 0; _i < _length; _i++) {
+      _updates[_i].delegatee = _i % 2 == 0 ? _delegatee1 : _delegatee2;
+    }
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+
+    uint256 lastScore1;
+    uint256 lastScore2;
+
+    for (uint256 _i = 0; _i < _length; _i++) {
+      if (_updates[_i].delegatee == _delegatee1) lastScore1 = _updates[_i].newScore;
+      else lastScore2 = _updates[_i].newScore;
+    }
+
+    assertEq(calculator.delegateeScores(_delegatee1), lastScore1);
+    assertEq(calculator.delegateeScores(_delegatee2), lastScore2);
+    assertEq(calculator.lastOracleUpdateTime(), block.timestamp);
+  }
+
+  function testFuzz_EmitsAnEventForEachDelegateeScoreUpdated(uint256 _length, uint256 _seed) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    vm.prank(scoreOracle);
+    for (uint256 _i = 0; _i < _length; _i++) {
+      vm.expectEmit();
+      emit EarningPowerCalculator.DelegateeScoreUpdated(
+        _updates[_i].delegatee, 0, _updates[_i].newScore
+      );
+    }
+    calculator.updateDelegateeScores(_updates);
+  }
+
+  function testFuzz_UpdatesTimeOfIneligibilityWhenDelegateeScoresDropBelowThreshold(
+    uint256 _length,
+    uint256 _seed,
+    uint256 _delegateeScoreAboveThreshold,
+    uint256 _delegateeScoreBelowThreshold,
+    uint256 _randomTimestamp
+  ) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updatesAbove =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+    _delegateeScoreAboveThreshold = _boundScoreAboveThreshold(_delegateeScoreAboveThreshold);
+    _delegateeScoreBelowThreshold = _boundScoreBelowThreshold(_delegateeScoreBelowThreshold);
+
+    _setUpdatesWithScore(_updatesAbove, _delegateeScoreAboveThreshold);
+
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updatesBelow =
+      _cloneUpdatesWithScore(_updatesAbove, _delegateeScoreBelowThreshold);
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updatesAbove);
+
+    vm.warp(_randomTimestamp);
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updatesBelow);
+
+    for (uint256 _i = 0; _i < _length; _i++) {
+      assertEq(calculator.timeOfIneligibility(_updatesAbove[_i].delegatee), _randomTimestamp);
+    }
+  }
+
+  function testFuzz_ReturnsCorrectTimeOfIneligibilityWhenDelegateesBecomeEligible(
+    uint256 _length,
+    uint256 _seed,
+    uint256 _delegateeScoreAboveThreshold,
+    uint256 _randomTimestamp
+  ) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    _delegateeScoreAboveThreshold = _boundScoreAboveThreshold(_delegateeScoreAboveThreshold);
+
+    _setUpdatesWithScore(_updates, _delegateeScoreAboveThreshold);
+
+    vm.warp(_randomTimestamp);
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+    for (uint256 _i = 0; _i < _length; _i++) {
+      assertEq(calculator.timeOfIneligibility(_updates[_i].delegatee), 0);
+    }
+  }
+
+  function testFuzz_ReturnsCorrectTimeOfIneligibilityWhenIneligibleDelegateeScoresAreUpdatedWithAScoreBelowThreshold(
+    uint256 _length,
+    uint256 _seed,
+    uint256 _delegateeScoreAboveThreshold,
+    uint256 _delegateeScoreBelowThreshold,
+    uint256 _updatedDelegateeScoreBelowThreshold,
+    uint256 _expectedTimestamp,
+    uint256 _randomTimestamp
+  ) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updatesAbove =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    _delegateeScoreAboveThreshold = _boundScoreAboveThreshold(_delegateeScoreAboveThreshold);
+    _delegateeScoreBelowThreshold = _boundScoreBelowThreshold(_delegateeScoreBelowThreshold);
+    _updatedDelegateeScoreBelowThreshold =
+      _boundScoreBelowThreshold(_updatedDelegateeScoreBelowThreshold);
+
+    _setUpdatesWithScore(_updatesAbove, _delegateeScoreAboveThreshold);
+
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updatesBelow =
+      _cloneUpdatesWithScore(_updatesAbove, _delegateeScoreBelowThreshold);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _newUpdatesBelow =
+      _cloneUpdatesWithScore(_updatesAbove, _updatedDelegateeScoreBelowThreshold);
+
+    vm.startPrank(scoreOracle);
+    calculator.updateDelegateeScores(_updatesAbove);
+
+    // First time _delegatee becomes ineligible
+    vm.warp(_expectedTimestamp);
+    calculator.updateDelegateeScores(_updatesBelow);
+    console2.log(_expectedTimestamp);
+
+    // Since the delegatee is already ineligible, a score update that's below the threshold
+    // shouldn't change the lastDelegateeEligibilityChangeTime to _randomTimestamp.
+    vm.warp(_randomTimestamp);
+    calculator.updateDelegateeScores(_newUpdatesBelow);
+    vm.stopPrank();
+
+    for (uint256 _i = 0; _i < _length; _i++) {
+      assertEq(calculator.timeOfIneligibility(_updatesAbove[_i].delegatee), _expectedTimestamp);
+    }
+  }
+
+  function testFuzz_RevertIf_CallerIsNotTheScoreOracle(
+    address _caller,
+    uint256 _length,
+    uint256 _seed
+  ) public {
+    vm.assume(_caller != scoreOracle);
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    vm.prank(_caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        EarningPowerCalculator.BinaryEligibilityOracleEarningPowerCalculator__Unauthorized.selector,
+        bytes32("not oracle"),
+        _caller
+      )
+    );
+    calculator.updateDelegateeScores(_updates);
+  }
+
+  function testFuzz_RevertIf_AnyDelegateeScoreIsLocked(
+    uint256 _length,
+    uint256 _seed,
+    uint256 overrideIndex,
+    uint256 _overrideScore
+  ) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    overrideIndex = overrideIndex % _updates.length;
+    address lockedDelegatee = _updates[overrideIndex].delegatee;
+
+    vm.prank(owner);
+    calculator.overrideDelegateeScore(lockedDelegatee, _overrideScore);
+
+    vm.prank(scoreOracle);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        EarningPowerCalculator
+          .BinaryEligibilityOracleEarningPowerCalculator__DelegateeScoreLocked
+          .selector,
+        lockedDelegatee
+      )
+    );
+    calculator.updateDelegateeScores(_updates);
+  }
+
+  function testFuzz_RevertIf_OracleIsPaused(uint256 _length, uint256 _seed) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+
+    vm.prank(oraclePauseGuardian);
+    calculator.setOracleState(true);
+
+    vm.prank(scoreOracle);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        EarningPowerCalculator
+          .BinaryEligibilityOracleEarningPowerCalculator__DisallowedWhilePaused
+          .selector
+      )
+    );
+    calculator.updateDelegateeScores(_updates);
+  }
+}
+
 contract OverrideDelegateeScore is EarningPowerCalculatorTest {
   function testFuzz_OverrideDelegateScore(address _delegatee, uint256 _newScore, uint256 _timestamp)
     public
@@ -730,5 +1069,99 @@ contract SetDelegateeScoreEligibilityThreshold is EarningPowerCalculatorTest {
     vm.prank(_caller);
     vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, _caller));
     calculator.setDelegateeScoreEligibilityThreshold(_newDelegateScoreEligibilityThreshold);
+  }
+}
+
+contract IsDelegateeEligible is EarningPowerCalculatorTest {
+  function testFuzz_EligibleWhenScoreIsEqualOrAboveTheThreshold(address _delegatee, uint256 _score)
+    public
+  {
+    _score = _boundScoreAboveThreshold(_score);
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _score);
+    assertTrue(calculator.isDelegateeEligible(_delegatee));
+  }
+
+  function testFuzz_IneligibleWhenScoreIsBelowTheThreshold(address _delegatee, uint256 _score)
+    public
+  {
+    _score = _boundScoreBelowThreshold(_score);
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _score);
+    assertFalse(calculator.isDelegateeEligible(_delegatee));
+  }
+
+  function testFuzz_EligibleAfterBeingIneligible(
+    address _delegatee,
+    uint256 _belowScore,
+    uint256 _aboveScore
+  ) public {
+    _belowScore = _boundScoreBelowThreshold(_belowScore);
+    _aboveScore = _boundScoreAboveThreshold(_aboveScore);
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _belowScore);
+    assertFalse(calculator.isDelegateeEligible(_delegatee));
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _aboveScore);
+    assertTrue(calculator.isDelegateeEligible(_delegatee));
+  }
+
+  function testFuzz_IneligibleAfterBeingEligible(
+    address _delegatee,
+    uint256 _aboveScore,
+    uint256 _belowScore
+  ) public {
+    _aboveScore = _boundScoreAboveThreshold(_aboveScore);
+    _belowScore = _boundScoreBelowThreshold(_belowScore);
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _aboveScore);
+    assertTrue(calculator.isDelegateeEligible(_delegatee));
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _belowScore);
+    assertFalse(calculator.isDelegateeEligible(_delegatee));
+  }
+}
+
+contract IsOracleStale is EarningPowerCalculatorTest {
+  function testFuzz_OracleIsNotStaleDuringStaleOracleWindow(uint48 _timeElapsed) public {
+    _timeElapsed = uint48(bound(_timeElapsed, 0, staleOracleWindow));
+
+    vm.warp(block.timestamp + _timeElapsed);
+    assertFalse(calculator.isOracleStale());
+  }
+
+  function testFuzz_OracleStaleAfterTheOracleStaleWindow(uint48 _timeElapsed) public {
+    _timeElapsed = uint48(bound(_timeElapsed, staleOracleWindow + 1, type(uint48).max));
+
+    vm.warp(block.timestamp + _timeElapsed);
+    assertTrue(calculator.isOracleStale());
+  }
+
+  function testFuzz_UpdateScoreResetsOracleStaleness(address _delegatee, uint256 _score) public {
+    vm.warp(block.timestamp + staleOracleWindow + 1);
+    assertTrue(calculator.isOracleStale());
+
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScore(_delegatee, _score);
+
+    assertFalse(calculator.isOracleStale());
+  }
+
+  function testFuzz_BatchUpdateResetsOracleStaleness(uint256 _length, uint256 _seed) public {
+    _length = _boundToRealisticDelegateeScoreUpdateLength(_length);
+
+    vm.warp(block.timestamp + staleOracleWindow + 1);
+    assertTrue(calculator.isOracleStale());
+
+    EarningPowerCalculator.DelegateeScoreUpdate[] memory _updates =
+      _generateValidDelegateeScoreUpdates(_length, _seed);
+    vm.prank(scoreOracle);
+    calculator.updateDelegateeScores(_updates);
+
+    assertFalse(calculator.isOracleStale());
   }
 }
