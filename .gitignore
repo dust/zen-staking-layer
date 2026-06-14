@@ -10,6 +10,8 @@ out/
 # Dotenv file
 .env
 
+.DS_Store
+
 # Coverage
 lcov.info
 
