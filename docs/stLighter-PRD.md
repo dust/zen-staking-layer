@@ -3,6 +3,7 @@
 ## 产品 & 需求说明书(Phase 1)
 
 > **状态**:初稿,基于 `docs/Lighter-Bridge-Zen-Staking.md` 的产品构思 + 与产品方的多轮决策确认编写。
+> **执行计划**:`docs/stLighter-execution-plan.md`(可中断重启的任务清单,含已完成项)。
 > **底层依赖**:本协议构建于 `ZenStaker`(见 `docs/ZenStaker-Phase1-PRD.md`)之上。
 > **跨链前提(已确认)**:Horizen mainnet 已部署 LayerZero V2 Endpoint 与 DVN 等基础设施;Base 亦原生支持。OFT 部署与接线 **无需 LayerZero 官方审批**(permissionless),由项目方自持 owner/delegate 密钥完成。
 > 标注 **[需确认]** 的条目为待产品方补充的开放项。
@@ -44,6 +45,7 @@ stLighter 是部署在 **Horizen mainnet(基于 Base 的 L3 应用层)** 上的 
 | 赎回模型 | **即时赎回** | burn ltZEN 后立即从 ZenStaker 提取 ZEN 返还用户,与 ZenStaker 无锁定特性一致 |
 | 跨链路径 | **ltZEN 作为 LayerZero V2 OFT,Phase 1 首发即集成** | 原生 OFT,Horizen + Base 两链,mint/burn 式跨链;质押结算仍单点在 Horizen。无需 LayerZero 审批 |
 | Dashboard 数据 | **读两链真实链上状态(非纯索引器)** | ltZEN 在两链都是真实合约,Dashboard 直接读链上余额/汇率,索引器仅做查询加速与事件聚合 |
+| 可升级性 | **StLighter proxy 可升级;ltZEN 不可升级** | 协议逻辑经 proxy 升级,治理 = proxy admin + 多签 + 时间锁;ltZEN 为 immutable OFT,升级时 `setMinter` 迁移至新实现 |
 
 ## 3. 范围边界(Phase 1)
 
@@ -192,7 +194,7 @@ gas 费始终以 **ZEN** 结算给 relayer,但来源随操作而异:
 |------|----------|-----------|
 | `depositWithSig` | ZEN(转入协议) | 从转入的 ZEN 中先扣 `fee`,**剩余部分**才质押并据此 mint ltZEN |
 | `redeemWithSig` | ltZEN(销毁) | 从赎回**产出的 ZEN** 中扣 `fee`,余额转给用户 |
-| `harvest` | 无(permissionless) | 无需 meta-tx;relayer 自行决定是否代发,可由协议从复投奖励中预留极小激励(**[需确认]** 是否给 harvest 加 keeper 激励) |
+| `harvest` | 无(permissionless) | 无需 meta-tx;relayer 自行决定是否代发。keeper 激励见 §6.6(暂无定论,Phase 1 不强制) |
 
 ### 6.3 签名结构(EIP-712)
 
@@ -218,7 +220,7 @@ RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uin
 5. 用 (assets - fee) 走正常 deposit 路径:_harvest → 质押 → mint ltZEN 给 receiver
 ```
 
-> **[需确认]** fee 的收款人:是 `msg.sender`(代发的 relayer)还是签名里另指定的 `feeReceiver`?无许可模式下通常付给 `msg.sender`。
+> **fee 收款人(已确认)**:付给 `msg.sender`(代发该笔交易的 relayer)。签名内不设独立 `feeReceiver` 字段。
 
 ### 6.5 安全考量(gasless 特有)
 
@@ -227,6 +229,28 @@ RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uin
 - **抢跑/审查**:无许可 relayer 降低单点审查风险;若某 relayer 不打包,用户可换 relayer 或自行上链。
 - **fee 与 deposit 顺序**:必须"先扣 fee 再 mint 份额",且 fee 不计入 `totalAssets`/份额计算,避免稀释其他持有者。
 - **零费回退**:若用户自己直接调用(非 gasless),`maxFeeZen=0`,不扣费——gasless 是可选叠加层,不破坏直接调用路径。
+
+### 6.6 Harvest keeper 激励(背景与可选方案,暂无定论)
+
+**背景**: `harvest()` 是 permissionless 的,但链上没有人有义务调用它。虽然 `totalAssets()` 已把 `unclaimedReward` 计入兑换率(估值不因未 harvest 失真),未 harvest 的奖励尚未 `stakeMore` 复投,会影响:
+
+1. **复利节奏**:奖励停留在协议合约余额而非 deposit 本金,earning power 计息基数偏低,全体持有者复利略慢。
+2. **赎回可提取上限**:`redeem` 路径虽会先 `_harvest()`,但若长期无人 harvest,大额赎回依赖用户自身交易触发 harvest,体验上可能出现"兑换率看起来涨了但 withdraw 额度不够"的困惑(已在 redeem 内强制 harvest 缓解)。
+3. **relayer 经济**:keeper 代发 `harvest()` 只花 ETH gas,无直接收入,缺乏持续激励时 harvest 频率完全依赖项目方或善意第三方。
+
+**Phase 1 决策**:暂不引入链上 keeper 激励;依赖 (a) 每次 deposit/redeem 自动 harvest,(b) 项目方/社区 keeper 自愿维护。后续若观测到 harvest 间隔过长再评估。
+
+**可选方案(供后续评估)**:
+
+| 方案 | 机制 | 优点 | 缺点 |
+|------|------|------|------|
+| A. 无激励(当前) | 纯 permissionless,收益靠自动 harvest + 自愿 keeper | 最简单,无额外分账,审计面最小 | harvest 频率不可控 |
+| B. 固定 bps 激励 | `harvest()` 从 claimed 奖励中扣 `harvestBps`(如 1–5 bps)给 `msg.sender` | 直接激励 caller,实现简单 | 从持有者收益中抽成;需设上限防掠夺 |
+| C. 递增/竞争激励 | 距上次 harvest 越久,允许 keeper 拿的激励越高(有硬顶) | 鼓励在"该 harvest 时"才调用,减少无意义调用 | 参数敏感,可能被 MEV 抢跑 |
+| D. 链下补贴 | 项目方运营 keeper bot,或前端/钱包内置 harvest 打包 | 不改合约,灵活 | 中心化,不可持续 |
+| E. 与 gasless 合并 | relayer 在代发 deposit/redeem 时顺带 harvest,从用户 `maxFeeZen` 覆盖 | 复用已有 meta-tx 经济 | 不覆盖"纯 harvest"场景 |
+
+若未来采用方案 B/C,应设硬上限(如 ≤ 50 bps)、与 `feeBps` 分开记账,并在 `AUDIT_DELTA.md` 中记录。
 
 ## 7. 架构与集成
 
@@ -251,17 +275,17 @@ RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uin
 
 ## 8. 安全考量
 
-- **信任假设**:协议合约是 ZenStaker 该 deposit 的唯一 owner/claimer,用户对 ZEN 的所有权完全由 ltZEN 份额代表。协议的 admin/升级权限由 **多签 + 时间锁(timelock)治理** 持有:特权操作(费率调整、合约升级、参数变更)须经多签发起并通过时间锁延迟生效,给用户留出退出窗口。
+- **信任假设**:协议合约是 ZenStaker 该 deposit 的唯一 owner/claimer,用户对 ZEN 的所有权完全由 ltZEN 份额代表。协议的 admin/升级权限由 **proxy + 多签 + 时间锁(timelock)治理** 持有:特权操作(费率调整、合约升级、参数变更)须经多签发起并通过时间锁延迟生效,给用户留出退出窗口。**ltZEN 不可升级**(immutable 部署);协议升级时通过 `LtZEN.setMinter` 将 mint/burn 权迁移至新实现。
 - **兑换率操纵**:`totalAssets` 依赖 ZenStaker 的 `balance` 与 `unclaimedReward`,均为受信合约只读值,不引入外部预言机,降低操纵面。
 - **首存攻击**:见 §5.5,用 OZ 虚拟份额偏移。
 - **重入**:deposit/redeem 涉及外部 ZEN 转账与 ZenStaker 调用,需遵循 checks-effects-interactions 并复用 OZ 的 `ReentrancyGuard`。
 - **协议费上限**:`feeBps` 设硬上限常量 **2000 bps(20%)**,治理调整不得超过该值,防掠夺性费率。
-- **暂停(已确认:仅暂停 deposit)**:提供 emergency pause,**仅冻结 deposit/mint 入口,赎回(redeem/burn)与 harvest 始终可用**,确保用户在任何情况下都能退出。pause 权限由治理(多签 + 时间锁)持有。**[需确认]** 是否额外设一个可即时触发暂停的 guardian(不经时间锁)?
+- **暂停(已确认:仅暂停 deposit)**:提供 emergency pause,**仅冻结 deposit/mint 入口,赎回(redeem/burn)与 harvest 始终可用**,确保用户在任何情况下都能退出。pause 权限由治理(多签 + 时间锁)持有。**不设**可即时触发暂停的 guardian 角色——所有暂停须经治理(多签 + 时间锁)。
 - **跨链(OFT)风险**:
   - **DVN 安全配置**:permissionless 部署意味着安全责任自负。DVN 选择与确认阈值直接决定桥的安全性,需独立评审;建议多 DVN 冗余。
   - **peer 配置**:`setPeer` 错配或被恶意篡改会导致跨链资产损失,故 owner/delegate 必须由治理(多签+时间锁)严格把关。
   - **兑换率跨链一致性**:Base 端 ltZEN 不自行计算兑换率,只引用 Horizen 值,避免两链估值漂移被套利。
-  - **暂停与跨链**:emergency 情况下,OFT 跨链是否需要可暂停?**[需确认]**(注意:暂停跨链可能困住 Base 端用户,需权衡)。
+  - **暂停与跨链(已确认)**:emergency 情况下 **OFT 跨链不可暂停**。用户始终可将 Base 上的 ltZEN 桥回 Horizen 赎回;暂停跨链会困住 spoke 端用户,故明确排除。
 
 ## 9. 验收标准(待实现后补全测试映射)
 
@@ -292,7 +316,7 @@ CI 强度(1000 runs × 50000 calls)下锁死的核心会计性质:
 **已确认:**
 - ✅ harvest 触发:permissionless `harvest()` + stake/redeem 自动 harvest(§5.4)
 - ✅ 赎回前强制 claim + restake(§5.6)
-- ✅ 治理:多签 + 时间锁(§7)
+- ✅ 治理:多签 + 时间锁(§7);**不设**即时 guardian 暂停角色(§8)
 - ✅ 奖励源头:Horizen DAO / 基金会及治理机构,经 ZenStaker notifier 注入(§1)
 - ✅ delegatee:固定为协议合约地址(§5.1)
 - ✅ 紧急暂停:仅冻结 deposit/mint,赎回与 harvest 始终可用(§7)
@@ -301,15 +325,15 @@ CI 强度(1000 runs × 50000 calls)下锁死的核心会计性质:
 - ✅ 代币:symbol `ltZEN`,decimals `18`(§4.1)
 - ✅ 跨链:ltZEN 作为 LayerZero V2 OFT,Phase 1 首发即集成 Horizen + Base;质押结算单点在 Horizen;Horizen 端点/DVN 已就绪、OFT 部署无需审批(§3 / §4 / §6)
 - ✅ Dashboard:读两链真实链上状态(ltZEN 在两链均为真实合约),索引器仅做查询加速(§3 / §6)
+- ✅ **可升级性**:StLighter 协议合约通过 **proxy 可升级**,owner = proxy admin + 多签 + 时间锁;**ltZEN 不可升级**(§7 / §8)
+- ✅ **OFT 安全栈**:部署时具体决定,参考 Horizen ↔ Base 上已有 **ZEN、USDC** OFT 桥的 DVN/确认数配置(§7)
+- ✅ **OFT 跨链暂停**:紧急情况下 **不可暂停** OFT 跨链,避免困住 Base 端用户(§8)
+- ✅ **gasless fee 收款人**:付给 `msg.sender`(relayer)(§6.4)
+- ✅ **harvest keeper 激励**:Phase 1 暂不引入;见 §6.6 背景与可选方案
 
 **仍需产品方补充:**
-1. **暂停 guardian**:除治理(多签+时间锁)外,是否设可**即时**触发暂停的 guardian 角色?(§7)
-2. **ltZEN 代币全称**:symbol 已定 `ltZEN`,完整 name 字符串待定(如 "Lighter Staked ZEN")。
-3. **协议合约 / ltZEN 可升级性**:是否采用代理(proxy)可升级,还是不可升级 + 迁移式治理?(影响信任模型与审计范围)
-4. **金库实现形态**:✅ 已定稿——会计层在 stLighter 协议合约,ltZEN 纯 OFT + EIP-2612(§4.2)。
-5. **OFT 安全栈**:DVN 选型与确认阈值(几个 DVN、多少确认)。
-6. **跨链是否可暂停**:emergency 下 OFT 跨链路径是否需要 pause?(权衡:暂停会困住 Base 端用户)。
-7. **Base 端赎回体验**:Phase 1 Base 用户赎回需先桥回 Horizen,前端是否提供"一键桥回并赎回"引导?(纯前端编排,非合约)
+1. **ltZEN 代币全称**:symbol 已定 `ltZEN`,完整 name 字符串待定(如 "Lighter Staked ZEN")。
+2. **Base 端赎回体验**:Phase 1 Base 用户赎回需先桥回 Horizen,前端是否提供"一键桥回并赎回"引导?(纯前端编排,非合约)
 
 **编写部署脚本/测试骨架时新发现的问题:**
 8. **⚠️ issuedShares 与 ZenStaker `withdraw` 的精度/取整一致性**:✅ 已定稿——`convertToAssets` 在赎回路径**向下取整(favor 协议)**,避免提空导致 revert / 灰尘。已在测试 `test_LargeRedeemNotBlockedByUnharvestedRewards` 标记。

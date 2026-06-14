@@ -12,13 +12,10 @@ import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
 
-/// @notice Test skeleton for the stLighter protocol. Mirrors the structure of ZenStaker.t.sol:
-/// one base contract with shared setUp + helpers, then per-feature child contracts.
+/// @notice Integration tests for the stLighter protocol. Mirrors ZenStaker.t.sol: one base
+/// contract with shared setUp + helpers, then per-feature child contracts.
 ///
-/// NOTE: These tests are NON-COMPILING SCAFFOLDING until the StLighter / LtZEN function bodies
-/// and the LayerZero OFT wiring are implemented. They encode the intended behavior so the
-/// implementation has a target. Cross-chain OFT tests require LayerZero's TestHelperOz5 harness
-/// (or a mock endpoint) — stubbed in CrossChain below.
+/// Cross-chain OFT tests are stubbed in `CrossChain` (require LayerZero TestHelperOz5).
 contract StLighterTest is Test {
   ERC20VotesMock zen;
   IdentityEarningPowerCalculator calculator;
@@ -245,6 +242,36 @@ contract Redeem is StLighterTest {
     vm.prank(alice);
     protocol.redeem(shares, alice); // redeem must work even when paused
   }
+
+  function test_PreviewRedeemMatchesLastExitRedeem() public {
+    uint256 shares = _deposit(alice, 1000e18);
+    _notifyReward(100e18);
+    vm.warp(block.timestamp + zenStaker.REWARD_DURATION());
+
+    uint256 preview = protocol.previewRedeem(shares);
+    vm.prank(alice);
+    uint256 assets = protocol.redeem(shares, alice);
+    assertEq(assets, preview);
+    assertGt(assets, 1000e18);
+  }
+
+  function test_LastExitLeavesNoStrandedZen() public {
+    uint256 aliceShares = _deposit(alice, 800e18);
+    uint256 bobShares = _deposit(bob, 200e18);
+    _notifyReward(50e18);
+    vm.warp(block.timestamp + zenStaker.REWARD_DURATION());
+
+    vm.prank(alice);
+    protocol.redeem(aliceShares, alice);
+
+    uint256 preview = protocol.previewRedeem(bobShares);
+    vm.prank(bob);
+    uint256 assets = protocol.redeem(bobShares, bob);
+
+    assertEq(assets, preview);
+    assertEq(protocol.issuedShares(), 0);
+    assertLe(zen.balanceOf(address(protocol)), 1e6);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +370,50 @@ contract Governance is StLighterTest {
     vm.expectRevert();
     vm.prank(alice);
     protocol.setFeeParameters(100, makeAddr("treasury"));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ltZEN EIP-2612 permit
+// ---------------------------------------------------------------------------
+contract LtZENPermit is StLighterTest {
+  bytes32 constant PERMIT_TYPEHASH =
+    keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
+  uint256 ownerKey = 0xA11CE;
+  address owner;
+  address spender = makeAddr("spender");
+
+  function setUp() public override {
+    super.setUp();
+    owner = vm.addr(ownerKey);
+  }
+
+  function _depositFor(address _u, uint256 _assets) internal returns (uint256 shares) {
+    zen.mint(_u, _assets);
+    vm.startPrank(_u);
+    zen.approve(address(protocol), _assets);
+    shares = protocol.deposit(_assets, _u);
+    vm.stopPrank();
+  }
+
+  function test_PermitAllowsTransferWithoutPriorApproval() public {
+    uint256 shares = _depositFor(owner, 1000e18);
+    uint256 deadline = block.timestamp + 1 hours;
+
+    bytes32 message = keccak256(
+      abi.encode(PERMIT_TYPEHASH, owner, spender, shares, ltZen.nonces(owner), deadline)
+    );
+    bytes32 messageHash =
+      keccak256(abi.encodePacked("\x19\x01", ltZen.DOMAIN_SEPARATOR(), message));
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, messageHash);
+
+    ltZen.permit(owner, spender, shares, deadline, v, r, s);
+    vm.prank(spender);
+    ltZen.transferFrom(owner, spender, shares);
+
+    assertEq(ltZen.balanceOf(spender), shares);
+    assertEq(ltZen.balanceOf(owner), 0);
   }
 }
 

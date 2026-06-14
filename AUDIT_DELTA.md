@@ -1,4 +1,4 @@
-# Audit Delta — ZenStaker
+# Audit Delta — ZenStaker & stLighter
 
 ## Audited base
 
@@ -80,3 +80,56 @@ The new view functions are stateless reads with no side effects and require no
 re-audit of the core contracts. `ZenDelegationSurrogate` contains no logic
 beyond the `DelegationSurrogate` base constructor. `IdentityEarningPowerCalculator`
 is a pure passthrough already present in the audited repository.
+
+---
+
+## stLighter (liquid staking layer)
+
+stLighter is a **new subsystem** built on top of the deployed ZenStaker. It does
+not modify any audited Staker write path; it is an external caller of ZenStaker's
+public API (`stake`, `stakeMore`, `withdraw`, `claimReward`) and ZenStaker view
+helpers (`getDepositInfo`).
+
+### New files
+
+| File | Role |
+|------|------|
+| `src/stlighter/StLighter.sol` | Pooled vault accounting (ERC4626-style), auto-compound, gasless meta-tx |
+| `src/stlighter/LtZEN.sol` | LayerZero V2 OFT share token + EIP-2612 permit |
+| `src/stlighter/ILtZEN.sol` | Minimal mint/burn interface for the protocol |
+| `script/DeployStLighterHorizen.s.sol` | Hub deployment (ltZEN + StLighter + minter wiring) |
+| `script/DeployStLighterBase.s.sol` | Spoke deployment (ltZEN only, minter = 0) |
+| `script/WireStLighterOFT.s.sol` | OFT peer + DVN wiring (deployment-time) |
+| `test/StLighter.t.sol` | Integration tests |
+| `test/StLighter.invariants.t.sol` | Accounting invariant suite |
+| `test/helpers/StLighter.handler.sol` | Invariant fuzz handler |
+
+### Relationship to audited base
+
+- **ZenStaker / Staker**: unchanged write logic. stLighter holds a single aggregate
+  deposit where it is owner and claimer.
+- **LtZEN**: new token contract; inherits LayerZero `OFT` (not part of audited
+  base). Immutable deployment — not upgradeable.
+- **StLighter**: new protocol contract. Planned deployment via **proxy** (not yet
+  implemented in scripts); governance = proxy admin + multisig + timelock.
+
+### Build configuration note
+
+`foundry.toml` sets `via_ir = true` globally because the LayerZero OFT inheritance
+chain requires it. This changes bytecode for all contracts (including the audited
+Staker base) but behavior is verified unchanged by the existing test suite.
+
+### New dependencies (git submodules)
+
+- `lib/devtools` — LayerZero OFT/OApp EVM packages
+- `lib/LayerZero-v2` — LayerZero V2 protocol
+
+### Audit implications
+
+- stLighter is **net-new code** requiring a dedicated audit scope.
+- ZenStaker audit delta is unchanged; stLighter only **calls** ZenStaker, it does
+  not inherit or override it.
+- Cross-chain (OFT) security depends on DVN/peer configuration at deployment;
+  reference existing Horizen ↔ Base ZEN/USDC bridge settings.
+- Planned proxy upgrade path for StLighter must preserve storage layout across
+  implementation versions; ltZEN `minter` migrates via `setMinter` on upgrade.
