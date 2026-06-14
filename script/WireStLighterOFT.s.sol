@@ -18,8 +18,8 @@ import {LtZEN} from "../src/stlighter/LtZEN.sol";
 ///   PEER_LT_ZEN         — ltZEN address on the REMOTE chain
 ///   PRIVATE_KEY         — OFT owner key (governance)
 ///
-/// DVN / security stack config (open question §9-5) is left as TODO — set send/receive libraries
-/// and ULN config (required + optional DVNs, confirmations) before going live.
+/// DVN / ULN config: run `ConfigureStLighterOFTDVN.s.sol` per chain after peering.
+/// Copy parameters from Horizen ZenTokenOFT (`0x57da…9280`) — see `docs/stLighter-oft-reference.md`.
 contract WireStLighterOFT is Script {
   function run() external {
     address localLtZen = vm.envAddress("LT_ZEN_LOCAL");
@@ -30,13 +30,12 @@ contract WireStLighterOFT is Script {
     vm.startBroadcast(ownerKey);
 
     LtZEN ltZen = LtZEN(localLtZen);
-    // ltZen.setPeer(peerEid, bytes32(uint256(uint160(peerLtZen))));   // TODO: OFT.setPeer
+    ltZen.setPeer(peerEid, bytes32(uint256(uint160(peerLtZen))));
     console2.log("Set peer on:", localLtZen);
     console2.log("Peer eid:   ", peerEid);
     console2.log("Peer ltZEN: ", peerLtZen);
-
-    // TODO: configure DVNs + confirmations via EndpointV2.setConfig (send + receive ULN).
-    //       e.g. required DVNs = {LayerZero Labs DVN, <second DVN>}, confirmations = N.
+    console2.log("NOTE: run ConfigureStLighterOFTDVN.s.sol per chain (copy DVN from ZenTokenOFT).");
+    console2.log("      See docs/stLighter-oft-reference.md");
 
     vm.stopBroadcast();
   }

@@ -94,13 +94,14 @@ helpers (`getDepositInfo`).
 
 | File | Role |
 |------|------|
-| `src/stlighter/StLighter.sol` | Pooled vault accounting (ERC4626-style), auto-compound, gasless meta-tx |
+| `src/stlighter/StLighter.sol` | Pooled vault accounting (ERC4626-style), auto-compound, gasless meta-tx, `depositWithPermit` / `depositWithSigAndPermit`, `MAX_GAS_FEE_ZEN` |
 | `src/stlighter/LtZEN.sol` | LayerZero V2 OFT share token + EIP-2612 permit |
 | `src/stlighter/ILtZEN.sol` | Minimal mint/burn interface for the protocol |
 | `script/DeployStLighterHorizen.s.sol` | Hub deployment (ltZEN + StLighter + minter wiring) |
 | `script/DeployStLighterBase.s.sol` | Spoke deployment (ltZEN only, minter = 0) |
 | `script/WireStLighterOFT.s.sol` | OFT peer + DVN wiring (deployment-time) |
 | `test/StLighter.t.sol` | Integration tests |
+| `test/mocks/MockERC1271Wallet.sol` | EIP-1271 gasless test double |
 | `test/StLighter.invariants.t.sol` | Accounting invariant suite |
 | `test/helpers/StLighter.handler.sol` | Invariant fuzz handler |
 
@@ -110,8 +111,9 @@ helpers (`getDepositInfo`).
   deposit where it is owner and claimer.
 - **LtZEN**: new token contract; inherits LayerZero `OFT` (not part of audited
   base). Immutable deployment — not upgradeable.
-- **StLighter**: new protocol contract. Planned deployment via **proxy** (not yet
-  implemented in scripts); governance = proxy admin + multisig + timelock.
+- **StLighter**: new protocol contract. **UUPS-upgradeable** via `ERC1967Proxy` +
+  `initialize`; governance `owner` (timelock) authorizes upgrades via
+  `upgradeToAndCall`. ltZEN `minter` = proxy address (stable across impl upgrades).
 
 ### Build configuration note
 
@@ -123,6 +125,7 @@ Staker base) but behavior is verified unchanged by the existing test suite.
 
 - `lib/devtools` — LayerZero OFT/OApp EVM packages
 - `lib/LayerZero-v2` — LayerZero V2 protocol
+- `lib/openzeppelin-contracts-upgradeable` — OZ v5.0.2 upgradeable mixins (StLighter UUPS)
 
 ### Audit implications
 

@@ -11,6 +11,9 @@ import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
 import {StLighterHandler} from "./helpers/StLighter.handler.sol";
+import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
+import {EndpointV2Mock} from
+  "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
 
 /// @notice Invariant suite for the StLighter core layer (single-chain, no OFT bridging). Locks
 /// down the accounting properties that matter most for safety and for the cross-chain rate model.
@@ -31,8 +34,16 @@ contract StLighterInvariants is Test {
     calculator = new IdentityEarningPowerCalculator();
     zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance);
 
-    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", makeAddr("lz"), address(this), address(0));
-    protocol = new StLighter(IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance);
+    ltZen = new LtZEN(
+      "Lighter Staked ZEN",
+      "ltZEN",
+      address(new EndpointV2Mock(1, address(this))),
+      address(this),
+      address(0)
+    );
+    (, protocol) = StLighterProxyDeploy.deploy(
+      IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance
+    );
     ltZen.setMinter(address(protocol));
 
     vm.prank(governance);

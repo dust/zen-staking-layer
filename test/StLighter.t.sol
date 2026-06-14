@@ -11,25 +11,30 @@ import {StLighter} from "../src/stlighter/StLighter.sol";
 import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
+import {EndpointV2Mock} from
+  "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
+import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
+import {MockERC1271Wallet} from "./mocks/MockERC1271Wallet.sol";
 
 /// @notice Integration tests for the stLighter protocol. Mirrors ZenStaker.t.sol: one base
 /// contract with shared setUp + helpers, then per-feature child contracts.
 ///
-/// Cross-chain OFT tests are stubbed in `CrossChain` (require LayerZero TestHelperOz5).
+/// Cross-chain OFT tests live in `test/StLighter.crosschain.t.sol` (TestHelperOz5).
 contract StLighterTest is Test {
   ERC20VotesMock zen;
   IdentityEarningPowerCalculator calculator;
   ZenStaker zenStaker;
   LtZEN ltZen;
   StLighter protocol;
+  StLighter implementation;
 
   address governance = makeAddr("governance");
   address rewardNotifier = makeAddr("rewardNotifier");
   address alice = makeAddr("alice");
   address bob = makeAddr("bob");
 
-  // Placeholder LZ endpoint — real OFT tests swap in a mock/TestHelper endpoint.
-  address lzEndpoint = makeAddr("lzEndpoint");
+  // LayerZero endpoint mock — LtZEN/OFT constructor calls endpoint.setDelegate().
+  EndpointV2Mock lzEndpoint;
 
   function setUp() public virtual {
     vm.warp(1_000_000);
@@ -45,8 +50,12 @@ contract StLighterTest is Test {
     zenStaker.setRewardNotifier(rewardNotifier, true);
 
     // ltZEN + protocol, wired per DeployStLighterHorizen order.
-    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", lzEndpoint, address(this), address(0));
-    protocol = new StLighter(IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance);
+    lzEndpoint = new EndpointV2Mock(1, address(this));
+    ltZen = new LtZEN(
+      "Lighter Staked ZEN", "ltZEN", address(lzEndpoint), address(this), address(0)
+    );
+    (implementation, protocol) =
+      StLighterProxyDeploy.deploy(IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance);
     ltZen.setMinter(address(protocol));
   }
 
@@ -66,6 +75,28 @@ contract StLighterTest is Test {
     zen.transfer(address(zenStaker), _amount);
     zenStaker.notifyRewardAmount(_amount);
     vm.stopPrank();
+  }
+
+  function _zenPermitHash(address _owner, uint256 _value, uint256 _deadline)
+    internal
+    view
+    returns (bytes32)
+  {
+    bytes32 typeHash =
+      keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    bytes32 structHash = keccak256(
+      abi.encode(typeHash, _owner, address(protocol), _value, zen.nonces(_owner), _deadline)
+    );
+    return keccak256(abi.encodePacked("\x19\x01", zen.DOMAIN_SEPARATOR(), structHash));
+  }
+
+  function _signZenPermit(uint256 _key, address _owner, uint256 _value, uint256 _deadline)
+    internal
+    view
+    returns (uint8 v, bytes32 r, bytes32 s)
+  {
+    bytes32 digest = _zenPermitHash(_owner, _value, _deadline);
+    (v, r, s) = vm.sign(_key, digest);
   }
 }
 
@@ -147,6 +178,23 @@ contract Deposit is StLighterTest {
     vm.expectRevert(); // StLighter__ZeroAmount
     vm.prank(alice);
     protocol.deposit(0, alice);
+  }
+
+  function test_DepositWithPermitWithoutPriorApproval() public {
+    uint256 key = 0xA11CE;
+    address depositor = vm.addr(key);
+    uint256 assets = 1000e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(depositor, assets);
+
+    (uint8 v, bytes32 r, bytes32 s) = _signZenPermit(key, depositor, assets, deadline);
+
+    vm.prank(depositor);
+    uint256 shares = protocol.depositWithPermit(assets, depositor, deadline, v, r, s);
+
+    assertGt(shares, 0);
+    assertEq(ltZen.balanceOf(depositor), shares);
+    assertEq(zen.allowance(depositor, address(protocol)), 0);
   }
 }
 
@@ -418,24 +466,12 @@ contract LtZENPermit is StLighterTest {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-chain (OFT) — requires LayerZero test harness; stubbed
+// Cross-chain (OFT) — hub wiring smoke test; full suite in StLighter.crosschain.t.sol
 // ---------------------------------------------------------------------------
 contract CrossChain is StLighterTest {
-  function test_BridgePreservesTotalSupplyAcrossChains() public {
-    // TODO: use LayerZero TestHelperOz5 with two endpoints (Horizen + Base).
-    // Assert: send burns on source, mints on dest; sum of supplies constant.
-    vm.skip(true);
-  }
-
-  function test_BridgeDoesNotChangeExchangeRate() public {
-    // TODO: deposit on Horizen, bridge ltZEN to Base, assert convertToAssets unchanged
-    //       (issuedShares untouched by bridging — the core invariant from PRD §4.2).
-    vm.skip(true);
-  }
-
   function test_SpokeHasNoMinter() public view {
     // On a spoke deployment, minter == address(0); local mint/burn disabled.
-    // Here we only assert the hub wiring; spoke modeled in a dedicated fork test.
+    // Here we only assert the hub wiring; spoke modeled in StLighter.crosschain.t.sol.
     assertTrue(ltZen.minter() != address(0)); // hub
   }
 }
@@ -526,6 +562,71 @@ contract Gasless is StLighterTest {
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__GasFeeExceedsMax
     protocol.depositWithSig(assets, user, maxFee, maxFee + 1, user, deadline, sig);
+  }
+
+  function test_RevertWhenFeeExceedsContractCap() public {
+    uint256 assets = 1000e18;
+    uint256 maxFee = protocol.MAX_GAS_FEE_ZEN() + 1;
+    uint256 fee = 1e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(user, assets);
+    vm.prank(user);
+    zen.approve(address(protocol), assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(DEPOSIT_TYPEHASH, assets, user, maxFee, user, protocol.nonces(user), deadline)
+    );
+    bytes memory sig = _sign(structHash);
+
+    vm.prank(relayer);
+    vm.expectRevert(); // StLighter__GasFeeExceedsMax
+    protocol.depositWithSig(assets, user, maxFee, fee, user, deadline, sig);
+  }
+
+  function test_DepositWithSigAndPermitWithoutPriorApproval() public {
+    uint256 assets = 1000e18;
+    uint256 maxFee = 5e18;
+    uint256 fee = 3e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    uint256 permitDeadline = block.timestamp + 2 hours;
+    zen.mint(user, assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(DEPOSIT_TYPEHASH, assets, user, maxFee, user, protocol.nonces(user), deadline)
+    );
+    bytes memory sig = _sign(structHash);
+    (uint8 pv, bytes32 pr, bytes32 ps) = _signZenPermit(userKey, user, assets, permitDeadline);
+
+    vm.prank(relayer);
+    protocol.depositWithSigAndPermit(
+      assets, user, maxFee, fee, user, deadline, sig, permitDeadline, pv, pr, ps
+    );
+
+    assertEq(zen.balanceOf(relayer), fee);
+    assertEq(protocol.totalAssets(), assets - fee);
+    assertGt(ltZen.balanceOf(user), 0);
+    assertEq(zen.allowance(user, address(protocol)), 0);
+  }
+
+  function test_GaslessDepositFromERC1271Wallet() public {
+    MockERC1271Wallet wallet = new MockERC1271Wallet(user);
+    uint256 assets = 1000e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(address(wallet), assets);
+    vm.prank(address(wallet));
+    zen.approve(address(protocol), assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH, assets, address(wallet), uint256(0), address(wallet), protocol.nonces(address(wallet)), deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+
+    vm.prank(relayer);
+    protocol.depositWithSig(assets, address(wallet), 0, 0, address(wallet), deadline, sig);
+
+    assertGt(ltZen.balanceOf(address(wallet)), 0);
   }
 
   function test_RevertOnExpiredDeadline() public {
