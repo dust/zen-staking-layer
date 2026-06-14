@@ -7,6 +7,10 @@
   optimizer_runs = 10_000_000
   solc_version = "0.8.28"
   verbosity = 3
+  # via_ir is required by the LayerZero OFT inheritance chain (ltZEN). It changes bytecode for ALL
+  # contracts including the audited staker base — see AUDIT_DELTA.md. Behavior is verified
+  # unchanged by the full existing test suite.
+  via_ir = true
 
 [profile.ci]
   fuzz = { runs = 5000 }
