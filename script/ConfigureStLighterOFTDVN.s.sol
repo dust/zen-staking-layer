@@ -3,9 +3,12 @@ pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {UlnConfig} from "@layerzerolabs/lz-evm-messagelib-v2/contracts/uln/UlnBase.sol";
-import {SetConfigParam} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
-import {ILayerZeroEndpointV2} from
-  "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {
+  SetConfigParam
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
+import {
+  ILayerZeroEndpointV2
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 
 /// @notice Configures LayerZero ULN (DVN + confirmations) for ltZEN on one chain.
 ///
@@ -38,7 +41,8 @@ contract ConfigureStLighterOFTDVN is Script {
     address receiveLib = vm.envAddress("LZ_RECEIVE_LIB");
     uint64 confirmations = uint64(vm.envUint("LZ_CONFIRMATIONS"));
     address[] memory requiredDvns = _parseAddressList(vm.envString("DVN_ADDRESSES"));
-    address[] memory optionalDvns = _parseAddressList(vm.envOr("DVN_OPTIONAL_ADDRESSES", string("")));
+    address[] memory optionalDvns =
+      _parseAddressList(vm.envOr("DVN_OPTIONAL_ADDRESSES", string("")));
     uint8 optionalThreshold = uint8(vm.envOr("DVN_OPTIONAL_THRESHOLD", uint256(0)));
     uint256 ownerKey = vm.envUint("PRIVATE_KEY");
 
@@ -72,9 +76,7 @@ contract ConfigureStLighterOFTDVN is Script {
 
   function _parseAddressList(string memory _csv) private view returns (address[] memory addrs) {
     bytes memory csv = bytes(_csv);
-    if (csv.length == 0) {
-      return new address[](0);
-    }
+    if (csv.length == 0) return new address[](0);
     uint256 count = 1;
     for (uint256 i = 0; i < csv.length; i++) {
       if (csv[i] == ",") count++;

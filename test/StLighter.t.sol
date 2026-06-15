@@ -5,14 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Staker} from "../src/Staker.sol";
 import {ZenStaker} from "../src/ZenStaker.sol";
-import {IdentityEarningPowerCalculator} from
-  "../src/calculators/IdentityEarningPowerCalculator.sol";
+import {
+  IdentityEarningPowerCalculator
+} from "../src/calculators/IdentityEarningPowerCalculator.sol";
 import {StLighter} from "../src/stlighter/StLighter.sol";
 import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
-import {EndpointV2Mock} from
-  "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
+import {EndpointV2Mock} from "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
 import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
 import {MockERC1271Wallet} from "./mocks/MockERC1271Wallet.sol";
 
@@ -43,19 +43,16 @@ contract StLighterTest is Test {
     calculator = new IdentityEarningPowerCalculator();
 
     // Underlying ZenStaker (admin = governance for simplicity).
-    zenStaker = new ZenStaker(
-      IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance
-    );
+    zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance);
     vm.prank(governance);
     zenStaker.setRewardNotifier(rewardNotifier, true);
 
     // ltZEN + protocol, wired per DeployStLighterHorizen order.
     lzEndpoint = new EndpointV2Mock(1, address(this));
-    ltZen = new LtZEN(
-      "Lighter Staked ZEN", "ltZEN", address(lzEndpoint), address(this), address(0)
+    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", address(lzEndpoint), address(this), address(0));
+    (implementation, protocol) = StLighterProxyDeploy.deploy(
+      IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance
     );
-    (implementation, protocol) =
-      StLighterProxyDeploy.deploy(IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance);
     ltZen.setMinter(address(protocol));
   }
 
@@ -82,8 +79,9 @@ contract StLighterTest is Test {
     view
     returns (bytes32)
   {
-    bytes32 typeHash =
-      keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    bytes32 typeHash = keccak256(
+      "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+    );
     bytes32 structHash = keccak256(
       abi.encode(typeHash, _owner, address(protocol), _value, zen.nonces(_owner), _deadline)
     );
@@ -274,7 +272,8 @@ contract Redeem is StLighterTest {
   }
 
   function test_LargeRedeemNotBlockedByUnharvestedRewards() public {
-    // Regression for PRD §5.6: redeem must harvest first so withdraw isn't capped by stale balance.
+    // Regression for PRD §5.6: redeem must harvest first so withdraw isn't capped by stale
+    // balance.
     uint256 shares = _deposit(alice, 1000e18);
     _notifyReward(500e18);
     vm.warp(block.timestamp + zenStaker.REWARD_DURATION());
@@ -449,11 +448,9 @@ contract LtZENPermit is StLighterTest {
     uint256 shares = _depositFor(owner, 1000e18);
     uint256 deadline = block.timestamp + 1 hours;
 
-    bytes32 message = keccak256(
-      abi.encode(PERMIT_TYPEHASH, owner, spender, shares, ltZen.nonces(owner), deadline)
-    );
-    bytes32 messageHash =
-      keccak256(abi.encodePacked("\x19\x01", ltZen.DOMAIN_SEPARATOR(), message));
+    bytes32 message =
+      keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, shares, ltZen.nonces(owner), deadline));
+    bytes32 messageHash = keccak256(abi.encodePacked("\x19\x01", ltZen.DOMAIN_SEPARATOR(), message));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, messageHash);
 
     ltZen.permit(owner, spender, shares, deadline, v, r, s);
@@ -497,7 +494,8 @@ contract Gasless is StLighterTest {
   }
 
   function _sign(bytes32 _structHash) internal view returns (bytes memory) {
-    bytes32 digest = keccak256(abi.encodePacked("\x19\x01", protocol.DOMAIN_SEPARATOR(), _structHash));
+    bytes32 digest =
+      keccak256(abi.encodePacked("\x19\x01", protocol.DOMAIN_SEPARATOR(), _structHash));
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(userKey, digest);
     return abi.encodePacked(r, s, v);
   }
@@ -618,7 +616,13 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, address(wallet), uint256(0), address(wallet), protocol.nonces(address(wallet)), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        address(wallet),
+        uint256(0),
+        address(wallet),
+        protocol.nonces(address(wallet)),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);

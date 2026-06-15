@@ -6,8 +6,9 @@ import {SendParam, MessagingFee} from "@layerzerolabs/oft-evm/contracts/interfac
 import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/TestHelperOz5.sol";
 import {ZenStaker} from "../src/ZenStaker.sol";
-import {IdentityEarningPowerCalculator} from
-  "../src/calculators/IdentityEarningPowerCalculator.sol";
+import {
+  IdentityEarningPowerCalculator
+} from "../src/calculators/IdentityEarningPowerCalculator.sol";
 import {StLighter} from "../src/stlighter/StLighter.sol";
 import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
@@ -45,11 +46,7 @@ contract StLighterCrossChainTest is TestHelperOz5 {
     zenStaker.setRewardNotifier(rewardNotifier, true);
 
     hubLtZen = new LtZEN(
-      "Lighter Staked ZEN",
-      "ltZEN",
-      address(endpoints[HUB_EID]),
-      address(this),
-      address(0)
+      "Lighter Staked ZEN", "ltZEN", address(endpoints[HUB_EID]), address(this), address(0)
     );
     (, hubProtocol) = StLighterProxyDeploy.deploy(
       IERC20(address(zen)), zenStaker, ILtZEN(address(hubLtZen)), governance
@@ -57,11 +54,7 @@ contract StLighterCrossChainTest is TestHelperOz5 {
     hubLtZen.setMinter(address(hubProtocol));
 
     spokeLtZen = new LtZEN(
-      "Lighter Staked ZEN",
-      "ltZEN",
-      address(endpoints[SPOKE_EID]),
-      address(this),
-      address(0)
+      "Lighter Staked ZEN", "ltZEN", address(endpoints[SPOKE_EID]), address(this), address(0)
     );
 
     address[] memory oftApps = new address[](2);

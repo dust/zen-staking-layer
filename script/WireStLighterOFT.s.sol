@@ -19,7 +19,8 @@ import {LtZEN} from "../src/stlighter/LtZEN.sol";
 ///   PRIVATE_KEY         — OFT owner key (governance)
 ///
 /// DVN / ULN config: run `ConfigureStLighterOFTDVN.s.sol` per chain after peering.
-/// Copy parameters from Horizen ZenTokenOFT (`0x57da…9280`) — see `docs/stLighter-oft-reference.md`.
+/// Copy parameters from Horizen ZenTokenOFT (`0x57da…9280`) — see
+/// `docs/stLighter-oft-reference.md`.
 contract WireStLighterOFT is Script {
   function run() external {
     address localLtZen = vm.envAddress("LT_ZEN_LOCAL");

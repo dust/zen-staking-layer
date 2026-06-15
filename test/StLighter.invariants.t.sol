@@ -4,16 +4,16 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ZenStaker} from "../src/ZenStaker.sol";
-import {IdentityEarningPowerCalculator} from
-  "../src/calculators/IdentityEarningPowerCalculator.sol";
+import {
+  IdentityEarningPowerCalculator
+} from "../src/calculators/IdentityEarningPowerCalculator.sol";
 import {StLighter} from "../src/stlighter/StLighter.sol";
 import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
 import {StLighterHandler} from "./helpers/StLighter.handler.sol";
 import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
-import {EndpointV2Mock} from
-  "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
+import {EndpointV2Mock} from "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
 
 /// @notice Invariant suite for the StLighter core layer (single-chain, no OFT bridging). Locks
 /// down the accounting properties that matter most for safety and for the cross-chain rate model.
@@ -61,7 +61,8 @@ contract StLighterInvariants is Test {
     targetContract(address(handler));
   }
 
-  /// @dev Core of the cross-chain rate model (PRD §4.2, 方案 X): with no bridging, the protocol's
+  /// @dev Core of the cross-chain rate model (PRD §4.2, 方案 X): with no bridging, the
+  /// protocol's
   /// issued-share counter must exactly equal the ltZEN token supply.
   function invariant_IssuedSharesEqualsTokenSupply() public view {
     assertEq(protocol.issuedShares(), ltZen.totalSupply());
@@ -100,9 +101,6 @@ contract StLighterInvariants is Test {
 
   function afterInvariant() public view {
     // sanity: at least some activity happened
-    assertGe(
-      handler.ghost_totalDeposited() + handler.ghost_totalNotified(),
-      0
-    );
+    assertGe(handler.ghost_totalDeposited() + handler.ghost_totalNotified(), 0);
   }
 }

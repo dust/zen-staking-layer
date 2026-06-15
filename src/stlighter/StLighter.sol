@@ -9,13 +9,18 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Ownable2StepUpgradeable} from
-  "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from
-  "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
-import {EIP712Upgradeable} from
-  "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {
+  Ownable2StepUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
+import {
+  PausableUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {
+  ReentrancyGuardUpgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {
+  EIP712Upgradeable
+} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
 
 import {Staker} from "../Staker.sol";
@@ -213,8 +218,9 @@ contract StLighter is
     bytes32 _r,
     bytes32 _s
   ) external nonReentrant whenNotPaused returns (uint256 shares) {
-    try IERC20Permit(address(_zen)).permit(msg.sender, address(this), _assets, _deadline, _v, _r, _s)
-    {} catch {}
+    try IERC20Permit(address(_zen))
+      .permit(msg.sender, address(this), _assets, _deadline, _v, _r, _s) {}
+      catch {}
     return _deposit(msg.sender, _assets, _receiver, 0, address(0));
   }
 
@@ -283,8 +289,9 @@ contract StLighter is
       ),
       _signature
     );
-    try IERC20Permit(address(_zen)).permit(_user, address(this), _assets, _permitDeadline, _v, _r, _s)
-    {} catch {}
+    try IERC20Permit(address(_zen))
+      .permit(_user, address(this), _assets, _permitDeadline, _v, _r, _s) {}
+      catch {}
     return _deposit(_user, _assets, _receiver, _feeZen, msg.sender);
   }
 
@@ -318,7 +325,11 @@ contract StLighter is
     emit Deposited(_payer, _receiver, netAssets, shares);
   }
 
-  function redeem(uint256 _shares, address _receiver) external nonReentrant returns (uint256 assets) {
+  function redeem(uint256 _shares, address _receiver)
+    external
+    nonReentrant
+    returns (uint256 assets)
+  {
     return _redeem(msg.sender, _shares, _receiver, 0, address(0));
   }
 

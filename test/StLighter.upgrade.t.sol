@@ -5,14 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ZenStaker} from "../src/ZenStaker.sol";
-import {IdentityEarningPowerCalculator} from
-  "../src/calculators/IdentityEarningPowerCalculator.sol";
+import {
+  IdentityEarningPowerCalculator
+} from "../src/calculators/IdentityEarningPowerCalculator.sol";
 import {StLighter} from "../src/stlighter/StLighter.sol";
 import {LtZEN} from "../src/stlighter/LtZEN.sol";
 import {ILtZEN} from "../src/stlighter/ILtZEN.sol";
 import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
-import {EndpointV2Mock} from
-  "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
+import {EndpointV2Mock} from "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
 import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
 
 contract StLighterUpgradeTest is Test {
