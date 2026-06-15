@@ -46,7 +46,7 @@ contract StLighterCrossChainTest is TestHelperOz5 {
     zenStaker.setRewardNotifier(rewardNotifier, true);
 
     hubLtZen = new LtZEN(
-      "Lighter Staked ZEN", "ltZEN", address(endpoints[HUB_EID]), address(this), address(0)
+      "ltZEN", "ltZEN", address(endpoints[HUB_EID]), address(this), address(0)
     );
     (, hubProtocol) = StLighterProxyDeploy.deploy(
       IERC20(address(zen)), zenStaker, ILtZEN(address(hubLtZen)), governance
@@ -54,7 +54,7 @@ contract StLighterCrossChainTest is TestHelperOz5 {
     hubLtZen.setMinter(address(hubProtocol));
 
     spokeLtZen = new LtZEN(
-      "Lighter Staked ZEN", "ltZEN", address(endpoints[SPOKE_EID]), address(this), address(0)
+      "ltZEN", "ltZEN", address(endpoints[SPOKE_EID]), address(this), address(0)
     );
 
     address[] memory oftApps = new address[](2);

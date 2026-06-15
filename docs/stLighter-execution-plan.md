@@ -2,7 +2,7 @@
 
 > **用途**:可中断、可重启的任务清单。记录已完成项、进行中项与待办,便于随时接续开发。
 > **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
-> **最后更新**:2026-06-14
+> **最后更新**:2026-06-15
 
 ---
 
@@ -12,9 +12,15 @@
 |------|------|
 | 核心协议 `StLighter.sol` | ✅ 已实现(deposit/redeem/harvest/gasless/permit/issuedShares/pause/fee) |
 | 份额代币 `LtZEN.sol` | ✅ 已实现(OFT + ERC20Permit + minter) |
-| 单元测试 `test/StLighter.t.sol` | ✅ **72 passed**(含 gasless/permit/ERC1271) |
+| 单元测试 `test/StLighter.t.sol` | ✅ **59 passed**(含 gasless/permit/ERC1271/view helpers) |
+| 治理测试 `test/StLighter.governance.t.sol` | ✅ **4 passed** |
+| 升级测试 `test/StLighter.upgrade.t.sol` | ✅ **5 passed** |
+| 部署脚本测试 `test/StLighter.deploy.t.sol` | ✅ **4 passed**(checklist §1–§4 自动断言) |
 | 不变量 `test/StLighter.invariants.t.sol` | ✅ **5 passed** |
-| 跨链测试 | ✅ `test/StLighter.crosschain.t.sol` — 4 passed; **双链测试网接线推迟** |
+| 跨链测试 `test/StLighter.crosschain.t.sol` | ✅ **4 passed**; **双链测试网接线推迟** |
+| 测试合计 | ✅ **81 passed / 0 failed / 0 skipped** |
+| 前端 ABI | ✅ `abi/StLighter.json` / `abi/LtZEN.json` + `README` |
+| CI 覆盖率门槛 | ✅ 限 `src/stlighter/*`,90%(LtZEN 100%、StLighter 91.67%,见构建发现) |
 | Proxy 可升级 | ✅ UUPS + ERC1967Proxy + Timelock 脚本 |
 | OFT 接线脚本 | ✅ `WireStLighterOFT` + `ConfigureStLighterOFTDVN` |
 | 部署 checklist | ✅ `docs/stLighter-deploy-checklist.md` |
@@ -40,7 +46,7 @@ FOUNDRY_PROFILE=lite forge test --match-path test/StLighter.invariants.t.sol
 - [x] **OFT 跨链不可暂停**(避免困住 Base 用户)
 - [x] **harvest keeper 激励**:Phase 1 暂不引入;见 PRD §6.6 可选方案
 - [x] **gasless fee 收款人**:`msg.sender`(relayer)
-- [ ] **ltZEN 代币全称**:symbol `ltZEN` 已定,name 待定
+- [x] **ltZEN 代币全称**:name 与 symbol 一致,均为 `ltZEN`(2026-06-15 确认,已落地脚本/测试)
 - [ ] **Base 端赎回 UX**:前端是否编排「一键桥回并赎回」(纯前端)
 
 ---
@@ -72,8 +78,8 @@ FOUNDRY_PROFILE=lite forge test --match-path test/StLighter.invariants.t.sol
 ### 待完成
 
 - [ ] `git submodule status` 与 `.gitmodules` 对齐(可选,拷贝 lib 后元数据可能不一致)
-- [ ] 确认 CI 覆盖率仍满足 ≥ 99.5%(stLighter 新代码纳入后)
-- [ ] `scopelint check` 通过
+- [x] 确认 CI 覆盖率仍满足 ≥ 99.5%(stLighter 新代码纳入后) — 见下「CI 覆盖率/构建发现」
+- [ ] `scopelint check` 通过(本机未安装 scopelint;CI 仍会执行)
 
 ### 验收命令
 
@@ -163,12 +169,14 @@ scopelint check
 
 ### 任务
 
-- [ ] 确定 ltZEN 完整 name 字符串
+- [x] 确定 ltZEN 完整 name 字符串 — name = symbol = `ltZEN`(2026-06-15)
 - [x] 主网部署 checklist(Horizen hub → Base spoke → Wire OFT → 移交治理) — `docs/stLighter-deploy-checklist.md`
-- [ ] 前端/Dashboard 多链读链集成(合约外,但需 ABI 稳定)
+- [x] 部署脚本本地集成测试 — `test/StLighter.deploy.t.sol`(checklist §1–§4 验收转为自动断言)
+- [x] 前端 ABI 固定导出 — `abi/StLighter.json` / `abi/LtZEN.json` + `abi/README.md`
+- [ ] 前端/Dashboard 多链读链集成(合约外,ABI 已稳定导出)
 - [ ] Base 用户「桥回 Horizen 再 redeem」前端编排(若产品确认)
 - [ ] 安全评审:OFT peer 配置、DVN 选型、proxy 升级权限
-- [ ] 独立审计 scope 定稿(stLighter 为 net-new,见 `AUDIT_DELTA.md`)
+- [x] 独立审计 scope 定稿(stLighter net-new + 审计边界/信任假设)— `AUDIT_DELTA.md`
 
 ---
 
@@ -255,10 +263,37 @@ AUDIT_DELTA.md                  # 审计差异(ZenStaker + stLighter)
 
 ---
 
+## CI 覆盖率 / 构建发现(2026-06-15)
+
+核对覆盖率门槛时发现两处 **CI 实际会失败** 的问题,均已修复:
+
+1. **`forge coverage` 与 `via_ir` 冲突** — CI 原命令 `forge coverage`(coverage profile)会剥离
+   `via_ir`,而 LayerZero OFT 继承链(ltZEN)必须 `via_ir`,导致 stack-too-deep,coverage job
+   编译即失败。修复:`ci.yml` 改为 `forge coverage --ir-minimum ...`。
+2. **审计基线 fuzz 测试在 via_ir 下失败** — `testFuzz_UpdatesExistingDelegateScore`
+   (`BinaryEligibilityOracleEarningPowerCalculator.t.sol`,审计基线)仅在 `via_ir` 下、且在
+   天文级 warp 时间戳(`~3.7e53`)确定性失败;optimizer 关闭则通过。属编译器 codegen 工件,
+   非合约缺陷(生产写路径 `lastOracleUpdateTime = block.timestamp` 无条件正确)。**决策(用户)**:
+   不改审计基线测试文件;CI 用 `--no-match-test` 排除,并在 `AUDIT_DELTA.md` 记录。
+3. **99.5% 覆盖率门槛在 via_ir 下不可达** — `--ir-minimum` 源码映射不准,**所有**文件被系统性
+   低估(连审计基线 `Staker.sol` 也仅 ~94%,其覆盖行在映射层丢失而非未测)。**决策(用户)**:
+   门槛**仅限 `src/stlighter/*`**,阈值 **90%**。实测:`LtZEN.sol` 真 100%;`StLighter.sol`
+   91.67%——剩余 12 行(`_disableInitializers`/`__X_init`/`_harvest`/`_pause`/`previewRedeem`
+   返回等)经测试**确证执行**,纯属 ir-minimum 无法归因内联/内部调用。已补 `Views` 测试合约
+   覆盖 `previewDeposit`/`convertToShares`/`totalShares`(此前唯一真实缺口)。
+
+覆盖率结果(`--ir-minimum`,排除上述基线测试,限 stLighter):`LtZEN.sol` 100%;
+`StLighter.sol` 行 91.67%、分支 76.92%(分支默认不卡门槛)。
+注:`scopelint` 本机未安装,未在本地执行格式/lint 检查。
+
+---
+
 ## 变更日志
 
 | 日期 | 变更 |
 |------|------|
+| 2026-06-15 | A.1/B/C.1-3:修复 CI coverage(`--ir-minimum`)、排除 via_ir 基线测试并记入 AUDIT_DELTA;coverage 门槛改为限 `src/stlighter/*`@90%(用户决策);新增 `test/StLighter.deploy.t.sol`(部署脚本本地集成)与 `Views` 测试合约;ltZEN name=`ltZEN`;导出 `abi/`。全套 **81 passed**(CI test job 481 passed/1 skipped) |
+| 2026-06-15 | 基线核对:全套 72 passed(t 54 / governance 4 / upgrade 5 / invariants 5 / crosschain 4);更正快照表(原 72 误标在 `StLighter.t.sol` 单文件,实为套件合计) |
 | 2026-06-14 | 阶段 2 收尾:Timelock 部署脚本、ltZEN ownership 移交、治理测试(64 passed) |
 | 2026-06-14 | 阶段 2 完成:StLighter UUPS proxy;60+5 测试通过;新增 `openzeppelin-contracts-upgradeable` 依赖 |
 | 2026-06-14 | 初版:产品决策入 PRD;差距分析;阶段 0 完成;阶段 1 测试/AUDIT_DELTA 部分完成;submodule 阻塞记录 |

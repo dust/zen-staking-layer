@@ -25,7 +25,7 @@ contract DeployStLighterBase is Script {
     vm.startBroadcast(deployerKey);
 
     // Spoke ltZEN: no protocol, minter stays address(0). Deployer = temp owner for wiring.
-    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", lzEndpoint, deployer, address(0));
+    ltZen = new LtZEN("ltZEN", "ltZEN", lzEndpoint, deployer, address(0));
     console2.log("LtZEN (Base spoke):", address(ltZen));
 
     ltZen.transferOwnership(governance);

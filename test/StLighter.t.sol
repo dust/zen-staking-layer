@@ -49,7 +49,7 @@ contract StLighterTest is Test {
 
     // ltZEN + protocol, wired per DeployStLighterHorizen order.
     lzEndpoint = new EndpointV2Mock(1, address(this));
-    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", address(lzEndpoint), address(this), address(0));
+    ltZen = new LtZEN("ltZEN", "ltZEN", address(lzEndpoint), address(this), address(0));
     (implementation, protocol) = StLighterProxyDeploy.deploy(
       IERC20(address(zen)), zenStaker, ILtZEN(address(ltZen)), governance
     );
@@ -126,6 +126,43 @@ contract Setup is StLighterTest {
     ltZen.mint(alice, 1e18);
   }
 }
+
+// ---------------------------------------------------------------------------
+// View helpers (convertToShares / previewDeposit / totalShares)
+// ---------------------------------------------------------------------------
+contract Views is StLighterTest {
+  function test_PreviewDepositMatchesConvertToShares() public view {
+    // previewDeposit is a thin wrapper over convertToShares.
+    assertEq(protocol.previewDeposit(1000e18), protocol.convertToShares(1000e18));
+  }
+
+  function test_ConvertToSharesOnEmptyVaultUsesVirtualOffset() public view {
+    // Empty vault: convertToShares scales by the virtual share offset (DECIMALS_OFFSET).
+    uint256 offset = 10 ** protocol.DECIMALS_OFFSET();
+    assertApproxEqRel(protocol.convertToShares(1000e18), 1000e18 * offset, 1e12);
+  }
+
+  function test_PreviewDepositMatchesActualMintedShares() public {
+    uint256 previewed = protocol.previewDeposit(1000e18);
+    uint256 minted = _deposit(alice, 1000e18);
+    assertEq(minted, previewed);
+  }
+
+  function test_TotalSharesEqualsIssuedShares() public {
+    assertEq(protocol.totalShares(), 0);
+    uint256 shares = _deposit(alice, 1000e18);
+    assertEq(protocol.totalShares(), shares);
+    assertEq(protocol.totalShares(), protocol.issuedShares());
+  }
+
+  function test_ConvertRoundTripAfterDeposit() public {
+    _deposit(alice, 1000e18);
+    uint256 shares = protocol.convertToShares(500e18);
+    // Converting back yields no more than the input (floor rounding favors the vault).
+    assertLe(protocol.convertToAssets(shares), 500e18);
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // Deposit

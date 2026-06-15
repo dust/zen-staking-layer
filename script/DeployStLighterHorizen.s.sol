@@ -39,7 +39,7 @@ contract DeployStLighterHorizen is Script {
 
     vm.startBroadcast(deployerKey);
 
-    ltZen = new LtZEN("Lighter Staked ZEN", "ltZEN", lzEndpoint, deployer, address(0));
+    ltZen = new LtZEN("ltZEN", "ltZEN", lzEndpoint, deployer, address(0));
     console2.log("LtZEN:         ", address(ltZen));
 
     implementation = new StLighter();

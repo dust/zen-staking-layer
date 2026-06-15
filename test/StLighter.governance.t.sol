@@ -43,7 +43,7 @@ contract StLighterGovernanceTest is Test {
     timelock = new TimelockController(MIN_DELAY, proposers, executors, address(0));
 
     ltZen = new LtZEN(
-      "Lighter Staked ZEN",
+      "ltZEN",
       "ltZEN",
       address(new EndpointV2Mock(1, address(this))),
       address(this),
@@ -93,7 +93,7 @@ contract StLighterGovernanceTest is Test {
 
   function test_LtZENOwnershipTransferIsImmediate() public {
     LtZEN spokeLtZen = new LtZEN(
-      "Lighter Staked ZEN",
+      "ltZEN",
       "ltZEN",
       address(new EndpointV2Mock(2, address(this))),
       address(this),

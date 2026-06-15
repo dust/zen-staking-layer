@@ -30,7 +30,7 @@ contract LtZEN is OFT, ERC20Permit {
 
   error LtZEN__NotMinter();
 
-  /// @param _name ERC20 name (e.g. "Lighter Staked ZEN").
+  /// @param _name ERC20 name ("ltZEN").
   /// @param _symbol ERC20 symbol ("ltZEN").
   /// @param _lzEndpoint LayerZero V2 Endpoint on this chain.
   /// @param _owner Governance owner (multisig + timelock); also the OApp delegate initially.

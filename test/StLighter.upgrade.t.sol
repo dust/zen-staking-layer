@@ -33,7 +33,7 @@ contract StLighterUpgradeTest is Test {
     zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance);
 
     ltZen = new LtZEN(
-      "Lighter Staked ZEN",
+      "ltZEN",
       "ltZEN",
       address(new EndpointV2Mock(1, address(this))),
       address(this),
