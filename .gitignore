@@ -16,3 +16,10 @@ lcov.info
 # IDEs
 .vscode
 .idea
+
+# Node
+node_modules/
+
+# Env
+.env
+.claude/settings.json
