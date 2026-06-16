@@ -1,0 +1,78 @@
+type Deposit @entity(immutable: false) {
+  id: String!
+  owner: Bytes!
+  delegatee: Bytes!
+  claimer: Bytes!
+  stakedAmount: BigInt!
+  earningPower: BigInt!
+  createdAtBlock: BigInt!
+  createdAtTimestamp: BigInt!
+  updatedAtBlock: BigInt!
+  updatedAtTimestamp: BigInt!
+}
+
+type StakeDepositedEvent @entity(immutable: true) {
+  id: Bytes!
+  owner: Bytes!
+  depositId: BigInt!
+  amount: BigInt!
+  depositBalance: BigInt!
+  earningPower: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type StakeWithdrawnEvent @entity(immutable: true) {
+  id: Bytes!
+  owner: Bytes!
+  depositId: BigInt!
+  amount: BigInt!
+  depositBalance: BigInt!
+  earningPower: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type RewardClaimedEvent @entity(immutable: true) {
+  id: Bytes!
+  depositId: BigInt!
+  claimer: Bytes!
+  amount: BigInt!
+  earningPower: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type DelegateeAlteredEvent @entity(immutable: true) {
+  id: Bytes!
+  depositId: BigInt!
+  oldDelegatee: Bytes!
+  newDelegatee: Bytes!
+  earningPower: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type ClaimerAlteredEvent @entity(immutable: true) {
+  id: Bytes!
+  depositId: BigInt!
+  oldClaimer: Bytes!
+  newClaimer: Bytes!
+  earningPower: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type RewardNotifiedEvent @entity(immutable: true) {
+  id: Bytes!
+  amount: BigInt!
+  notifier: Bytes!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
