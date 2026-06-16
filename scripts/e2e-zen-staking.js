@@ -72,12 +72,8 @@ const USER1_STAKE      = ethers.parseEther("1000");
 const USER2_STAKE      = ethers.parseEther("500");
 const USER1_STAKE_MORE = ethers.parseEther("500");
 
-// Anvil well-known test accounts (Foundry default mnemonic, indices 0-2)
-const ANVIL_ACCOUNTS = [
-  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80", // account[0]
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", // account[1]
-  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a", // account[2]
-];
+// Anvil HD derivation path (standard BIP-44 for Ethereum)
+const ANVIL_HD_PATH = "m/44'/60'/0'/0";
 
 // ---------------------------------------------------------------------------
 // Anvil helpers
@@ -86,12 +82,16 @@ const ANVIL_ACCOUNTS = [
 /**
  * Spawn a local Anvil node and resolve once it is ready to accept connections.
  * Returns the child process so the caller can kill it when done.
+ * Pass a mnemonic to override Anvil's default funded accounts.
  */
-function startAnvil(port) {
+function startAnvil(port, mnemonic) {
   return new Promise((resolve, reject) => {
     console.log(`\n  Spawning anvil on port ${port}…`);
 
-    const proc = spawn("anvil", ["--port", String(port)], {
+    const args = ["--port", String(port)];
+    if (mnemonic) args.push("--mnemonic", mnemonic);
+
+    const proc = spawn("anvil", args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -244,16 +244,19 @@ async function run() {
   let provider, deployer, user1, user2;
 
   if (USE_ANVIL) {
-    // Spawn a fresh local Anvil node
-    const proc = await startAnvil(ANVIL_PORT);
-    // Expose proc to cleanup handler via closure in main()
-    // We re-attach it here via a module-level variable instead
-    _anvilProc = proc;
+    // Generate a fresh random mnemonic so each run gets unique accounts.
+    // Anvil pre-funds the derived addresses with 10 000 ETH automatically.
+    const mnemonic = ethers.Mnemonic.entropyToPhrase(ethers.randomBytes(16));
+    console.log(`\n  Mnemonic : ${mnemonic}`);
+
+    _anvilProc = await startAnvil(ANVIL_PORT, mnemonic);
 
     provider = new ethers.JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`);
-    deployer  = managedWallet(new ethers.Wallet(ANVIL_ACCOUNTS[0], provider));
-    user1     = managedWallet(new ethers.Wallet(ANVIL_ACCOUNTS[1], provider));
-    user2     = managedWallet(new ethers.Wallet(ANVIL_ACCOUNTS[2], provider));
+
+    const hdRoot = ethers.HDNodeWallet.fromPhrase(mnemonic, "", ANVIL_HD_PATH);
+    deployer  = managedWallet(new ethers.Wallet(hdRoot.deriveChild(0).privateKey, provider));
+    user1     = managedWallet(new ethers.Wallet(hdRoot.deriveChild(1).privateKey, provider));
+    user2     = managedWallet(new ethers.Wallet(hdRoot.deriveChild(2).privateKey, provider));
   } else {
     // Testnet mode: read everything from .env
     const { RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY } = process.env;
@@ -651,8 +654,10 @@ process.on("exit",    () => { if (_anvilProc) _anvilProc.kill(); });
 process.on("SIGINT",  () => { if (_anvilProc) _anvilProc.kill(); process.exit(130); });
 process.on("SIGTERM", () => { if (_anvilProc) _anvilProc.kill(); process.exit(143); });
 
-main().catch(err => {
-  console.error("\n  FATAL:", err.message ?? err);
-  if (err.data) console.error("  Error data:", err.data);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch(err => {
+    console.error("\n  FATAL:", err.message ?? err);
+    if (err.data) console.error("  Error data:", err.data);
+    process.exit(1);
+  });
