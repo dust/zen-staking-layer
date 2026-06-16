@@ -1,0 +1,68 @@
+[
+  {
+    "type": "event",
+    "name": "StakeDeposited",
+    "inputs": [
+      { "name": "owner", "type": "address", "indexed": true },
+      { "name": "depositId", "type": "uint256", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "depositBalance", "type": "uint256", "indexed": false },
+      { "name": "earningPower", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StakeWithdrawn",
+    "inputs": [
+      { "name": "owner", "type": "address", "indexed": true },
+      { "name": "depositId", "type": "uint256", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "depositBalance", "type": "uint256", "indexed": false },
+      { "name": "earningPower", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardClaimed",
+    "inputs": [
+      { "name": "depositId", "type": "uint256", "indexed": true },
+      { "name": "claimer", "type": "address", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "earningPower", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DelegateeAltered",
+    "inputs": [
+      { "name": "depositId", "type": "uint256", "indexed": true },
+      { "name": "oldDelegatee", "type": "address", "indexed": false },
+      { "name": "newDelegatee", "type": "address", "indexed": false },
+      { "name": "earningPower", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ClaimerAltered",
+    "inputs": [
+      { "name": "depositId", "type": "uint256", "indexed": true },
+      { "name": "oldClaimer", "type": "address", "indexed": true },
+      { "name": "newClaimer", "type": "address", "indexed": true },
+      { "name": "earningPower", "type": "uint256", "indexed": false }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardNotified",
+    "inputs": [
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "notifier", "type": "address", "indexed": false }
+    ],
+    "anonymous": false
+  }
+]
