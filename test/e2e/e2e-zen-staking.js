@@ -160,7 +160,7 @@ function managedWallet(wallet) {
 }
 
 function loadArtifact(solFile, contractName) {
-  const p = path.resolve(__dirname, "..", "out", solFile, `${contractName}.json`);
+  const p = path.resolve(__dirname, "../..", "out", solFile, `${contractName}.json`);
   if (!fs.existsSync(p))
     throw new Error(`Artifact not found: ${p}\nRun 'forge build' first.`);
   const raw = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -252,6 +252,14 @@ async function run() {
     _anvilProc = await startAnvil(ANVIL_PORT, mnemonic);
 
     provider = new ethers.JsonRpcProvider(`http://127.0.0.1:${ANVIL_PORT}`);
+    // Add a 1.5× gas safety buffer — Anvil's eth_estimateGas returns the
+    // exact minimum, leaving no headroom for minor state divergences between
+    // estimation and execution (e.g., block-timestamp drift, warm-slot bias).
+    const _origEstGas = provider.estimateGas.bind(provider);
+    provider.estimateGas = async (tx) => {
+      const est = await _origEstGas(tx);
+      return est + est / 2n; // 1.5×
+    };
 
     const hdRoot = ethers.HDNodeWallet.fromPhrase(mnemonic, "", ANVIL_HD_PATH);
     deployer  = managedWallet(new ethers.Wallet(hdRoot.deriveChild(0).privateKey, provider));
@@ -264,10 +272,17 @@ async function run() {
       if (!v) { console.error(`  Missing env var: ${k}`); process.exit(1); }
     }
     provider = new ethers.JsonRpcProvider(RPC_URL);
+    const _origEstGasT = provider.estimateGas.bind(provider);
+    provider.estimateGas = async (tx) => {
+      const est = await _origEstGasT(tx);
+      return est + est / 2n;
+    };
     deployer  = managedWallet(new ethers.Wallet(DEPLOYER_PRIVATE_KEY, provider));
     user1     = managedWallet(new ethers.Wallet(USER1_PRIVATE_KEY, provider));
     user2     = managedWallet(new ethers.Wallet(USER2_PRIVATE_KEY, provider));
   }
+
+  _provider = provider; // expose for error diagnostics
 
   const network = await provider.getNetwork();
   console.log(`\n  Network  : ${network.name} (chainId ${network.chainId})`);
@@ -278,7 +293,8 @@ async function run() {
   // -- Load Foundry artifacts --------------------------------------------------
   const mockTokenArtifact  = loadArtifact("MockERC20Votes.sol", "ERC20VotesMock");
   const calculatorArtifact = loadArtifact("IdentityEarningPowerCalculator.sol", "IdentityEarningPowerCalculator");
-  const zenStakerArtifact  = loadArtifact("ZenStaker.sol", "ZenStaker");
+  const zenStakerArtifact  = loadArtifact("ZenStakerUpgradeable.sol", "ZenStakerUpgradeable");
+  const proxyArtifact      = loadArtifact("ERC1967Proxy.sol", "ERC1967Proxy");
 
   // -- 1: ETH Balance Check & Top-Up ------------------------------------------
   section("1 - ETH Balance Check & Top-Up");
@@ -352,24 +368,37 @@ async function run() {
   logTx("Deploy IdentityEarningPowerCalculator", calcContract.deploymentTransaction(), calcReceipt);
   console.log(`  Contract : ${await calculator.getAddress()}`);
 
-  // -- 4: Deploy ZenStaker -----------------------------------------------------
-  section("4 - Deploy ZenStaker");
+  // -- 4: Deploy ZenStakerUpgradeable (UUPS implementation + ERC-1967 proxy) --
+  section("4 - Deploy ZenStakerUpgradeable (UUPS implementation + ERC-1967 proxy)");
 
-  const StakerFactory  = new ethers.ContractFactory(
+  const stakerIface   = new ethers.Interface(zenStakerArtifact.abi);
+  _stIface = stakerIface; // expose for error diagnostics
+
+  const ImplFactory   = new ethers.ContractFactory(
     zenStakerArtifact.abi, zenStakerArtifact.bytecode, deployer
   );
-  const stakerContract = await StakerFactory.deploy(
-    await zenToken.getAddress(),   // _rewardToken  (ZEN)
-    await zenToken.getAddress(),   // _stakeToken   (ZEN - same token)
-    await calculator.getAddress(), // _earningPowerCalculator
-    0n,                            // _maxBumpTip   (0 = bumping disabled, Phase 1)
-    deployer.address               // _admin
-  );
-  const stakerReceipt = await stakerContract.deploymentTransaction().wait();
-  const staker        = stakerContract.attach(await stakerContract.getAddress());
+  const implContract  = await ImplFactory.deploy(await zenToken.getAddress());
+  const implReceipt   = await implContract.deploymentTransaction().wait();
+  const implAddress   = await implContract.getAddress();
+  logTx("Deploy ZenStakerUpgradeable impl", implContract.deploymentTransaction(), implReceipt);
+  console.log(`  Implementation : ${implAddress}`);
 
-  logTx("Deploy ZenStaker", stakerContract.deploymentTransaction(), stakerReceipt);
-  console.log(`  Contract : ${await staker.getAddress()}`);
+  const initData = stakerIface.encodeFunctionData("initialize", [
+    deployer.address,              // _admin (deployer acts as admin for e2e)
+    await calculator.getAddress(), // _earningPowerCalculator
+    0n,                            // _maxBumpTip
+  ]);
+
+  const ProxyFactory  = new ethers.ContractFactory(
+    proxyArtifact.abi, proxyArtifact.bytecode, deployer
+  );
+  const proxyContract = await ProxyFactory.deploy(implAddress, initData);
+  const proxyReceipt  = await proxyContract.deploymentTransaction().wait();
+  const proxyAddress  = await proxyContract.getAddress();
+  logTx("Deploy ERC1967Proxy + initialize", proxyContract.deploymentTransaction(), proxyReceipt);
+  console.log(`  Proxy          : ${proxyAddress}`);
+
+  const staker = new ethers.Contract(proxyAddress, zenStakerArtifact.abi, deployer);
 
   assert(await staker.REWARD_TOKEN() === await zenToken.getAddress(), "REWARD_TOKEN == MockZenToken");
   assert(await staker.STAKE_TOKEN()  === await zenToken.getAddress(), "STAKE_TOKEN == MockZenToken");
@@ -396,7 +425,6 @@ async function run() {
   const stakeRx1 = await stakeTx1.wait();
   logTx(`User1 stake(${ethers.formatEther(USER1_STAKE)} ZEN)`, stakeTx1, stakeRx1);
 
-  const stakerIface = new ethers.Interface(zenStakerArtifact.abi);
   // event StakeDeposited(address indexed owner, DepositIdentifier indexed depositId, ...)
   const depositId1  = stakerIface.parseLog(
     stakeRx1.logs.find(l => { try { return stakerIface.parseLog(l)?.name === "StakeDeposited"; } catch { return false; } })
@@ -408,7 +436,8 @@ async function run() {
   assert(dep1.owner        === user1.address, "deposit1.owner == user1");
   assert(dep1.earningPower === USER1_STAKE,   "deposit1.earningPower == stake (identity 1:1)");
 
-  await printDepositorSummary(staker, user1.address, [depositId1], "after user1 stake");
+  const sum1Early = await printDepositorSummary(staker, user1.address, [depositId1], "after user1 stake");
+  assert(sum1Early.totalStaked === USER1_STAKE, "getDepositorFullSummary: user1 totalStaked correct after stake");
 
   const gs1 = await printGlobalState(staker, "after user1 stake");
   assert(gs1.totalStaked === USER1_STAKE, `totalStaked == ${ethers.formatEther(USER1_STAKE)} ZEN`);
@@ -494,6 +523,23 @@ async function run() {
   assert(uncl1Before > 0n, "user1 has accrued rewards");
   assert(uncl2Before > 0n, "user2 has accrued rewards");
 
+  // -- 9b: getDepositorFullSummary reflects accrued rewards ---------------------
+  section("9b - getDepositorFullSummary shows accrued unclaimed rewards");
+
+  const sum1Accrued = await printDepositorSummary(staker, user1.address, [depositId1], "after rewards accrued");
+  const sum2Accrued = await printDepositorSummary(staker, user2.address, [depositId2], "after rewards accrued");
+  assert(sum1Accrued.totalUnclaimed > 0n, "getDepositorFullSummary: user1 has unclaimed rewards");
+  assert(sum2Accrued.totalUnclaimed > 0n, "getDepositorFullSummary: user2 has unclaimed rewards");
+  assert(sum1Accrued.totalUnclaimed > sum2Accrued.totalUnclaimed,
+    "getDepositorFullSummary: user1 unclaimed > user2 unclaimed (proportional to larger stake)");
+
+  // Verify duplicate ID dedup: passing the same depositId twice must not double the result.
+  const [, , noDoubleCount] = await staker.getDepositorFullSummary(user1.address, [depositId1, depositId1]);
+  assert(
+    noDoubleCount === sum1Accrued.totalUnclaimed,
+    "getDepositorFullSummary: duplicate depositId does not double-count rewards"
+  );
+
   // -- 10: Claim rewards --------------------------------------------------------
   section("10 - Users claim rewards");
 
@@ -577,10 +623,16 @@ async function run() {
   assert(u1BalAfterCross > u1BalBeforeCross, "user1 balance increased claiming deposit2 as claimer");
 
   // -- 14: Full depositor summaries ---------------------------------------------
-  section("14 - Full depositor summaries");
+  section("14 - Full depositor summaries (getDepositorFullSummary assertions)");
 
-  await printDepositorSummary(staker, user1.address, [depositId1], "user1 before withdraw");
-  await printDepositorSummary(staker, user2.address, [depositId2], "user2 before withdraw");
+  const sum1Final = await printDepositorSummary(staker, user1.address, [depositId1], "user1 before withdraw");
+  const sum2Final = await printDepositorSummary(staker, user2.address, [depositId2], "user2 before withdraw");
+
+  const expectedU1Bal = USE_ANVIL ? USER1_STAKE + USER1_STAKE_MORE : USER1_STAKE + ethers.parseEther("1") + USER1_STAKE_MORE;
+  assert(sum1Final.totalStaked === expectedU1Bal,
+    `getDepositorFullSummary: user1 totalStaked == ${ethers.formatEther(expectedU1Bal)} ZEN`);
+  assert(sum2Final.totalStaked === USER2_STAKE,
+    `getDepositorFullSummary: user2 totalStaked == ${ethers.formatEther(USER2_STAKE)} ZEN`);
 
   // -- 15: User1 full withdrawal ------------------------------------------------
   section("15 - User1 full withdrawal");
@@ -631,7 +683,28 @@ async function run() {
   assert(gsFinal.totalEarningPower === 0n, "totalEarningPower == 0");
 
   const stakerBal = await zenToken.balanceOf(await staker.getAddress());
-  console.log(`\n  ZenStaker remaining ZEN balance (undistributed rewards): ${fmt(stakerBal)}`);
+  console.log(`\n  ZenStakerUpgradeable remaining ZEN balance (undistributed rewards): ${fmt(stakerBal)}`);
+
+  // -- 18: Upgrade proxy to a new implementation --------------------------------
+  section("18 - UUPS upgrade to new implementation");
+
+  const ImplFactory2  = new ethers.ContractFactory(
+    zenStakerArtifact.abi, zenStakerArtifact.bytecode, deployer
+  );
+  const implContract2 = await ImplFactory2.deploy(await zenToken.getAddress());
+  const implReceipt2  = await implContract2.deploymentTransaction().wait();
+  const implAddress2  = await implContract2.getAddress();
+  logTx("Deploy new ZenStakerUpgradeable impl", implContract2.deploymentTransaction(), implReceipt2);
+  console.log(`  New implementation : ${implAddress2}`);
+
+  const upgradeTx = await staker.connect(deployer).upgradeToAndCall(implAddress2, "0x");
+  const upgradeRx = await upgradeTx.wait();
+  logTx("upgradeToAndCall(newImpl, \"0x\")", upgradeTx, upgradeRx);
+
+  const gsAfterUpgrade = await printGlobalState(staker, "after upgrade");
+  assert(gsAfterUpgrade.totalStaked === 0n,        "totalStaked == 0 after upgrade");
+  assert(await staker.admin()       === deployer.address, "admin preserved after upgrade");
+  assert(await staker.getAddress()  === proxyAddress,     "proxy address unchanged after upgrade");
 
   // -- Summary ------------------------------------------------------------------
   section("SUCCESS - End-to-End Test PASSED");
@@ -639,25 +712,77 @@ async function run() {
   console.log(`\n  Mode     : ${USE_ANVIL ? `Anvil (local, port ${ANVIL_PORT})` : "Testnet"}`);
   console.log(`  Network  : ${(await provider.getNetwork()).name}`);
   console.log("\n  Contracts deployed:");
-  console.log(`    MockZenToken             : ${await zenToken.getAddress()}`);
-  console.log(`    IdentityEarningPowerCalc : ${await calculator.getAddress()}`);
-  console.log(`    ZenStaker                : ${await staker.getAddress()}`);
+  console.log(`    MockZenToken                    : ${await zenToken.getAddress()}`);
+  console.log(`    IdentityEarningPowerCalc        : ${await calculator.getAddress()}`);
+  console.log(`    ZenStakerUpgradeable (impl v1)  : ${implAddress}`);
+  console.log(`    ZenStakerUpgradeable (impl v2)  : ${implAddress2}`);
+  console.log(`    ZenStakerUpgradeable (proxy)    : ${await staker.getAddress()}`);
   console.log("\n  Deposits:");
   console.log(`    User1 depositId          : ${depositId1}`);
   console.log(`    User2 depositId          : ${depositId2}`);
-  console.log("\n  All assertions passed. ZenStaker full lifecycle verified on-chain.\n");
+  console.log("\n  All assertions passed. ZenStakerUpgradeable full lifecycle + upgrade verified on-chain.\n");
 }
 
 // Module-level handle so process exit handlers can reach it
 let _anvilProc = null;
+// Module-level provider + ABI — populated in run() for use by the error handler
+let _provider  = null;
+let _stIface   = null;
 process.on("exit",    () => { if (_anvilProc) _anvilProc.kill(); });
 process.on("SIGINT",  () => { if (_anvilProc) _anvilProc.kill(); process.exit(130); });
 process.on("SIGTERM", () => { if (_anvilProc) _anvilProc.kill(); process.exit(143); });
 
 main()
   .then(() => process.exit(0))
-  .catch(err => {
+  .catch(async err => {
     console.error("\n  FATAL:", err.message ?? err);
     if (err.data) console.error("  Error data:", err.data);
+
+    // Fetch full tx and simulate to decode the revert reason
+    const hash = err.receipt?.hash;
+    if (_provider && hash) {
+      try {
+        const fullTx = await _provider.getTransaction(hash);
+        if (fullTx) {
+          const isOog = fullTx.gasLimit === err.receipt.gasUsed;
+          console.error(
+            `\n  [DIAG] gasLimit=${fullTx.gasLimit}  gasUsed=${err.receipt.gasUsed}` +
+            `  OOG=${isOog}`
+          );
+          console.error("  [DIAG] simulating call to decode revert…");
+          try {
+            await _provider.call({
+              to:   fullTx.to,
+              from: fullTx.from,
+              data: fullTx.data,
+            });
+            console.error("  [DIAG] simulation passed (state changed since tx was mined)");
+          } catch (simErr) {
+            if (simErr.data) {
+              console.error("  [DIAG] revert bytes:", simErr.data);
+              // Try staker ABI first
+              if (_stIface) {
+                try {
+                  const e = _stIface.parseError(simErr.data);
+                  console.error("  [DIAG] decoded:", e.name, [...e.args].map(a => a.toString()).join(", "));
+                } catch { /* not in staker ABI */ }
+              }
+              // Common ERC-20 / Panic selectors
+              const sel = simErr.data.slice(0, 10);
+              const KNOWN = {
+                "0x7939f424": "ERC20InsufficientAllowance",
+                "0xfb8f41b2": "ERC20InsufficientBalance",
+                "0x4e487b71": "Panic (arithmetic/OOG in sub-call)",
+              };
+              if (KNOWN[sel]) console.error("  [DIAG] known selector:", KNOWN[sel]);
+            } else {
+              console.error("  [DIAG] simulation failed, no revert data:", simErr.message);
+            }
+          }
+        }
+      } catch (diagErr) {
+        console.error("  [DIAG] diagnostic error:", diagErr.message);
+      }
+    }
     process.exit(1);
   });

@@ -5,9 +5,9 @@
     "codegen": "graph codegen",
     "build": "graph build",
     "deploy": "graph deploy --node https://api.studio.thegraph.com/deploy/ zen-staker",
-    "create-local": "graph create --node http://localhost:8020/ hcce",
-    "remove-local": "graph remove --node http://localhost:8020/ hcce",
-    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 hcce",
+    "create-local": "graph create --node http://localhost:8020/ zen-staker",
+    "remove-local": "graph remove --node http://localhost:8020/ zen-staker",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 zen-staker",
     "test": "graph test"
   },
   "dependencies": {

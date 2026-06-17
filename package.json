@@ -23,7 +23,7 @@
     "ethers": "^6.13.0"
   },
   "scripts": {
-    "e2e": "node script/e2e-zen-staking.js",
-    "e2e:anvil": "node script/e2e-zen-staking.js --anvil"
+    "e2e": "node test/e2e/e2e-zen-staking.js",
+    "e2e:anvil": "node test/e2e/e2e-zen-staking.js --anvil"
   }
 }
