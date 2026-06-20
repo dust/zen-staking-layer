@@ -71,3 +71,30 @@
 ## 环境变量速查
 
 见 `.env.template`：`ZEN_TOKEN_ADDRESS`、`ADMIN_ADDRESS`、`STLighter_*`、`LZ_*`、`TIMELOCK_*` 等。
+
+
+``` shell
+forge script script/DeployMockZEN.s.sol --rpc-url=$RPC_URL --broadcast --private-key="$PRIVATE_KEY"
+
+forge script script/DeployZenStaker.s.sol --rpc-url=$RPC_URL --broadcast --private-key=$PRIVATE_KEY
+
+ZEN_STAKER=0xb1E4021B36Ad51AE548B2065Bc55A3BACa33187e
+
+forge verify-contract \
+  --rpc-url $RPC_URL \
+  --verifier blockscout \
+  --verifier-url "$RPC_URL/api" \
+  $ZEN_STAKER \
+  src/ZenStaker.sol:ZenStaker
+
+
+```
+
+== Logs ==
+  LtZEN:          0xF91e475D62E6181C630bf70bCd8564c29b03486B
+  Implementation: 0x0d4bE6a999279c8e5Bf7d63FDb0aB626b9275a76
+  StLighter proxy: 0xEaAF6a0CF959D0C8b18A79289F4b7c1ce16E41c6
+  ZEN:            0x3909EBEE55aa57Cd7b2ce4c05e57C24f7499203A
+  ZenStaker:      0xb1E4021B36Ad51AE548B2065Bc55A3BACa33187e
+  Timelock:       0x6dF5Ff7f16a8b08908F6B6893fD4e8D84e770679
+
