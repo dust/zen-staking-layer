@@ -7,40 +7,68 @@ import {DelegationSurrogate} from "./DelegationSurrogate.sol";
 import {IEarningPowerCalculator} from "./interfaces/IEarningPowerCalculator.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-/// @notice Minimal non-voting delegation surrogate for ZenStaker. Holds staked tokens on behalf
-/// of depositors without delegating any governance voting power. Governance delegation is out of
-/// scope for Phase 1.
+/// @notice Non-voting delegation surrogate used by ZenStakerUpgradeable.
+/// Identical to ZenDelegationSurrogate in ZenStaker.sol.
 contract ZenDelegationSurrogate is DelegationSurrogate {
   constructor(IERC20 _token) DelegationSurrogate(_token) {}
 }
 
-/// @title ZenStaker
-/// @notice Horizen Phase 1 concrete staking implementation. Users stake ZEN to earn ZEN rewards.
-/// All write logic is inherited unchanged from the audited Tally Staker base contracts.
-/// The only additions are view-only helper functions that reduce RPC round-trips for the
-/// Goldsky indexer and frontend.
-contract ZenStaker is Staker, StakerPermitAndStake {
-  /// @notice Maps each delegatee address to its non-voting delegation surrogate contract.
+/// @title ZenStakerUpgradeable
+/// @notice UUPS-upgradeable variant of ZenStaker. All staking logic is
+/// inherited unchanged from the audited Staker and StakerPermitAndStake base
+/// contracts. The only differences from ZenStaker are:
+///   1. A proxy-safe constructor that sets immutables and locks initializers.
+///   2. An `initialize()` function that replaces the constructor for state setup.
+///   3. A `_authorizeUpgrade()` hook gating upgrades behind the admin role.
+///
+/// The write-path logic, storage layout, and view helpers are identical to
+/// ZenStaker. Deploy behind an ERC-1967 proxy (e.g. OZ ERC1967Proxy).
+contract ZenStakerUpgradeable is Staker, StakerPermitAndStake, Initializable, UUPSUpgradeable {
+  /// @notice Maps each delegatee address to its non-voting delegation surrogate.
   mapping(address delegatee => DelegationSurrogate surrogate) private _surrogates;
 
-  /// @param _rewardToken ZEN token address (reward token).
-  /// @param _stakeToken ZEN token address (stake token — same as reward for ZEN-on-ZEN staking).
-  /// @param _earningPowerCalculator Earning power calculator (use IdentityEarningPowerCalculator).
-  /// @param _maxBumpTip Maximum tip a bumper may request (0 — bumping disabled in Phase 1).
-  /// @param _admin Horizen multisig address.
-  constructor(
-    IERC20 _rewardToken,
-    IERC20 _stakeToken,
-    IEarningPowerCalculator _earningPowerCalculator,
-    uint256 _maxBumpTip,
-    address _admin
-  )
-    Staker(_rewardToken, _stakeToken, _earningPowerCalculator, _maxBumpTip, _admin)
-    StakerPermitAndStake(IERC20Permit(address(_stakeToken)))
+  /// @notice Deploys the implementation contract. Sets immutables baked into
+  /// bytecode and permanently locks the implementation so it cannot be
+  /// initialized directly.
+  ///
+  /// @dev `address(1)` is passed as placeholders for admin and
+  /// earningPowerCalculator to satisfy the non-zero checks in Staker's
+  /// constructor. These values are written to the *implementation* contract's
+  /// own storage, which is never read through a proxy. The proxy's storage is
+  /// populated exclusively by `initialize()`.
+  ///
+  /// @param _token ZEN token address (both reward and stake token).
+  constructor(IERC20 _token)
+    Staker(_token, _token, IEarningPowerCalculator(address(1)), 0, address(1))
+    StakerPermitAndStake(IERC20Permit(address(_token)))
   {
     MAX_CLAIM_FEE = 0;
+    _disableInitializers();
+  }
+
+  /// @notice Initializes the proxy state. Replaces the constructor for
+  /// post-proxy-deployment setup. Can only be called once.
+  /// @param _admin Horizen multisig address (becomes staker admin).
+  /// @param _earningPowerCalculator Earning power calculator contract.
+  /// @param _maxBumpTip Maximum tip a bumper may request (0 in Phase 1).
+  function initialize(
+    address _admin,
+    IEarningPowerCalculator _earningPowerCalculator,
+    uint256 _maxBumpTip
+  ) external initializer {
+    _setAdmin(_admin);
+    _setEarningPowerCalculator(address(_earningPowerCalculator));
+    _setMaxBumpTip(_maxBumpTip);
     _setClaimFeeParameters(ClaimFeeParameters({feeAmount: 0, feeCollector: address(0)}));
+  }
+
+  /// @inheritdoc UUPSUpgradeable
+  /// @dev Only the staker admin (Horizen multisig) may authorize an upgrade.
+  function _authorizeUpgrade(address) internal view override {
+    _revertIfNotAdmin();
   }
 
   /// @inheritdoc Staker
@@ -62,7 +90,7 @@ contract ZenStaker is Staker, StakerPermitAndStake {
   }
 
   // ---------------------------------------------------------------------------
-  // View helpers — no state changes, no new storage written during stake/withdraw/claim
+  // View helpers — identical to ZenStaker; no state changes
   // ---------------------------------------------------------------------------
 
   /// @notice Returns all useful deposit data for a single deposit in one call.
@@ -88,8 +116,8 @@ contract ZenStaker is Staker, StakerPermitAndStake {
     unclaimedRewards = _scaledUnclaimedReward(d) / SCALE_FACTOR;
   }
 
-  /// @notice Batch version of getDepositInfo. Caller supplies deposit IDs sourced from the
-  /// off-chain indexer (Goldsky). Returns parallel arrays.
+  /// @notice Batch version of getDepositInfo. Caller supplies deposit IDs
+  /// sourced from the off-chain indexer (Goldsky). Returns parallel arrays.
   /// @param _depositIds List of deposit identifiers to query.
   function getDepositsInfo(DepositIdentifier[] calldata _depositIds)
     external
@@ -137,9 +165,8 @@ contract ZenStaker is Staker, StakerPermitAndStake {
   }
 
   /// @notice Returns aggregated staking totals for a single depositor address.
-  /// @dev Does not aggregate unclaimed rewards across deposits — deposit IDs are tracked by the
-  /// indexer, not on-chain. Use getDepositorFullSummary with the IDs from the indexer for reward
-  /// totals.
+  /// @dev Does not aggregate unclaimed rewards across deposits — deposit IDs
+  /// are tracked by the indexer, not on-chain.
   /// @param _depositor The address to query.
   function getDepositorSummary(address _depositor)
     external
@@ -150,9 +177,10 @@ contract ZenStaker is Staker, StakerPermitAndStake {
     totalEarningPower_ = depositorTotalEarningPower[_depositor];
   }
 
-  /// @notice Returns aggregated staking totals plus total unclaimed rewards for a depositor in
-  /// one call. Deposit IDs must be supplied by the caller (sourced from the Goldsky indexer via
-  /// StakeDeposited events filtered on the indexed owner field).
+  /// @notice Returns aggregated staking totals plus total unclaimed rewards
+  /// for a depositor in one call. Deposit IDs must be supplied by the caller
+  /// (sourced from the Goldsky indexer via StakeDeposited events filtered on
+  /// the indexed owner field).
   /// @param _depositor The address to query.
   /// @param _depositIds All deposit IDs belonging to this depositor.
   function getDepositorFullSummary(address _depositor, DepositIdentifier[] calldata _depositIds)
