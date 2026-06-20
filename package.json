@@ -17,5 +17,13 @@
   "homepage": "https://github.com/ScopeLift/staker#readme",
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.2"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0"
+  },
+  "scripts": {
+    "e2e": "node test/e2e/e2e-zen-staking.js",
+    "e2e:anvil": "node test/e2e/e2e-zen-staking.js --anvil"
   }
 }
