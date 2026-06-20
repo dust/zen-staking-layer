@@ -1,7 +1,7 @@
 # stLighter — 执行计划
 
 > **用途**:可中断、可重启的任务清单。记录已完成项、进行中项与待办,便于随时接续开发。
-> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
+> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/stLighter-dashboard-design.md`(前端复利透明度可视化)、`docs/stLighter-dashboard-uiux-spec.md`(前端 UI/UX 执行规格)、`docs/stLighter-dashboard-tone-guide.md`(视觉与文案 tone)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
 > **最后更新**:2026-06-15
 
 ---
@@ -241,6 +241,9 @@ docs/
   stLighter-sequence-diagrams.md
   stLighter-execution-plan.md   # 本文件
   stLighter-deploy-checklist.md # 主网/测试网部署顺序
+  stLighter-dashboard-design.md # 前端复利透明度可视化设计(汇率/复投/复利)
+  stLighter-dashboard-uiux-spec.md # 前端 UI/UX 执行规格(页面/组件/交互/边界态)
+  stLighter-dashboard-tone-guide.md # 视觉与文案 tone 指南(UI 全英文)
   ZenStaker-Phase1-PRD.md
 
 src/stlighter/
