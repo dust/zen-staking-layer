@@ -204,20 +204,27 @@ Base 下 /redeem **不提供本地赎回**,而是:
 | 查看汇率/持仓(ZEN 价值) | ✅ | ✅(汇率读自 Horizen) |
 | 存入 deposit | ✅ | ❌ → 引导切到 Horizen |
 | 赎回 redeem | ✅ | ❌ → 引导桥回 |
-| 跨链 bridge | ✅ | ✅ |
+| 跨链 bridge(可自定义接收地址) | ✅ | ✅ |
+| gasless(中继代付) | ✅ deposit/redeem | ✅ 跨链 bridge |
 | 透明度只读 | ✅ | ✅(标注"汇率结算在 Horizen") |
+
+> **gasless 跨两链**:Horizen 上 gasless 作用于 deposit/redeem(`depositWithSig`/`redeemWithSig`);Base 上 gasless 作用于跨链 bridge(签名授权 OFT send,中继代提)。两端统一走同一 relayer 抽象:**选择中继端点 → 提交 metaTx → track tx 状态变化**。
 
 ### 6.2 页面:跨链(Bridge)
 
 ```
 从 [Horizen ▾]  →  到 [Base ▾]
 数量 [ ... ] ltZEN   [最大]
+接收地址 [ 0x…(默认本人,可改) ]            ← 自定义 receiver,可发给他人
 预计到账 ≈ 同额 ltZEN(OFT 1:1,份额不变)
 LayerZero 费用 ≈ ... (原生币)
+☐ 免 gas 跨链(由中继代付)                  ← Base/Horizen 两端均支持 gasless 跨链
 [ 跨链转移 ]
 ```
 
 - 强调:**跨链不改变份额数量、不改变可兑换 ZEN 价值**(OFT 1:1,`issuedShares` 不变)。
+- **自定义接收地址**:默认填当前钱包,可改为任意地址(发给他人/换钱包)。填非本人地址时**二次确认**("发送到该地址不可撤销")并校验地址格式。
+- **gasless 跨链**(两链均可):用户签名授权 OFT `send`,中继代付并 track 状态;复用统一 relayer 接口(与 Horizen 的 gasless deposit/redeem 同一抽象)。
 - 状态机:`发起 → 源链 burn 确认 → LayerZero 传递中(进度/预计时间) → 目标链 mint 到账`。给"在 LayerZero Scan 查看"链接。
 
 ### 6.3 可选:一键"桥回并赎回"(若产品确认,纯前端编排)

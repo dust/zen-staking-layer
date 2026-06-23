@@ -1,0 +1,45 @@
+"use client";
+
+import { useChainId, useSwitchChain } from "wagmi";
+import { chains, isSupportedChainId } from "@/config/chains";
+
+/**
+ * ChainSwitcher (uiux §2.1 header). Switching between Horizen/Base drives which actions
+ * are available across the app (gating happens in lib/chainGating.ts, consumed per-page).
+ *
+ * On an unsupported network the switcher highlights nothing and the WalletButton surfaces
+ * the wrong-network prompt.
+ */
+export function ChainSwitcher() {
+  const chainId = useChainId();
+  const { switchChain, isPending } = useSwitchChain();
+  const onSupported = isSupportedChainId(chainId);
+
+  return (
+    <div
+      role="group"
+      aria-label="Select network"
+      className="inline-flex items-center rounded-full border border-white/10 bg-white/5 p-0.5"
+    >
+      {chains.map((c) => {
+        const active = onSupported && c.id === chainId;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            disabled={isPending || active}
+            aria-pressed={active}
+            onClick={() => switchChain({ chainId: c.id })}
+            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:cursor-default ${
+              active
+                ? "bg-white/15 text-white"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            {c.name.replace(" Testnet", "").replace(" Sepolia", "")}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
