@@ -11,7 +11,7 @@ Stack: Next.js 16 (App Router) · wagmi v3 / viem · RainbowKit · TanStack Quer
 
 ```bash
 npm install
-cp .env.local.example .env.local   # then fill in the values (see below)
+cp env.local.example .env.local    # then fill in the values (see below)
 npm run dev                        # http://localhost:3000
 ```
 
