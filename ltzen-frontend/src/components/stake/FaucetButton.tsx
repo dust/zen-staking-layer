@@ -1,0 +1,31 @@
+"use client";
+
+/**
+ * FaucetButton (uiux §4 "Get test ZEN"). Mints a fixed grant of test ZEN on Horizen so a new
+ * user can try staking. Hidden when ZEN isn't configured; disabled while a mint is in flight.
+ */
+
+import { useFaucet, FAUCET_AMOUNT_ZEN } from "@/hooks/useFaucet";
+import { copy } from "@/lib/copy";
+
+export function FaucetButton() {
+  const { mint, isBusy, isConfigured, isConnected } = useFaucet();
+
+  if (!isConfigured) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        onClick={() => void mint()}
+        disabled={isBusy || !isConnected}
+        className="inline-flex items-center rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+      >
+        {isBusy
+          ? copy.cta.gettingTestZen
+          : `${copy.cta.getTestZen} (${FAUCET_AMOUNT_ZEN.toString()} ZEN)`}
+      </button>
+      <span className="text-xs text-zinc-500">{copy.faucet.note}</span>
+    </div>
+  );
+}

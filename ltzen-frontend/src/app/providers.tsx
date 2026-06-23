@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { WagmiProvider } from "wagmi";
 import { wagmiConfig } from "@/config/wagmi";
+import { ToastProvider } from "@/components/common/Toast";
 
 /**
  * Client-side provider boundary (Next 16 App Router: React Context is not allowed in Server
@@ -32,7 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={darkTheme()} modalSize="compact">
-          {children}
+          <ToastProvider>{children}</ToastProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

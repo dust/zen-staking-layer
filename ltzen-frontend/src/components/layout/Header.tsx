@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChainSwitcher } from "./ChainSwitcher";
 import { WalletButton } from "./WalletButton";
+import { TxBadge } from "./TxBadge";
 
 /**
  * Top bar (uiux §2.1): logo + primary nav + ChainSwitcher + WalletButton.
@@ -36,6 +37,7 @@ export function Header() {
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
+          <TxBadge />
           <ChainSwitcher />
           <WalletButton />
         </div>

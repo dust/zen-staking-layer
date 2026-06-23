@@ -61,6 +61,63 @@ export const copy = {
     redeem: "Redeem",
     viewExplorer: "View on Explorer",
     retry: "Retry",
+    approve: "Approve ZEN",
+    approving: "Approving…",
+    depositing: "Staking…",
+    max: "Max",
+    getTestZen: "Get test ZEN",
+    gettingTestZen: "Requesting…",
+    switchToHorizen: "Switch to Horizen",
+    fallbackToStandard: "Use a standard deposit instead",
+  },
+
+  // Stake page (uiux §4). All NET-NEW English (docs were Chinese).
+  stake: {
+    title: "Stake ZEN",
+    subtitle: "Deposit ZEN and receive ltZEN. It compounds automatically — no claiming, no lockup.",
+    amountLabel: "Amount",
+    youReceive: "You receive",
+    balance: "Balance",
+    previewNote: "Estimated from the current exchange rate; settles on-chain.",
+    needsApprovalNote: "First stake needs a one-time approval, then the deposit.",
+    gaslessToggle: "Gasless deposit (relayer pays gas)",
+    gaslessUnavailable: "Gasless isn't available right now — no relayer is configured. You can still stake normally.",
+    gaslessMaxFee: "Max fee you authorize",
+    gaslessEstFee: "Estimated relayer fee",
+    gaslessNetStake: "Actually staked",
+    gaslessSignNote: "You only sign — the relayer submits and the fee is taken from your deposit.",
+    submitting: "Submitting to relayer…",
+    relayerWaiting: "Waiting for the relayer to land on-chain…",
+    signing: "Waiting for your signature…",
+    pausedBanner: "Deposits are temporarily paused. Redeeming and viewing are unaffected.",
+  },
+
+  faucet: {
+    note: "Mint test ZEN to try staking on Horizen.",
+    success: "Test ZEN minted.",
+  },
+
+  // §8.2 error copy — one string per classified kind.
+  errors: {
+    rejected: "Canceled.",
+    insufficientBalance: "Not enough balance.",
+    needsApproval: "You need to approve ZEN first.",
+    wrongChain: "Wrong network — switch to Horizen.",
+    rateMoved: "The rate moved. Refreshing the estimate — please review and retry.",
+    paused: "Deposits are temporarily paused. Redeeming and viewing are unaffected.",
+    relayerTimeout: "The relayer timed out. You can switch to a standard deposit.",
+    rpc: "Couldn't reach the network. Retry.",
+    unknown: "Something went wrong. Retry.",
+  },
+
+  // Transaction lifecycle toasts (uiux §8.1).
+  tx: {
+    pending: "Transaction pending…",
+    confirmed: "Confirmed.",
+    failed: "Transaction failed.",
+    approveConfirmed: "Approval confirmed.",
+    depositConfirmed: "Stake confirmed.",
+    inFlight: "in progress",
   },
 
   units: {
