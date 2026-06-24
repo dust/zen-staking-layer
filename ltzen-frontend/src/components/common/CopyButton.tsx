@@ -27,7 +27,7 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
       type="button"
       onClick={onCopy}
       aria-label={`${copied ? copy.transparency.copied : copy.transparency.copy}${label ? ` ${label}` : ""}`}
-      className="inline-flex min-h-9 items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 transition-colors hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+      className="inline-flex min-h-9 items-center gap-1 rounded-md border border-white/[0.08] px-2 py-1 text-xs text-zinc-300 transition-colors hover:border-white/25 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green"
     >
       <span aria-hidden>{copied ? "✓" : "⧉"}</span>
       {copied ? copy.transparency.copied : copy.transparency.copy}

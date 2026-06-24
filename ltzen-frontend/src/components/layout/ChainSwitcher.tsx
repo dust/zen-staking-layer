@@ -19,7 +19,7 @@ export function ChainSwitcher() {
     <div
       role="group"
       aria-label="Select network"
-      className="inline-flex items-center rounded-full border border-white/10 bg-white/5 p-0.5"
+      className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5"
     >
       {chains.map((c) => {
         const active = onSupported && c.id === chainId;
@@ -30,9 +30,9 @@ export function ChainSwitcher() {
             disabled={isPending || active}
             aria-pressed={active}
             onClick={() => switchChain({ chainId: c.id })}
-            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:cursor-default ${
+            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green ${
               active
-                ? "bg-white/15 text-white"
+                ? "bg-brand-green/15 text-brand-green"
                 : "text-zinc-400 hover:text-white"
             }`}
           >

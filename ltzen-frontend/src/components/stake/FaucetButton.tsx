@@ -19,7 +19,7 @@ export function FaucetButton() {
         type="button"
         onClick={() => void mint()}
         disabled={isBusy || !isConnected}
-        className="inline-flex items-center rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+        className="inline-flex items-center rounded-xl border border-white/[0.12] bg-white/[0.03] px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:border-white/25 hover:text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
       >
         {isBusy
           ? copy.cta.gettingTestZen

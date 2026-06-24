@@ -101,13 +101,13 @@ export function StakeForm() {
             {d.balance !== undefined ? formatZenAmount(d.balance, 4) : "—"}
           </span>
         </div>
-        <div className="mt-1.5 flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 focus-within:border-emerald-400/40">
+        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 focus-within:border-brand-green/50">
           <input
             inputMode="decimal"
             placeholder="0.0"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="w-full bg-transparent text-lg text-white outline-none placeholder:text-zinc-600"
+            className="w-full bg-transparent font-mono text-lg text-white outline-none placeholder:text-zinc-600"
             aria-label={`${copy.stake.amountLabel} (ZEN)`}
           />
           <span className="text-sm text-zinc-500">{copy.units.zen}</span>
@@ -184,7 +184,7 @@ export function StakeForm() {
         type="button"
         onClick={() => void onSubmit()}
         disabled={!canSubmit}
-        className="mt-5 w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-5 w-full rounded-xl bg-gradient-to-br from-brand-teal via-brand-green to-brand-indigo px-4 py-3 text-sm font-semibold text-black transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
       >
         {!d.isConnected ? copy.cta.connect : buttonLabel}
       </button>

@@ -32,7 +32,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme()} modalSize="compact">
+        <RainbowKitProvider
+          theme={darkTheme({
+            // Brand emerald accent so the wallet modal matches the app CTAs (design-uplift D2).
+            accentColor: "#31e0b5",
+            accentColorForeground: "#000000",
+            borderRadius: "medium",
+          })}
+          modalSize="compact"
+        >
           <ToastProvider>{children}</ToastProvider>
         </RainbowKitProvider>
       </QueryClientProvider>

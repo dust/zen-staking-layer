@@ -143,7 +143,7 @@ function ToastViewport({
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`pointer-events-auto rounded-lg border px-4 py-3 text-sm shadow-lg backdrop-blur ${TONE_STYLE[t.tone]}`}
+          className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm shadow-lg shadow-black/30 backdrop-blur-xl ${TONE_STYLE[t.tone]}`}
           role={t.tone === "error" ? "alert" : "status"}
         >
           <div className="flex items-start justify-between gap-3">
