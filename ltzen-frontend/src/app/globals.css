@@ -17,3 +17,19 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+
+/*
+ * a11y (uiux §10): respect prefers-reduced-motion. Tailwind's `motion-safe:` variants already
+ * gate opt-in animations (e.g. HeroRate's pulse); this is a global backstop that neutralizes
+ * any transition/animation for users who ask for reduced motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

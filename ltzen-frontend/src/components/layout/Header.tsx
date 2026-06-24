@@ -2,19 +2,13 @@ import Link from "next/link";
 import { ChainSwitcher } from "./ChainSwitcher";
 import { WalletButton } from "./WalletButton";
 import { TxBadge } from "./TxBadge";
+import { NAV_ITEMS } from "./nav";
 
 /**
  * Top bar (uiux §2.1): logo + primary nav + ChainSwitcher + WalletButton.
- * Server component shell; the interactive children are client components.
+ * Server component shell; the interactive children are client components. The full nav shows on
+ * desktop (≥md); on mobile the BottomTabBar takes over (uiux §9).
  */
-const NAV = [
-  { href: "/", label: "Overview" },
-  { href: "/stake", label: "Stake" },
-  { href: "/redeem", label: "Redeem" },
-  { href: "/bridge", label: "Bridge" },
-  { href: "/transparency", label: "Transparency" },
-];
-
 export function Header() {
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-black/60 backdrop-blur">
@@ -25,7 +19,7 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
-          {NAV.map((item) => (
+          {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}

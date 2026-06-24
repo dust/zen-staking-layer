@@ -33,6 +33,17 @@ export const ZEN_PERMIT_TYPES = {
   ],
 } as const;
 
+export const REDEEM_WITH_SIG_TYPES = {
+  RedeemWithSig: [
+    { name: "shares", type: "uint256" },
+    { name: "receiver", type: "address" },
+    { name: "maxFeeZen", type: "uint256" },
+    { name: "user", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
 type StLighterDomain = readonly [
   string,
   string,
@@ -141,6 +152,35 @@ export async function signDepositWithSig(
     domain,
     types: DEPOSIT_WITH_SIG_TYPES,
     primaryType: "DepositWithSig",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
+}
+
+export interface RedeemWithSigParams {
+  shares: bigint;
+  receiver: Address;
+  maxFeeZen: bigint;
+  user: Address;
+  deadline: bigint;
+}
+
+/**
+ * Sign StLighter RedeemWithSig (EIP-712). Reuses the StLighter domain + nonce (same proxy as
+ * deposit). Unlike deposit, redeem needs no ERC20 permit — the contract burns the user's ltZEN
+ * shares directly (internal accounting, no token approval).
+ */
+export async function signRedeemWithSig(
+  config: Config,
+  chainId: number,
+  stLighter: Address,
+  params: RedeemWithSigParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readDepositSignContext(config, chainId, stLighter, params.user);
+  const signature = await signTypedData(config, {
+    domain,
+    types: REDEEM_WITH_SIG_TYPES,
+    primaryType: "RedeemWithSig",
     message: { ...params, nonce },
   });
   return { signature, nonce };

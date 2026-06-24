@@ -1,10 +1,12 @@
 /**
- * Direct contract relayer (M2 testnet — no backend relayer required).
+ * Direct contract relayer (M2/M3 testnet — no backend relayer required).
  *
- * After the user signs DepositWithSig + ZEN Permit off-chain, this implementation broadcasts
- * `depositWithSigAndPermit` from the connected wallet. The user pays gas for that one
- * transaction but needs no separate `approve`. Production will swap to HttpRelayer so the
- * relayer wallet submits and the fee is taken from the deposit.
+ * After the user signs the meta-tx off-chain, this implementation broadcasts the matching
+ * StLighter entrypoint from the connected wallet:
+ *   - depositWithSigAndPermit (deposit): DepositWithSig + ZEN Permit, no separate approve.
+ *   - redeemWithSig (redeem): RedeemWithSig only — redeem burns ltZEN internally, no permit.
+ * The user pays gas for that one transaction. Production will swap to HttpRelayer so the relayer
+ * wallet submits and the fee is taken from the proceeds.
  */
 
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
@@ -71,38 +73,65 @@ export class DirectContractRelayer implements Relayer {
   constructor(private readonly config: Config) {}
 
   async submit(req: RelayRequest): Promise<RelayHandle> {
-    if (req.kind !== "depositWithSigAndPermit" || !req.permit) {
-      throw new Error("DirectContractRelayer only supports depositWithSigAndPermit with permit");
-    }
-
     const id = `direct-${++counter}`;
-    const permit = req.permit;
     const feeZen = 0n;
 
-    return new DirectRelayHandle(
-      this.config,
-      req.chainId,
-      id,
-      async () =>
-        writeContract(this.config, {
-          chainId: req.chainId,
-          address: req.verifyingContract,
-          abi: abis.stLighter,
-          functionName: "depositWithSigAndPermit",
-          args: [
-            BigInt(req.amount),
-            req.receiver,
-            BigInt(req.maxFeeZen),
-            feeZen,
-            req.user,
-            BigInt(req.deadline),
-            req.signature,
-            BigInt(permit.deadline),
-            permit.v,
-            permit.r,
-            permit.s,
-          ],
-        }),
-    );
+    if (req.kind === "depositWithSigAndPermit") {
+      if (!req.permit) {
+        throw new Error("depositWithSigAndPermit requires a ZEN permit signature");
+      }
+      const permit = req.permit;
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.stLighter,
+            functionName: "depositWithSigAndPermit",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
+              BigInt(req.maxFeeZen),
+              feeZen,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+              BigInt(permit.deadline),
+              permit.v,
+              permit.r,
+              permit.s,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "redeemWithSig") {
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.stLighter,
+            functionName: "redeemWithSig",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
+              BigInt(req.maxFeeZen),
+              feeZen,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+            ],
+          }),
+      );
+    }
+
+    throw new Error(`DirectContractRelayer does not support kind "${req.kind}"`);
   }
 }
