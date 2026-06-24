@@ -1,21 +1,47 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens (design-uplift D1). Brand DNA shared with sibling project lighter-ui:
+ * deep blue-black canvas, hairline borders, teal→green→indigo brand gradient. Fonts are
+ * injected by next/font in layout.tsx as --font-display / --font-sans / --font-mono.
+ */
 :root {
-  --background: #0a0a0a;
+  --background: #070a0e; /* canvas — blue-black, not pure black */
   --foreground: #ededed;
+  --surface: #0d1117; /* cards / panels */
+  --hairline: rgba(255, 255, 255, 0.06);
+
+  /* Brand gradient stops (from lighter-ui logo.svg). */
+  --brand-teal: #27e4c0;
+  --brand-green: #31e0b5;
+  --brand-indigo: #3454ee;
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-teal) 0%,
+    var(--brand-green) 55%,
+    var(--brand-indigo) 100%
+  );
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--background);
+  --color-surface: var(--surface);
+  --color-hairline: var(--hairline);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-green: var(--brand-green);
+  --color-brand-indigo: var(--brand-indigo);
+
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, Arial, sans-serif;
 }
 
 /*
