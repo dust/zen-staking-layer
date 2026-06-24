@@ -1,24 +1,27 @@
 /**
- * Relayer selector (frontend-plan §2). Picks the concrete relayer at call time: a real
- * HttpRelayer when endpoints are configured (`NEXT_PUBLIC_RELAYER_ENDPOINTS`), otherwise the
- * MockRelayer so the gasless UX is exercisable in dev. The first endpoint wins for now; a
- * future multi-endpoint strategy (health/latency pick) would live here only.
+ * Relayer selector (frontend-plan §2).
+ *
+ *   - HttpRelayer when `NEXT_PUBLIC_RELAYER_ENDPOINTS` is set (future production relayer).
+ *   - MockRelayer when `NEXT_PUBLIC_MOCK_RELAYER_ONLY=1` (UI lifecycle / timeout testing).
+ *   - DirectContractRelayer otherwise (M2 testnet: real on-chain depositWithSigAndPermit, no
+ *     separate approve; user confirms one broadcast tx until a relayer backend exists).
  */
 
-import { hasRelayer, relayerEndpoints } from "@/config/relayer";
+import type { Config } from "wagmi";
+import { hasRelayer, relayerEndpoints, useMockRelayerOnly } from "@/config/relayer";
+import { DirectContractRelayer } from "./directContractRelayer";
 import { HttpRelayer } from "./httpRelayer";
 import { MockRelayer } from "./mockRelayer";
 import type { Relayer } from "./types";
 
 export * from "./types";
 
-let cached: Relayer | undefined;
+/** Gasless is available in dev/testnet (direct submit) or when a relayer endpoint is configured. */
+export const gaslessSupported =
+  hasRelayer || useMockRelayerOnly || process.env.NODE_ENV !== "production";
 
-export function getRelayer(): Relayer {
-  if (cached) return cached;
-  cached = hasRelayer ? new HttpRelayer(relayerEndpoints[0]) : new MockRelayer();
-  return cached;
+export function createRelayer(config: Config): Relayer {
+  if (hasRelayer) return new HttpRelayer(relayerEndpoints[0]);
+  if (useMockRelayerOnly) return new MockRelayer();
+  return new DirectContractRelayer(config);
 }
-
-/** Whether gasless is offered at all (real relayer OR dev mock). Mock is dev-only. */
-export const gaslessSupported = hasRelayer || process.env.NODE_ENV !== "production";

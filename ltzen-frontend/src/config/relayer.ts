@@ -15,3 +15,6 @@ export const relayerEndpoints: string[] = (
   .filter(Boolean);
 
 export const hasRelayer = relayerEndpoints.length > 0;
+
+/** Pure UI simulation — no on-chain broadcast (timeout testing via NEXT_PUBLIC_MOCK_RELAYER_TIMEOUT). */
+export const useMockRelayerOnly = process.env.NEXT_PUBLIC_MOCK_RELAYER_ONLY === "1";

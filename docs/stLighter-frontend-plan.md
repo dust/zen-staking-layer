@@ -124,9 +124,13 @@ ltzen-frontend/
 ### M2 — Stake(核心写入闭环,Horizen)
 - `useFaucet`:Get test ZEN 按钮 → `MockZEN.mint()`(领 256 ZEN)。
 - `useDeposit`:`previewDeposit` 实时预览;allowance 检查 → `approve` → `deposit` 状态机(uiux-spec §4.2);通用 `useTxLifecycle` + Toast + tx hash explorer 链接。
-- **gasless deposit(Horizen)**:`useRelayer` + `depositWithSig` —— 签名→选 relayer 提交→track 状态;费用透明(显示 `maxFeeZen`/预计 `feeZen`,uiux-spec §4.3)。中继超时兜底"改用普通存入"。
-- 成功后乐观更新持仓与余额;错误归类文案(§8.2)。
-- **验收**:领币→授权→存入→见 ltZEN 余额与汇率;gasless 存入走签名+中继且可 track;拒签/余额不足/错链/暂停/中继超时态文案正确。
+- **gasless deposit(Horizen)**:`depositWithSigAndPermit` — 双签(DepositWithSig + ZEN Permit),免 approve;`createRelayer()` 抽象:
+  - 测试网默认 `DirectContractRelayer`(直连合约,一笔 tx 验证 EIP-712,无后端 relayer)
+  - `NEXT_PUBLIC_MOCK_RELAYER_ONLY=1` → 纯 UI 模拟
+  - `NEXT_PUBLIC_RELAYER_ENDPOINTS` → `HttpRelayer`(relayer 服务置后开发)
+- 费用透明(`maxFeeZen`;实际 `feeZen` 由 relayer 后端动态提供,测试网 fee=0)。
+- 成功后乐观更新持仓;错误归类文案(§8.2)。
+- **验收**:领币→标准存入或 gasless 双签存入→见 ltZEN;gasless 无 approve;中继超时兜底"改用普通存入"。`depositWithPermit` 推迟至 M2 之后。
 
 ### M3 — Redeem(赎回闭环,Horizen)
 - `useRedeem`:输入 ltZEN 份额(可切按 ZEN 反算);`previewRedeem` 预览;末位全额赎回提示(uiux-spec §5.1)。
@@ -184,7 +188,7 @@ ltzen-frontend/
 
 ## 6. 后续(本计划不含实现)
 - **Goldsky 子图**:历史汇率/harvest/APY 真实数据,替换前端轮询采样;补 harvest 标记与"不复投对照面积"。
-- **permit 一笔存入**(`depositWithPermit` / `depositWithSigAndPermit`):免单独 approve。
+- **permit 一笔存入**(`depositWithPermit`):非 gasless 路径,免单独 approve — M2 之后。
 - **Base 端 deposit/redeem**:产品上锚定 Horizen,属 Phase 2 跨链写入范畴(PRD §3),非本前端删减项。
 
 ---
@@ -195,5 +199,5 @@ ltzen-frontend/
 - **faucet 速率**:MockZEN 每次 256 ZEN 上限,按钮需处理"领取过于频繁/gas 不足"反馈。
 - **RPC 稳定性**:Caldera testnet RPC 若不稳,需要 TanStack Query 重试 + 骨架屏兜底。
 - **Base 接入(M5)**:依赖 Base ltZEN 已部署 + Horizen⇄Base OFT peer/DVN 接线;未就绪时 Base 页禁用并提示,Horizen 闭环独立先行。
-- **relayer 服务**:gasless 依赖一个可用 relayer 端点(自建/第三方)。具体协议未定时,`relayer/httpRelayer.ts` 先按通用「submit + getStatus」轮询实现,端点经 env 注入;选定后只改这一层。
+- **relayer 服务**:M2 不接真实 relayer。测试网默认 `DirectContractRelayer` 直连 `depositWithSigAndPermit`(验证 EIP-712,无 approve);`MockRelayer` 仅 UI 演练;`HttpRelayer` 待后端就绪。`feeZen` 由 relayer 动态报价,前端只签 `maxFeeZen` 上限。
 - **跨链接收地址**:bridge 允许填他人地址,UI 必须二次确认("发送到非本人地址不可撤销"),并校验地址格式,防误填。

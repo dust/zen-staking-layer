@@ -14,7 +14,7 @@
 import type { Address, Hex } from "viem";
 
 /** Which gasless action this meta-tx authorizes; lets a relayer route to the right entrypoint. */
-export type RelayKind = "depositWithSig" | "redeemWithSig" | "bridge";
+export type RelayKind = "depositWithSigAndPermit" | "redeemWithSig" | "bridge";
 
 /**
  * A signed authorization to relay. `args` is the EIP-712-signed tuple (assets/shares, receiver,
@@ -22,6 +22,14 @@ export type RelayKind = "depositWithSig" | "redeemWithSig" | "bridge";
  * the actual call. We do NOT include feeZen here — the relayer fills it (it isn't part of the
  * signed payload; see StLighter DEPOSIT_WITH_SIG_TYPEHASH).
  */
+/** ZEN EIP-2612 permit signature bundled with depositWithSigAndPermit. */
+export interface ZenPermitPayload {
+  deadline: number;
+  v: number;
+  r: Hex;
+  s: Hex;
+}
+
 export interface RelayRequest {
   kind: RelayKind;
   chainId: number;
@@ -33,7 +41,10 @@ export interface RelayRequest {
   amount: string;
   maxFeeZen: string;
   deadline: number;
+  /** StLighter DepositWithSig EIP-712 signature. */
   signature: Hex;
+  /** Required for depositWithSigAndPermit — authorizes ZEN transfer without on-chain approve. */
+  permit?: ZenPermitPayload;
 }
 
 export type RelayStatus =

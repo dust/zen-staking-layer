@@ -133,6 +133,10 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
     return { kind: "rate-moved", message: copy.errors.rateMoved, tone: "error", retryable: true };
   }
 
+  if (text.includes("invalid signature") || text.includes("stlighter__invalidsignature")) {
+    return { kind: "unknown", message: copy.errors.invalidSignature, tone: "error", retryable: true };
+  }
+
   if (
     text.includes("fetch failed") ||
     text.includes("timeout") ||
