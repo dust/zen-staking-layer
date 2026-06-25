@@ -231,7 +231,7 @@ export function RedeemForm() {
         type="button"
         onClick={() => void onSubmit()}
         disabled={!canSubmit}
-        className="mt-5 w-full rounded-xl bg-gradient-to-br from-brand-teal to-brand-green px-4 py-3 text-sm font-semibold text-black transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+        className="mt-5 w-full rounded-xl bg-brand-cta px-4 py-3 text-sm font-semibold text-black transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
       >
         {!r.isConnected ? copy.cta.connect : buttonLabel}
       </button>

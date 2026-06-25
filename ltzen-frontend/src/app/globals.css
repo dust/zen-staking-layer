@@ -21,6 +21,27 @@
     var(--brand-green) 55%,
     var(--brand-indigo) 100%
   );
+  /* CTA fill: the two BRIGHT stops only, so a black label stays high-contrast end-to-end. */
+  --brand-cta-gradient: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-green) 100%);
+}
+
+/*
+ * Brand gradient utilities defined with LITERAL linear-gradient() so they render in every
+ * browser. Tailwind v4's own `bg-gradient-to-*` relies on @property-registered position vars,
+ * which can resolve to empty (no background painted) — that broke the primary CTAs (the button
+ * had the class but no visible fill). These utilities sidestep that machinery entirely.
+ */
+.bg-brand-cta {
+  background-image: var(--brand-cta-gradient);
+}
+.bg-brand-full {
+  background-image: var(--brand-gradient);
+}
+.text-brand-gradient {
+  background-image: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 @theme inline {

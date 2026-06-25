@@ -16,7 +16,7 @@ export function Card({
 }) {
   if (accent) {
     return (
-      <div className="rounded-2xl bg-gradient-to-br from-brand-teal/40 via-brand-green/20 to-brand-indigo/40 p-px">
+      <div className="bg-brand-full rounded-2xl p-px opacity-60">
         <div className={`rounded-2xl bg-[#0D1117] p-5 ${className}`}>{children}</div>
       </div>
     );
