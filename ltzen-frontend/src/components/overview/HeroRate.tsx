@@ -73,7 +73,10 @@ function RateValue({ value }: { value: string }) {
         {unitsLabel} ltZEN =
       </span>
       <span>{head}</span>
-      <span className="bg-gradient-to-r from-brand-teal via-brand-green to-brand-indigo bg-clip-text text-transparent motion-safe:animate-pulse">
+      <span
+        className="text-brand-teal motion-safe:animate-pulse"
+        style={{ textShadow: "0 0 18px rgba(39, 228, 192, 0.45)" }}
+      >
         {tail}
       </span>
       <span className="ml-2 font-sans text-2xl text-zinc-400">ZEN</span>
