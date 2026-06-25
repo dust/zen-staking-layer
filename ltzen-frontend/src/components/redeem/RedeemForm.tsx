@@ -114,10 +114,10 @@ export function RedeemForm() {
     <Card className="max-w-xl">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">{copy.redeem.title}</h1>
+          <h1 className="font-display text-xl font-bold tracking-tight text-white">{copy.redeem.title}</h1>
           <p className="mt-1 text-sm text-zinc-400">{copy.redeem.subtitle}</p>
         </div>
-        <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5 text-xs">
+        <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 text-xs">
           {(["shares", "zen"] as const).map((m) => (
             <button
               key={m}
@@ -126,8 +126,8 @@ export function RedeemForm() {
                 setMode(m);
                 setInput("");
               }}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                mode === m ? "bg-white/10 text-white" : "text-zinc-400 hover:text-zinc-200"
+              className={`rounded-md px-2.5 py-1 font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green ${
+                mode === m ? "bg-brand-green/15 text-brand-green" : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
               {m === "shares" ? copy.redeem.byShares : copy.redeem.byZen}
@@ -158,7 +158,7 @@ export function RedeemForm() {
             type="button"
             onClick={onMax}
             disabled={r.shareBalance === undefined}
-            className="rounded-md bg-white/10 px-2 py-1 text-xs font-medium text-zinc-200 hover:bg-white/15 disabled:opacity-40"
+            className="min-h-9 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-white/15 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green"
           >
             {copy.cta.max}
           </button>
@@ -196,7 +196,7 @@ export function RedeemForm() {
               setGasless(e.target.checked);
               r.resetGasless();
             }}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-emerald-500"
+            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-[#31e0b5]"
           />
           {copy.redeem.gaslessToggle}
           <InfoTooltip text={copy.redeem.gaslessSignNote} />
@@ -206,20 +206,20 @@ export function RedeemForm() {
         )}
 
         {useGasless && sharesWei && r.previewAssets !== undefined && (
-          <div className="mt-3 space-y-1.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-xs">
+          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs">
             <div className="flex justify-between text-zinc-400">
               <span>{copy.redeem.gaslessMaxFee}</span>
-              <span className="tabular-nums">{formatZenAmount(r.maxFeeZen, 4)}</span>
+              <span className="font-mono tabular-nums">{formatZenAmount(r.maxFeeZen, 4)}</span>
             </div>
             {r.gaslessFeeZen !== undefined && r.gaslessFeeZen > 0n && (
               <div className="flex justify-between text-zinc-400">
                 <span>{copy.redeem.gaslessEstFee}</span>
-                <span className="tabular-nums">{approx(formatZenAmount(r.gaslessFeeZen, 4))}</span>
+                <span className="font-mono tabular-nums">{approx(formatZenAmount(r.gaslessFeeZen, 4))}</span>
               </div>
             )}
             <div className="flex justify-between text-zinc-200">
               <span>{copy.redeem.gaslessNetReceive}</span>
-              <span className="tabular-nums">
+              <span className="font-mono tabular-nums">
                 {approx(formatZenAmount(r.previewAssets - (r.gaslessFeeZen ?? 0n), 4))}
               </span>
             </div>

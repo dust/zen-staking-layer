@@ -19,7 +19,7 @@ export function PositionCard() {
   if (!isConnected) {
     return (
       <Card>
-        <div className="flex items-center gap-1 text-sm font-medium text-zinc-400">
+        <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-zinc-400">
           {copy.labels.yourBalance}
         </div>
         <p className="mt-3 text-sm text-zinc-400">{copy.states.connectToView}</p>
@@ -32,14 +32,14 @@ export function PositionCard() {
 
   return (
     <Card>
-      <div className="flex items-center gap-1 text-sm font-medium text-zinc-400">
+      <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-[0.14em] text-zinc-400">
         {copy.labels.yourBalance}
         <InfoTooltip text={copy.tooltips.yourBalance} />
       </div>
 
-      <div className="mt-2 font-mono text-3xl font-semibold text-white tabular-nums">
+      <div className="mt-2 font-mono text-3xl font-semibold text-white tabular-nums sm:text-4xl">
         {!isConfigured ? (
-          <span className="text-lg text-zinc-500">{copy.states.notConfigured}</span>
+          <span className="font-sans text-lg text-zinc-500">{copy.states.notConfigured}</span>
         ) : isLoading || zenValue === undefined ? (
           <Skeleton className="h-9 w-48" />
         ) : (

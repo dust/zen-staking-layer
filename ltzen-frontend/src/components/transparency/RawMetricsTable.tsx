@@ -79,7 +79,7 @@ export function RawMetricsTable() {
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium text-white">{copy.transparency.metricsHeading}</h2>
+        <h2 className="font-display text-sm font-semibold tracking-tight text-white">{copy.transparency.metricsHeading}</h2>
       </div>
       <p className="mt-1 text-xs text-zinc-500">{copy.transparency.metricsNote}</p>
 

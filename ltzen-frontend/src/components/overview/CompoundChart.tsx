@@ -21,7 +21,7 @@ export function CompoundChart() {
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-zinc-400">Compounding</h2>
+        <h2 className="font-display text-sm font-semibold tracking-tight text-white">Compounding</h2>
         <span className="text-xs text-zinc-600">{copy.states.sessionSampleNote}</span>
       </div>
 
@@ -50,11 +50,15 @@ function Sparkline({ values }: { values: number[] }) {
   const max = Math.max(...values);
   const span = max - min || 1; // avoid /0 when all samples equal
 
-  const pts = values.map((v, i) => {
+  const xy = values.map((v, i) => {
     const x = PAD + (i / (values.length - 1)) * (W - PAD * 2);
     const y = H - PAD - ((v - min) / span) * (H - PAD * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
+    return [x, y] as const;
   });
+
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  // Close the path down to the baseline for a low-opacity area fill under the curve.
+  const area = `${PAD},${H - PAD} ${line} ${W - PAD},${H - PAD}`;
 
   return (
     <svg
@@ -64,10 +68,22 @@ function Sparkline({ values }: { values: number[] }) {
       role="img"
       aria-label="Exchange rate over this session — trending up as rewards compound."
     >
+      <defs>
+        <linearGradient id="compound-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#27e4c0" />
+          <stop offset="55%" stopColor="#31e0b5" />
+          <stop offset="100%" stopColor="#3454ee" />
+        </linearGradient>
+        <linearGradient id="compound-area" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#31e0b5" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#31e0b5" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill="url(#compound-area)" stroke="none" />
       <polyline
-        points={pts.join(" ")}
+        points={line}
         fill="none"
-        stroke="rgb(110 231 183)"
+        stroke="url(#compound-line)"
         strokeWidth={2}
         strokeLinejoin="round"
         strokeLinecap="round"

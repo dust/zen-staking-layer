@@ -18,7 +18,7 @@ export function ProtocolStatsCard() {
 
   return (
     <Card>
-      <h2 className="text-sm font-medium text-zinc-400">Protocol</h2>
+      <h2 className="font-display text-sm font-semibold tracking-tight text-white">Protocol</h2>
 
       <dl className="mt-3 space-y-4">
         <Stat

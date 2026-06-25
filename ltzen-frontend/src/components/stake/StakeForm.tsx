@@ -90,7 +90,7 @@ export function StakeForm() {
 
   return (
     <Card className="max-w-xl">
-      <h1 className="text-lg font-semibold text-white">{copy.stake.title}</h1>
+      <h1 className="font-display text-xl font-bold tracking-tight text-white">{copy.stake.title}</h1>
       <p className="mt-1 text-sm text-zinc-400">{copy.stake.subtitle}</p>
 
       <div className="mt-5">
@@ -115,7 +115,7 @@ export function StakeForm() {
             type="button"
             onClick={onMax}
             disabled={d.balance === undefined}
-            className="rounded-md bg-white/10 px-2 py-1 text-xs font-medium text-zinc-200 hover:bg-white/15 disabled:opacity-40"
+            className="min-h-9 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-white/15 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green"
           >
             {copy.cta.max}
           </button>
@@ -144,7 +144,7 @@ export function StakeForm() {
               setGasless(e.target.checked);
               d.resetGasless();
             }}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-emerald-500"
+            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-[#31e0b5]"
           />
           {copy.stake.gaslessToggle}
           <InfoTooltip text={copy.stake.gaslessSignNote} />
@@ -154,20 +154,20 @@ export function StakeForm() {
         )}
 
         {useGasless && amountWei && (
-          <div className="mt-3 space-y-1.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-xs">
+          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs">
             <div className="flex justify-between text-zinc-400">
               <span>{copy.stake.gaslessMaxFee}</span>
-              <span className="tabular-nums">{formatZenAmount(d.maxFeeZen, 4)}</span>
+              <span className="font-mono tabular-nums">{formatZenAmount(d.maxFeeZen, 4)}</span>
             </div>
             {d.gaslessFeeZen !== undefined && d.gaslessFeeZen > 0n && (
               <div className="flex justify-between text-zinc-400">
                 <span>{copy.stake.gaslessEstFee}</span>
-                <span className="tabular-nums">{approx(formatZenAmount(d.gaslessFeeZen, 4))}</span>
+                <span className="font-mono tabular-nums">{approx(formatZenAmount(d.gaslessFeeZen, 4))}</span>
               </div>
             )}
             <div className="flex justify-between text-zinc-200">
               <span>{copy.stake.gaslessNetStake}</span>
-              <span className="tabular-nums">
+              <span className="font-mono tabular-nums">
                 {approx(
                   formatZenAmount(
                     amountWei - (d.gaslessFeeZen ?? 0n),
