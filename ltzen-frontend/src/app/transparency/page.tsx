@@ -19,7 +19,7 @@ export default function TransparencyPage() {
   return (
     <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
       <header className="max-w-2xl">
-        <h1 className="text-2xl font-semibold text-white">{copy.transparency.title}</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-white">{copy.transparency.title}</h1>
         <p className="mt-2 text-sm leading-relaxed text-zinc-400">
           {copy.transparency.subtitle}
         </p>

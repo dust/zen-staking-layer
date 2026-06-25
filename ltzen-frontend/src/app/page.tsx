@@ -10,10 +10,10 @@ import { CompoundChart } from "@/components/overview/CompoundChart";
  */
 export default function Home() {
   return (
-    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:py-10">
       <HeroRate />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <CompoundChart />
         </div>

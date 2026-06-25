@@ -27,7 +27,7 @@ export function AddressList() {
 
   return (
     <Card>
-      <h2 className="text-sm font-medium text-white">{copy.transparency.addressesHeading}</h2>
+      <h2 className="font-display text-sm font-semibold tracking-tight text-white">{copy.transparency.addressesHeading}</h2>
       <p className="mt-1 text-xs text-zinc-500">{copy.transparency.addressesNote}</p>
 
       {configured.length === 0 ? (

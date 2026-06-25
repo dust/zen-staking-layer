@@ -11,7 +11,7 @@ import { Card } from "@/components/common/Card";
 export function HarvestHistory() {
   return (
     <Card>
-      <h2 className="text-sm font-medium text-white">{copy.transparency.harvestHeading}</h2>
+      <h2 className="font-display text-sm font-semibold tracking-tight text-white">{copy.transparency.harvestHeading}</h2>
       <div className="mt-4 rounded-lg border border-dashed border-white/10 bg-white/[0.01] px-4 py-8 text-center">
         <p className="mx-auto max-w-md text-sm text-zinc-400">
           {copy.transparency.harvestPlaceholder}

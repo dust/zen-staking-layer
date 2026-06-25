@@ -15,8 +15,9 @@ import { InfoTooltip } from "@/components/common/InfoTooltip";
  * never fake "1 ltZEN = <scaled>" (tone-guide: don't mislead).
  *
  * The number only climbs smoothly; harvest is rate-neutral so there is deliberately NO special
- * jump treatment (design §0 hard rule). Tabular figures keep width stable; the last digits are
- * emphasized to convey "live". Motion is disabled under prefers-reduced-motion.
+ * jump treatment (design §0 hard rule). Tabular figures keep width stable; the last digits get a
+ * brand-gradient + motion-safe pulse to read as "live". A single restrained radial glow gives the
+ * hero depth without competing with the number (design-uplift D3, restrained direction).
  */
 const unitsLabel = HERO_RATE_UNITS.toLocaleString("en-US");
 
@@ -25,27 +26,39 @@ export function HeroRate() {
   const scaled = rate !== undefined ? rate * BigInt(HERO_RATE_UNITS) : undefined;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-cyan-500/5 p-8">
-      <div className="flex items-center gap-1 text-sm font-medium text-zinc-400">
-        {copy.labels.exchangeRate}
-        <InfoTooltip text={copy.tooltips.exchangeRate} />
-      </div>
+    <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0D1117] p-8 sm:p-10">
+      {/* Restrained brand glow — one layer, low opacity, behind the content. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-teal/15 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 left-12 h-72 w-72 rounded-full bg-brand-indigo/10 blur-3xl"
+      />
 
-      <div className="mt-3 font-mono text-4xl font-semibold tracking-tight text-white tabular-nums sm:text-5xl">
-        {!isConfigured ? (
-          <span className="text-2xl text-zinc-500">{copy.states.notConfigured}</span>
-        ) : isError ? (
-          <span className="text-2xl text-zinc-500">{copy.states.loadError}</span>
-        ) : isLoading || scaled === undefined ? (
-          <Skeleton className="h-12 w-72" />
-        ) : (
-          <RateValue value={formatRate(scaled, 8)} />
-        )}
-      </div>
+      <div className="relative">
+        <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
+          {copy.labels.exchangeRate}
+          <InfoTooltip text={copy.tooltips.exchangeRate} />
+        </div>
 
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
-        {copy.brand.tagline}
-      </p>
+        <div className="mt-4 font-mono text-5xl font-semibold tracking-tight text-white tabular-nums sm:text-6xl">
+          {!isConfigured ? (
+            <span className="font-sans text-2xl text-zinc-500">{copy.states.notConfigured}</span>
+          ) : isError ? (
+            <span className="font-sans text-2xl text-zinc-500">{copy.states.loadError}</span>
+          ) : isLoading || scaled === undefined ? (
+            <Skeleton className="h-14 w-80" />
+          ) : (
+            <RateValue value={formatRate(scaled, 8)} />
+          )}
+        </div>
+
+        <p className="mt-5 max-w-md font-sans text-sm leading-relaxed text-zinc-400">
+          {copy.brand.tagline}
+        </p>
+      </div>
     </section>
   );
 }
@@ -55,11 +68,15 @@ function RateValue({ value }: { value: string }) {
   const head = value.slice(0, -3);
   const tail = value.slice(-3);
   return (
-    <span aria-label={`${unitsLabel} ltZEN equals ${value} ZEN`}>
-      <span className="text-zinc-300">{unitsLabel} ltZEN = </span>
+    <span aria-label={`${unitsLabel} ltZEN equals ${value} ZEN`} className="inline-flex flex-wrap items-baseline">
+      <span className="mr-3 font-sans text-base font-medium text-zinc-400">
+        {unitsLabel} ltZEN =
+      </span>
       <span>{head}</span>
-      <span className="text-emerald-300 motion-safe:animate-pulse">{tail}</span>
-      <span className="ml-2 text-2xl text-zinc-400">ZEN</span>
+      <span className="bg-gradient-to-r from-brand-teal via-brand-green to-brand-indigo bg-clip-text text-transparent motion-safe:animate-pulse">
+        {tail}
+      </span>
+      <span className="ml-2 font-sans text-2xl text-zinc-400">ZEN</span>
     </span>
   );
 }
