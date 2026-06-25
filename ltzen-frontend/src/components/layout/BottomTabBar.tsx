@@ -25,7 +25,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.06] bg-[#070A0E]/90 backdrop-blur-xl md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-between px-1">
@@ -47,7 +47,7 @@ export function BottomTabBar() {
                 <span className="leading-none">{item.label}</span>
                 <span
                   aria-hidden
-                  className={`mt-0.5 h-0.5 w-5 rounded-full ${active ? "bg-emerald-400" : "bg-transparent"}`}
+                  className={`mt-0.5 h-0.5 w-5 rounded-full ${active ? "bg-brand-green" : "bg-transparent"}`}
                 />
               </Link>
             </li>

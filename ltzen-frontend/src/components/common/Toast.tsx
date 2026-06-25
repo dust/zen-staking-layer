@@ -150,7 +150,7 @@ function ToastViewport({
             <div className="flex items-start gap-2">
               {t.tone === "pending" && (
                 <span
-                  className="mt-0.5 inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  className="mt-0.5 inline-block h-3 w-3 shrink-0 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
                   aria-hidden
                 />
               )}
