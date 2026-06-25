@@ -41,7 +41,7 @@ export function WalletButton() {
                   <button
                     type="button"
                     onClick={openConnectModal}
-                    className="rounded-full bg-gradient-to-br from-brand-teal via-brand-green to-brand-indigo px-4 py-1.5 text-sm font-semibold text-black transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+                    className="rounded-full bg-gradient-to-br from-brand-teal to-brand-green px-4 py-1.5 text-sm font-semibold text-black transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
                   >
                     Connect Wallet
                   </button>
@@ -64,7 +64,7 @@ export function WalletButton() {
                 <button
                   type="button"
                   onClick={openAccountModal}
-                  className="rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+                  className="rounded-full border border-white/[0.12] bg-white/[0.03] px-4 py-1.5 text-sm font-medium text-white transition-colors hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
                 >
                   {account.displayName}
                   <span className="ml-1 text-zinc-400">▾</span>

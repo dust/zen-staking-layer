@@ -13,7 +13,7 @@ import { NAV_ITEMS } from "./nav";
  */
 export function Header() {
   return (
-    <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#070A0E]/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-20 border-b border-white/[0.10] bg-[#070A0E]/95 backdrop-blur-xl">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-4">
         <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
           <Image src="/brand/logo.svg" alt="" width={22} height={22} className="shrink-0" priority />

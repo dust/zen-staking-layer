@@ -22,7 +22,7 @@ export function CompoundChart() {
     <Card>
       <div className="flex items-center justify-between">
         <h2 className="font-display text-sm font-semibold tracking-tight text-white">Compounding</h2>
-        <span className="text-xs text-zinc-600">{copy.states.sessionSampleNote}</span>
+        <span className="text-xs text-zinc-500">{copy.states.sessionSampleNote}</span>
       </div>
 
       <div className="mt-4 h-40">

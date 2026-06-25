@@ -40,7 +40,7 @@ export function AddressList() {
             return (
               <li
                 key={e.label}
-                className="flex flex-col gap-2 border-b border-white/5 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-2 border-b border-white/10 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <div className="text-sm text-zinc-300">{e.label}</div>

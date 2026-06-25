@@ -25,7 +25,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.06] bg-[#070A0E]/90 backdrop-blur-xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.10] bg-[#070A0E]/90 backdrop-blur-xl md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-between px-1">

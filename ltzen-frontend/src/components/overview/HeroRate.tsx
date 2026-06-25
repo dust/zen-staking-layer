@@ -26,7 +26,7 @@ export function HeroRate() {
   const scaled = rate !== undefined ? rate * BigInt(HERO_RATE_UNITS) : undefined;
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0D1117] p-8 sm:p-10">
+    <section className="relative overflow-hidden rounded-2xl border border-white/[0.10] bg-[#0D1117] p-8 sm:p-10">
       {/* Restrained brand glow — one layer, low opacity, behind the content. */}
       <div
         aria-hidden

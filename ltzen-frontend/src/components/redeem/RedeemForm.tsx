@@ -117,7 +117,7 @@ export function RedeemForm() {
           <h1 className="font-display text-xl font-bold tracking-tight text-white">{copy.redeem.title}</h1>
           <p className="mt-1 text-sm text-zinc-400">{copy.redeem.subtitle}</p>
         </div>
-        <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5 text-xs">
+        <div className="flex rounded-lg border border-white/[0.12] bg-white/[0.03] p-0.5 text-xs">
           {(["shares", "zen"] as const).map((m) => (
             <button
               key={m}
@@ -144,7 +144,7 @@ export function RedeemForm() {
             {r.shareBalance !== undefined ? formatShares(r.shareBalance) : "—"}
           </span>
         </div>
-        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 focus-within:border-brand-green/50">
+        <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-white/[0.12] bg-white/[0.02] px-3 py-2.5 focus-within:border-brand-green/50">
           <input
             inputMode="decimal"
             placeholder="0.0"
@@ -206,7 +206,7 @@ export function RedeemForm() {
         )}
 
         {useGasless && sharesWei && r.previewAssets !== undefined && (
-          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-xs">
+          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.12] bg-white/[0.02] px-3 py-2.5 text-xs">
             <div className="flex justify-between text-zinc-400">
               <span>{copy.redeem.gaslessMaxFee}</span>
               <span className="font-mono tabular-nums">{formatZenAmount(r.maxFeeZen, 4)}</span>
@@ -231,7 +231,7 @@ export function RedeemForm() {
         type="button"
         onClick={() => void onSubmit()}
         disabled={!canSubmit}
-        className="mt-5 w-full rounded-xl bg-gradient-to-br from-brand-teal via-brand-green to-brand-indigo px-4 py-3 text-sm font-semibold text-black transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+        className="mt-5 w-full rounded-xl bg-gradient-to-br from-brand-teal to-brand-green px-4 py-3 text-sm font-semibold text-black transition-[filter,opacity] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
       >
         {!r.isConnected ? copy.cta.connect : buttonLabel}
       </button>

@@ -27,7 +27,7 @@ export function InfoTooltip({ text, label = "More info" }: { text: string; label
       {open && (
         <span
           role="tooltip"
-          className="absolute left-1/2 top-6 z-30 w-56 -translate-x-1/2 rounded-lg border border-white/[0.08] bg-[#0D1117] px-3 py-2 text-xs leading-relaxed text-zinc-200 shadow-lg shadow-black/40"
+          className="absolute left-1/2 top-6 z-30 w-56 -translate-x-1/2 rounded-lg border border-white/[0.12] bg-[#0D1117] px-3 py-2 text-xs leading-relaxed text-zinc-200 shadow-lg shadow-black/40"
         >
           {text}
         </span>

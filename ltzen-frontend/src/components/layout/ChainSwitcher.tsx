@@ -19,7 +19,7 @@ export function ChainSwitcher() {
     <div
       role="group"
       aria-label="Select network"
-      className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5"
+      className="inline-flex items-center rounded-full border border-white/[0.12] bg-white/[0.03] p-0.5"
     >
       {chains.map((c) => {
         const active = onSupported && c.id === chainId;

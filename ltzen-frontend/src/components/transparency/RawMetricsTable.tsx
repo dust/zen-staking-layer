@@ -83,7 +83,7 @@ export function RawMetricsTable() {
       </div>
       <p className="mt-1 text-xs text-zinc-500">{copy.transparency.metricsNote}</p>
 
-      <dl className="mt-4 divide-y divide-white/5">
+      <dl className="mt-4 divide-y divide-white/10">
         {rows.map((row) => (
           <Row key={row.label} row={row} loading={m.isLoading} error={m.isError} />
         ))}

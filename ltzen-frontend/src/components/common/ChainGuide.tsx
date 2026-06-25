@@ -38,7 +38,7 @@ export function ChainGuide({ action }: { action: AppAction }) {
         {availability.status === "guide-bridge" ? (
           <Link
             href="/bridge"
-            className="inline-flex items-center rounded-xl bg-gradient-to-br from-brand-teal via-brand-green to-brand-indigo px-4 py-2 text-sm font-semibold text-black transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+            className="inline-flex items-center rounded-xl bg-gradient-to-br from-brand-teal to-brand-green px-4 py-2 text-sm font-semibold text-black transition-[filter] hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
           >
             Bridge back to Horizen →
           </Link>
@@ -54,7 +54,7 @@ export function ChainGuide({ action }: { action: AppAction }) {
                     : chainId!,
               })
             }
-            className="inline-flex items-center rounded-xl bg-gradient-to-br from-brand-teal via-brand-green to-brand-indigo px-4 py-2 text-sm font-semibold text-black transition-[filter] hover:brightness-110 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
+            className="inline-flex items-center rounded-xl bg-gradient-to-br from-brand-teal to-brand-green px-4 py-2 text-sm font-semibold text-black transition-[filter] hover:brightness-110 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-green"
           >
             {copy.cta.switchToHorizen}
           </button>
