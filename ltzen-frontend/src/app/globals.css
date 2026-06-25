@@ -30,11 +30,17 @@
  * browser. Tailwind v4's own `bg-gradient-to-*` relies on @property-registered position vars,
  * which can resolve to empty (no background painted) — that broke the primary CTAs (the button
  * had the class but no visible fill). These utilities sidestep that machinery entirely.
+ *
+ * Each also sets a SOLID background-color fallback FIRST: if a browser fails to paint the
+ * gradient for any reason, the button is still a visible solid mint with a ~10:1 black label —
+ * never an invisible black-on-black control.
  */
 .bg-brand-cta {
+  background-color: var(--brand-teal);
   background-image: var(--brand-cta-gradient);
 }
 .bg-brand-full {
+  background-color: var(--brand-green);
   background-image: var(--brand-gradient);
 }
 .text-brand-gradient {
