@@ -8,7 +8,7 @@
  */
 
 import type { Config } from "wagmi";
-import { hasRelayer, relayerEndpoints, useMockRelayerOnly } from "@/config/relayer";
+import { bffEndpoint, hasRelayer, relayerEndpoints, useMockRelayerOnly, useRelayerBff } from "@/config/relayer";
 import { DirectContractRelayer } from "./directContractRelayer";
 import { HttpRelayer } from "./httpRelayer";
 import { MockRelayer } from "./mockRelayer";
@@ -21,7 +21,12 @@ export const gaslessSupported =
   hasRelayer || useMockRelayerOnly || process.env.NODE_ENV !== "production";
 
 export function createRelayer(config: Config): Relayer {
-  if (hasRelayer) return new HttpRelayer(relayerEndpoints[0]);
+  if (hasRelayer) {
+    const endpoint =
+      relayerEndpoints[0] ?? (useRelayerBff ? bffEndpoint : undefined);
+    if (!endpoint) throw new Error("relayer endpoint not configured");
+    return new HttpRelayer(endpoint);
+  }
   if (useMockRelayerOnly) return new MockRelayer();
   return new DirectContractRelayer(config);
 }

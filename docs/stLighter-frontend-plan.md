@@ -1,8 +1,25 @@
 # stLighter Frontend (ltZEN dApp) — 项目计划
 
 > **用途**:把三份 dashboard 文档(design / uiux-spec / tone-guide)落地为一个可实施的前端工程计划。本文是**工程计划**(技术栈、目录、里程碑、任务分解、验收),不重复 UI/交互规格本身。
-> **关联**:界面交互 [`stLighter-dashboard-uiux-spec.md`](./stLighter-dashboard-uiux-spec.md);复利叙事 [`stLighter-dashboard-design.md`](./stLighter-dashboard-design.md);视觉文案 [`stLighter-dashboard-tone-guide.md`](./stLighter-dashboard-tone-guide.md);ABI/指标 [`../abi/README.md`](../abi/README.md)。
-> **最后更新**:2026-06-22
+> **关联**:界面交互 [`stLighter-dashboard-uiux-spec.md`](./stLighter-dashboard-uiux-spec.md);复利叙事 [`stLighter-dashboard-design.md`](./stLighter-dashboard-design.md);视觉文案 [`stLighter-dashboard-tone-guide.md`](./stLighter-dashboard-tone-guide.md);ABI/指标 [`../abi/README.md`](../abi/README.md);**待办与优先级** [`todo-list.md`](./todo-list.md)。
+> **最后更新**:2026-06-22（M0–M4 + Design Uplift D1–D4 已落地审计）
+
+---
+
+## 当前状态快照（2026-06-22 代码审计）
+
+| 里程碑 | 状态 | 说明 |
+|--------|------|------|
+| **M0** 脚手架与多链 | ✅ | `ltzen-frontend/`、Horizen+Base wagmi、RainbowKit、`chainGating`、`Header`/`ChainSwitcher`/`WalletButton` |
+| **M1** Overview 只读 | ✅ | `useExchangeRate`/`usePosition`/`useProtocolStats`/`useRateHistory`、`HeroRate`/`CompoundChart`、骨架屏与空态 |
+| **M2** Stake | ✅ | `useFaucet`、`useDeposit`(标准 + `depositWithSigAndPermit` gasless)、`DirectContractRelayer`/`MockRelayer`/`HttpRelayer` 抽象 |
+| **M3** Redeem | ✅ | `useRedeem`、`RedeemForm`(份额/ZEN 切换、`redeemWithSig` gasless、末位全额提示) |
+| **M4** Transparency + 打磨 | ✅ | `useTransparency`、`RawMetricsTable`/`AddressList`/`HarvestHistory`(占位)、`BottomTabBar`、暂停仅挡 deposit |
+| **M5** Base Bridge | ⏳ | 导航已预留 `/bridge`，**页面与 `useBridge` 未实现**；待 Base ltZEN + OFT 接线 |
+| **Design Uplift D1–D4** | ✅ | 见 [`stLighter-frontend-design-uplift-plan.md`](./stLighter-frontend-design-uplift-plan.md) |
+| **Relayer 后端** | ⏳ | **P0 最高优先级** — 见 [`todo-list.md`](./todo-list.md) §P0（redeemWithSig 测试网 → [rrelayer](https://github.com/joshstevens19/rrelayer)） |
+
+偏差与待办见 [`todo-list.md`](./todo-list.md)。
 
 ---
 
@@ -20,11 +37,23 @@
 | 合约地址 | **env 占位后填**(`NEXT_PUBLIC_*`,按链分组),代码不硬编码 |
 | 测试币 | **内置水龙头按钮**(调 `MockZEN.mint()` 领 256 ZEN,仅 Horizen) |
 | 设计 | **代码优先**,Tailwind + 语义色板自带样式,不等 Figma |
-| 组件库 | **shadcn/ui + Tailwind** |
+| 组件库 | **Tailwind + `theme.ts` 自研组件**(未用 shadcn;Design Uplift 亦禁止重型 UI 库) |
 
-**首版交付顺序**:M0 多链地基 → M1–M4 Horizen 全功能闭环(含 Horizen gasless)→ M5 Base 跨链页(bridge + 自定义接收地址 + Base gasless)。Base 页依赖 Base ltZEN 已部署 + OFT 接线就绪;若未就绪,Horizen 闭环可独立先行上线。
+**首版交付顺序**:M0–M4 ✅ 已完成；**M5** Base 跨链页待 Base ltZEN + OFT 接线。
 
-**首版明确不含**(留后续):permit 一笔存入(`depositWithPermit`)、Goldsky 子图(历史曲线真实数据)、Base 端 deposit/redeem(产品上锚定 Horizen,非删减)。
+**首版明确不含**(留后续):`depositWithPermit`(非 gasless)、Goldsky 子图、Base 端 deposit/redeem、真实 relayer 后端。
+
+```
+阶段 0 ✅
+    ↓
+M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅
+    ↓
+Design D1 ✅ → D2 ✅ → D3 ✅ → D4 ✅
+    ↓
+M5 (Bridge) ⏳  ·  **当前优先 P0**: gasless redeem + rrelayer — [`todo-list.md`](./todo-list.md)
+```
+
+**重启时建议**:读 [`todo-list.md`](./todo-list.md) P0 项 → 对照本文件 §M5 验收。
 
 ---
 
@@ -105,7 +134,7 @@ ltzen-frontend/
 
 ## 3. 里程碑与任务分解
 
-### M0 — 脚手架与多链接入(地基)
+### M0 — 脚手架与多链接入(地基) ✅
 - `create-next-app` + TypeScript + Tailwind;装 wagmi/viem/RainbowKit/TanStack Query/shadcn。
 - **两条自定义链(Horizen + Base)**;多链 wagmi config;RainbowKit Provider;QueryClient。
 - `.env.local.example` 全占位(按链分组)+ relayer 端点;`contracts.ts` 按链读 env + 绑 ABI;`sync-abi` 脚本。
@@ -113,7 +142,7 @@ ltzen-frontend/
 - 顶栏框架:logo、**ChainSwitcher(Horizen/Base 切换驱动可用动作)**、WalletButton(连接/错链/切链状态机,uiux-spec §2.2)。
 - **验收**:连钱包;Horizen/Base 间切链且 UI 动作随之变化;错链提示切链;`pnpm build` 通过。
 
-### M1 — 只读 Overview(无需写入即可展示)
+### M1 — 只读 Overview(无需写入即可展示) ✅
 - `useExchangeRate`:`convertToAssets(1e18)`,`watch`/区块刷新,6–8 位小数 + live 末位动效(design §0,严禁 harvest 跳涨叙事)。
 - `useProtocolStats`:`totalAssets` / `issuedShares`;HeroRate + ProtocolStatsCard。
 - `usePosition`:ltZEN 余额 ×汇率 = ZEN 估值(主数字 ZEN,裸份额次要,uiux-spec §0 原则1)。
@@ -121,7 +150,7 @@ ltzen-frontend/
 - 骨架屏 / 空态 / 未连钱包公开数据(uiux-spec §8.4)。
 - **验收**:未连钱包可见汇率/TVL/曲线;连钱包见持仓 ZEN 估值;数字格式符合 §8.3。
 
-### M2 — Stake(核心写入闭环,Horizen)
+### M2 — Stake(核心写入闭环,Horizen) ✅
 - `useFaucet`:Get test ZEN 按钮 → `MockZEN.mint()`(领 256 ZEN)。
 - `useDeposit`:`previewDeposit` 实时预览;allowance 检查 → `approve` → `deposit` 状态机(uiux-spec §4.2);通用 `useTxLifecycle` + Toast + tx hash explorer 链接。
 - **gasless deposit(Horizen)**:`depositWithSigAndPermit` — 双签(DepositWithSig + ZEN Permit),免 approve;`createRelayer()` 抽象:
@@ -132,20 +161,20 @@ ltzen-frontend/
 - 成功后乐观更新持仓;错误归类文案(§8.2)。
 - **验收**:领币→标准存入或 gasless 双签存入→见 ltZEN;gasless 无 approve;中继超时兜底"改用普通存入"。`depositWithPermit` 推迟至 M2 之后。
 
-### M3 — Redeem(赎回闭环,Horizen)
+### M3 — Redeem(赎回闭环,Horizen) ✅（gasless 真 relayer 见 `todo-list.md` §P0）
 - `useRedeem`:输入 ltZEN 份额(可切按 ZEN 反算);`previewRedeem` 预览;末位全额赎回提示(uiux-spec §5.1)。
 - redeem 状态机 + 乐观更新;"赎回前已自动复投"说明(PRD §5.6)。
-- **gasless redeem(Horizen)**:`redeemWithSig` 复用 `useRelayer`。
-- **验收**:赎回半数/全额,ZEN 余额变化与 preview 吻合,持仓更新;gasless 赎回可走中继并 track。
+- **gasless redeem(Horizen)**:`redeemWithSig` + `DirectContractRelayer`（代码已落地;**P0-A** 测试网 E2E + **P0-B** [rrelayer](https://github.com/joshstevens19/rrelayer) 待完成）。
+- **验收**:赎回半数/全额,ZEN 余额变化与 preview 吻合;gasless 签名→代发→track（测试网暂为用户钱包代发一笔 tx）。
 
-### M4 — Transparency + 打磨
+### M4 — Transparency + 打磨 ✅
 - RawMetricsTable:`rewardPerTokenAccumulated`(1e36 原值)、`totalAssets`、`issuedShares`、`feeBps`、`paused`、`minter`,每项 explorer 直链(uiux-spec §7 / design §1)。
 - AddressList(proxy/impl/ltZEN/ZenStaker + 复制);HarvestHistory 占位(待 Goldsky)。
 - 响应式三断点 + 移动底部 Tab(uiux-spec §9);a11y 基线(§10,色不作唯一信号、键盘可达、`prefers-reduced-motion`)。
 - 文案统一走 `copy.ts`,过 tone-guide §7 QA checklist(全英文、品牌拼写、≈/trailing 限定)。
 - **验收**:四页移动端可用;a11y 基线过;UI 文案全英文且符合 tone-guide。
 
-### M5 — Base 跨链页(bridge + 自定义接收地址 + Base gasless)
+### M5 — Base 跨链页(bridge + 自定义接收地址 + Base gasless) ⏳
 > 依赖:Base ltZEN 已部署 + Horizen⇄Base OFT peer/DVN 接线就绪。未就绪不阻塞 M1–M4 上线。
 - `useBridge`:LtZEN OFT `quoteSend`(估 LayerZero 原生费)→ `send`,**支持自定义接收地址**(默认本人,可填他人);跨链不改份额数量/ZEN 价值(uiux-spec §6.2)。
 - BridgeForm:源/目标链选择(Horizen⇄Base)、数量、`RecipientField`(默认自填,可改)、预计到账(同额 ltZEN)、LayerZero 费用、"在 LayerZero Scan 查看"。
