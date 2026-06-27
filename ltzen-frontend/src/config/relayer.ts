@@ -14,7 +14,12 @@ export const relayerEndpoints: string[] = (
   .map((s) => s.trim())
   .filter(Boolean);
 
-export const hasRelayer = relayerEndpoints.length > 0;
+/** Use same-origin Next.js BFF (`/api/relay`) — rrelayer credentials stay server-side. */
+export const useRelayerBff = process.env.NEXT_PUBLIC_USE_RELAYER_BFF === "1";
+
+export const bffEndpoint = "/api";
+
+export const hasRelayer = relayerEndpoints.length > 0 || useRelayerBff;
 
 /** Pure UI simulation — no on-chain broadcast (timeout testing via NEXT_PUBLIC_MOCK_RELAYER_TIMEOUT). */
 export const useMockRelayerOnly = process.env.NEXT_PUBLIC_MOCK_RELAYER_ONLY === "1";

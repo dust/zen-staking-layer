@@ -1,8 +1,8 @@
 # stLighter — 执行计划
 
 > **用途**:可中断、可重启的任务清单。记录已完成项、进行中项与待办,便于随时接续开发。
-> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/stLighter-dashboard-design.md`(前端复利透明度可视化)、`docs/stLighter-dashboard-uiux-spec.md`(前端 UI/UX 执行规格)、`docs/stLighter-dashboard-tone-guide.md`(视觉与文案 tone)、`docs/stLighter-frontend-plan.md`(前端工程项目计划)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
-> **最后更新**:2026-06-15
+> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/stLighter-dashboard-design.md`(前端复利透明度可视化)、`docs/stLighter-dashboard-uiux-spec.md`(前端 UI/UX 执行规格)、`docs/stLighter-dashboard-tone-guide.md`(视觉与文案 tone)、`docs/stLighter-frontend-plan.md`(前端工程项目计划)、`docs/todo-list.md`(待办与优先级)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
+> **最后更新**:2026-06-22
 
 ---
 
@@ -20,11 +20,17 @@
 | 跨链测试 `test/StLighter.crosschain.t.sol` | ✅ **4 passed**; **双链测试网接线推迟** |
 | 测试合计 | ✅ **81 passed / 0 failed / 0 skipped** |
 | 前端 ABI | ✅ `abi/StLighter.json` / `abi/LtZEN.json` + `README` |
+| **ltzen-frontend M0–M4** | ✅ Horizen 四页闭环(含 gasless deposit/redeem)；见 `stLighter-frontend-plan.md` |
+| **ltzen-frontend Design D1–D4** | ✅ 品牌 uplift 落地；见 `stLighter-frontend-design-uplift-plan.md` |
+| **ltzen-frontend M5 Bridge** | ⏳ 导航预留 `/bridge`，页面未实现 |
+| **Relayer / gasless** | ⏳ **P0** — redeemWithSig 测试网 E2E → [rrelayer](https://github.com/joshstevens19/rrelayer) 接入；见 `todo-list.md` |
 | CI 覆盖率门槛 | ✅ 限 `src/stlighter/*`,90%(LtZEN 100%、StLighter 91.67%,见构建发现) |
 | Proxy 可升级 | ✅ UUPS + ERC1967Proxy + Timelock 脚本 |
 | OFT 接线脚本 | ✅ `WireStLighterOFT` + `ConfigureStLighterOFTDVN` |
 | 部署 checklist | ✅ `docs/stLighter-deploy-checklist.md` |
 | 审计文档 | ✅ `AUDIT_DELTA.md` 已增 stLighter 章节 |
+
+待办与优先级见 [`todo-list.md`](./todo-list.md)。
 
 **阻塞项(已解除)**:~~`lib/devtools` submodule 未完整拉取~~ 已从 Mac 拷贝 `lib/`;编译通过。单链测试使用 `EndpointV2Mock` 替代占位地址。
 
@@ -227,6 +233,10 @@ scopelint check
 阶段 4 ✅ (Gasless 增强)
     ↓
 阶段 5 (部署上线 — checklist 已起草)
+    ↓
+ltzen-frontend M0–M4 ✅ + Design D1–D4 ✅
+    ↓
+见 todo-list.md（P0 gasless redeem + rrelayer → P1 Bridge → P2 Goldsky）
 ```
 
 **重启时建议**:先读本文件「当前状态快照」→ 执行阶段 1 验收命令确认基线 → 从第一个未勾选项继续。
@@ -244,8 +254,12 @@ docs/
   stLighter-dashboard-design.md # 前端复利透明度可视化设计(汇率/复投/复利)
   stLighter-dashboard-uiux-spec.md # 前端 UI/UX 执行规格(页面/组件/交互/边界态)
   stLighter-dashboard-tone-guide.md # 视觉与文案 tone 指南(UI 全英文)
-  stLighter-frontend-plan.md # 前端工程项目计划(Next.js + wagmi,Horizen 单链 MVP)
+  stLighter-frontend-plan.md    # 前端工程计划(M0–M5)
+  stLighter-frontend-design-uplift-plan.md # 前端视觉 uplift(D1–D4)
+  todo-list.md                  # 待办、偏差、优先级
   ZenStaker-Phase1-PRD.md
+
+ltzen-frontend/                 # Next.js dApp(多链 Horizen+Base)
 
 src/stlighter/
   StLighter.sol                 # 协议合约(会计 + ZenStaker 调用)
@@ -296,6 +310,9 @@ AUDIT_DELTA.md                  # 审计差异(ZenStaker + stLighter)
 
 | 日期 | 变更 |
 |------|------|
+| 2026-06-22 | **P0 重排**: Gasless redeem(`redeemWithSig`) 测试网 E2E + [rrelayer](https://github.com/joshstevens19/rrelayer) 接入为最高优先级;Bridge 降至 P1 |
+| 2026-06-22 | 新增 `todo-list.md`(待办/偏差/优先级);前端与执行计划快照指向该文件 |
+| 2026-06-22 | 前端审计:ltzen-frontend M0–M4 + Design D1–D4 落地;更新各计划状态快照 |
 | 2026-06-15 | A.1/B/C.1-3:修复 CI coverage(`--ir-minimum`)、排除 via_ir 基线测试并记入 AUDIT_DELTA;coverage 门槛改为限 `src/stlighter/*`@90%(用户决策);新增 `test/StLighter.deploy.t.sol`(部署脚本本地集成)与 `Views` 测试合约;ltZEN name=`ltZEN`;导出 `abi/`。全套 **81 passed**(CI test job 481 passed/1 skipped) |
 | 2026-06-15 | 基线核对:全套 72 passed(t 54 / governance 4 / upgrade 5 / invariants 5 / crosschain 4);更正快照表(原 72 误标在 `StLighter.t.sol` 单文件,实为套件合计) |
 | 2026-06-14 | 阶段 2 收尾:Timelock 部署脚本、ltZEN ownership 移交、治理测试(64 passed) |

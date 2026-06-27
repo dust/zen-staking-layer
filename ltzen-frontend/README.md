@@ -26,6 +26,16 @@ sensible testnet defaults; two things you actually need to set:
   bind to **proxy** addresses. Until filled, the UI shows a "not configured" state rather than
   crashing.
 
+## Gasless (meta-tx)
+
+| Mode | Env | Behaviour |
+|------|-----|-----------|
+| **Direct** (default) | — | `DirectContractRelayer` — user signs EIP-712, wallet sends one `*WithSig` tx |
+| **BFF + rrelayer** | `NEXT_PUBLIC_USE_RELAYER_BFF=1` + server `RRELAYER_*` | True gasless via [`/api/relay`](../docs/stLighter-rrelayer-setup.md) |
+| **Mock** | `NEXT_PUBLIC_MOCK_RELAYER_ONLY=1` | UI-only simulation |
+
+See [`../docs/gasless-acceptance.md`](../docs/gasless-acceptance.md) · [`../docs/stLighter-rrelayer-setup.md`](../docs/stLighter-rrelayer-setup.md).
+
 ## Scripts
 
 ```bash

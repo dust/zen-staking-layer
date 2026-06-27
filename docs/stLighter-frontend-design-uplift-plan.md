@@ -3,6 +3,20 @@
 > 目标:把功能完备但视觉通用的 ltzen-frontend,提升为有**家族识别度**的精炼 staking 仪表盘。
 > 方法:复用兄弟项目 **lighter-ui** 的品牌 DNA,分阶段实施 + 每阶段验收。
 > 红线:**不改动任何合约交互逻辑、hooks 数据流、relayer / eip712 / chainGating**。本计划纯视觉/呈现层(字体、颜色、间距、动效、布局密度、品牌资产)。所有 tone-guide 红线(全英文、品牌拼写、`≈` 仅用于预估、harvest 不"跳"汇率、不误导)继续生效。
+> **最后更新**:2026-06-22 — **D1–D4 均已落地**。待办见 [`todo-list.md`](./todo-list.md)。
+
+---
+
+## 当前状态（代码审计 2026-06-22）
+
+| 阶段 | 状态 | 关键落点 |
+|------|------|----------|
+| **D1** 品牌地基 | ✅ | `layout.tsx` Syne/DM Sans/JetBrains Mono；`globals.css` `@theme`；`public/brand/logo.svg`；`Header` 字标 |
+| **D2** 组件皮肤 | ✅ | `theme.ts`（`SURFACE`/`CTA_PRIMARY`/…）；`Card`/`Skeleton`/`Toast`；RainbowKit accent |
+| **D3** Overview 主角 | ✅ | `HeroRate` 渐变读数 + 克制光晕；`CompoundChart` 品牌曲线；栅格留白 |
+| **D4** 表单与收尾 | ✅ | `StakeForm`/`RedeemForm`/`RawMetricsTable`/`AddressList`；`app/icon.svg`；移动 `BottomTabBar` |
+
+**未做（按计划）**: M5 Bridge 页视觉（M5 功能未开工）；framer-motion 未引入。
 
 ---
 
@@ -56,10 +70,10 @@
 - Header 顶栏样式对齐家族:`border-white/[0.06]` + `bg-[#070A0E]/95 backdrop-blur-xl`。
 
 **验收 D1**
-- [ ] 三种字体在 Network 面板加载成功,无 FOUT 闪烁(`display:swap`)。
-- [ ] body 背景为 `#070A0E`;无残留 Geist 引用(`grep -r Geist src` 为空)。
-- [ ] 顶栏显示渐变 logo + Syne 字标,桌面/移动均正确。
-- [ ] `npm run lint && npx tsc --noEmit && npm run build` 全绿。
+- [x] 三种字体在 Network 面板加载成功,无 FOUT 闪烁(`display:swap`)。
+- [x] body 背景为 `#070A0E`;无残留 Geist 引用(`grep -r Geist src` 为空)。
+- [x] 顶栏显示渐变 logo + Syne 字标,桌面/移动均正确。
+- [x] `npm run lint && npx tsc --noEmit && npm run build` 全绿。
 
 ---
 
@@ -74,10 +88,10 @@
 - RainbowKit `darkTheme()` 传入 `accentColor` = 品牌 emerald,与全站一致。
 
 **验收 D2**
-- [ ] 所有卡片/按钮视觉统一(同圆角、同 hairline、同表面),无遗留旧 `bg-white/[0.02]` 杂色。
-- [ ] 主 CTA 全站一致(渐变填充);焦点态可见(键盘 Tab 可达,a11y §10 不退化)。
-- [ ] RainbowKit 连接弹窗强调色与全站一致。
-- [ ] lint + tsc + build 全绿;四页人工过一遍无错位。
+- [x] 所有卡片/按钮视觉统一(同圆角、同 hairline、同表面),无遗留旧 `bg-white/[0.02]` 杂色。
+- [x] 主 CTA 全站一致(渐变填充);焦点态可见(键盘 Tab 可达,a11y §10 不退化)。
+- [x] RainbowKit 连接弹窗强调色与全站一致。
+- [x] lint + tsc + build 全绿;四页人工过一遍无错位。
 
 ---
 
@@ -90,11 +104,11 @@
 - Overview 栅格间距/留白调优(克制方向:更大留白,主次分明)。
 
 **验收 D3**
-- [ ] HeroRate 是首屏视觉锚点;reduced-motion 下脉冲停止、数字静态可读。
-- [ ] 汇率仍只升不跳(无特殊跳变动效),单位标注诚实(未伪造 "1 ltZEN")。
-- [ ] 曲线渐变与品牌一致;空态/积累态文案不变。
-- [ ] 真实余额无 `≈` 前缀;预估值保留 `≈`(tone 红线)。
-- [ ] lint + tsc + build 全绿。
+- [x] HeroRate 是首屏视觉锚点;reduced-motion 下脉冲停止、数字静态可读。
+- [x] 汇率仍只升不跳(无特殊跳变动效),单位标注诚实(未伪造 "1 ltZEN")。
+- [x] 曲线渐变与品牌一致;空态/积累态文案不变。
+- [x] 真实余额无 `≈` 前缀;预估值保留 `≈`(tone 红线)。
+- [x] lint + tsc + build 全绿。
 
 ---
 
@@ -108,11 +122,11 @@
 - **tone-guide §7 QA checklist 全量过**:全英文、品牌拼写(stLighter/ltZEN/ZEN/ZenStaker/Horizen/Base/LayerZero)、`≈`/trailing 限定。
 
 **验收 D4(总验收)**
-- [ ] 四页(Overview/Stake/Redeem/Transparency)桌面 + 移动端视觉一致、无错位。
-- [ ] a11y 基线不退化:键盘可达、焦点态、对比度 AA、reduced-motion、色非唯一信号。
-- [ ] 品牌识别度:与 lighter-ui 并排可看出"同一团队/家族"(logo、字体、配色、渐变)。
-- [ ] tone-guide QA checklist 全绿。
-- [ ] lint + tsc + build 全绿;四页路由正常生成。
+- [x] 四页(Overview/Stake/Redeem/Transparency)桌面 + 移动端视觉一致、无错位。
+- [x] a11y 基线不退化:键盘可达、焦点态、对比度 AA、reduced-motion、色非唯一信号。
+- [x] 品牌识别度:与 lighter-ui 并排可看出"同一团队/家族"(logo、字体、配色、渐变)。
+- [x] tone-guide QA checklist 全绿。
+- [x] lint + tsc + build 全绿;四页路由正常生成。
 
 ---
 

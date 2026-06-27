@@ -16,6 +16,16 @@ import type { Relayer, RelayRequest, RelayResult, RelayHandle, RelayStatus } fro
 const POLL_MS = 1_500;
 const TIMEOUT_MS = 30_000;
 
+function resolveEndpoint(base: string, path: string): string {
+  if (base.startsWith("http://") || base.startsWith("https://")) {
+    return `${base.replace(/\/$/, "")}${path}`;
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}${base.replace(/\/$/, "")}${path}`;
+  }
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
 interface ServerStatus {
   status?: string;
   txHash?: `0x${string}`;
@@ -73,7 +83,7 @@ class HttpRelayHandle implements RelayHandle {
         return;
       }
       try {
-        const res = await fetch(`${this.endpoint}/relay/${this.id}`, {
+        const res = await fetch(resolveEndpoint(this.endpoint, `/relay/${this.id}`), {
           headers: { accept: "application/json" },
         });
         if (res.ok) {
@@ -110,7 +120,7 @@ export class HttpRelayer implements Relayer {
   }
 
   async submit(req: RelayRequest): Promise<RelayHandle> {
-    const res = await fetch(`${this.endpoint}/relay`, {
+    const res = await fetch(resolveEndpoint(this.endpoint, "/relay"), {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(req),
