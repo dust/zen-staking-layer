@@ -23,3 +23,8 @@ export function stLighterAddress(): `0x${string}` | undefined {
   const v = process.env.NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS?.trim();
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
 }
+
+export function ltZenAddress(): `0x${string}` | undefined {
+  const v = process.env.NEXT_PUBLIC_HORIZEN_LTZEN_ADDRESS?.trim();
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
+}

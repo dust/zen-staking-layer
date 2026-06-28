@@ -1,17 +1,21 @@
 import { createPublicClient, http } from "viem";
 import StLighterAbi from "@/abi/StLighter.json";
-import { horizen, HUB_CHAIN_ID } from "@/config/chains";
+import { horizen } from "@/config/chains";
 import type { RelayRequest } from "@/relayer/types";
-import { rrelayerConfigured, relayerFeeBps, stLighterAddress } from "./config";
+import { rrelayerConfigured, relayerFeeBps } from "./config";
 import { computeFeeZen } from "./fee";
 import { encodeMetaTx } from "./encode";
 import { createJob, patchJob } from "./jobs";
-import { broadcastContractCall, waitForTx } from "./rrelayer";
+import { relayError, relayLog } from "./log";
+import { broadcastContractCall, waitForRrelayerTx } from "./rrelayer";
+import { assertRequest, validateRelayRequest } from "./validate";
 
 function hubPublicClient() {
+  const rpc =
+    process.env.RRELAYER_PROVIDER_URL?.trim() ?? horizen.rpcUrls.default.http[0];
   return createPublicClient({
     chain: horizen,
-    transport: http(horizen.rpcUrls.default.http[0]),
+    transport: http(rpc),
   });
 }
 
@@ -28,18 +32,7 @@ async function feeBasisWei(req: RelayRequest): Promise<bigint> {
   }) as Promise<bigint>;
 }
 
-function assertRequest(req: RelayRequest): void {
-  if (req.chainId !== HUB_CHAIN_ID) {
-    throw new Error(`unsupported chainId ${req.chainId}`);
-  }
-  const configured = stLighterAddress();
-  if (configured && req.verifyingContract.toLowerCase() !== configured.toLowerCase()) {
-    throw new Error("verifyingContract mismatch");
-  }
-  if (!req.signature?.startsWith("0x")) throw new Error("invalid signature");
-}
-
-/** Queue meta-tx broadcast; returns job id immediately. */
+/** Queue meta-tx broadcast; returns job id immediately after validation passes. */
 export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZen: string }> {
   if (!rrelayerConfigured()) {
     throw new Error(
@@ -47,12 +40,29 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
     );
   }
 
-  assertRequest(req);
+  relayLog("queueRelay start", { kind: req.kind, user: req.user });
 
-  const maxFeeZen = BigInt(req.maxFeeZen);
+  assertRequest(req);
+  relayLog("assertRequest ok");
+
   const basis = await feeBasisWei(req);
-  const feeZen = computeFeeZen(maxFeeZen, basis, relayerFeeBps());
+  const feeZen = computeFeeZen(BigInt(req.maxFeeZen), basis, relayerFeeBps());
+  relayLog("fee computed", {
+    basis: basis.toString(),
+    feeZen: feeZen.toString(),
+    maxFeeZen: req.maxFeeZen,
+  });
+
+  relayLog("validateRelayRequest start");
+  await validateRelayRequest(req, feeZen, basis);
+  relayLog("validateRelayRequest ok");
+
   const { to, data } = encodeMetaTx(req, feeZen);
+  relayLog("encoded meta-tx", {
+    to,
+    dataLen: data.length,
+    selector: data.slice(0, 10),
+  });
 
   const id = crypto.randomUUID();
   createJob(id);
@@ -61,11 +71,16 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   void (async () => {
     try {
       patchJob(id, { status: "relaying" });
-      const hash = await broadcastContractCall(to, data);
-      patchJob(id, { txHash: hash });
-      await waitForTx(hash);
-      patchJob(id, { status: "confirmed" });
+      relayLog("broadcast start", { id, to });
+      const { rrelayerTxId, hash } = await broadcastContractCall(to, data);
+      relayLog("broadcast sent", { id, rrelayerTxId, hash });
+      patchJob(id, { txHash: hash, rrelayerTxId });
+      relayLog("waitForRrelayerTx start", { id, rrelayerTxId, hash });
+      const confirmedHash = await waitForRrelayerTx(rrelayerTxId, hash);
+      relayLog("waitForRrelayerTx confirmed", { id, hash: confirmedHash });
+      patchJob(id, { txHash: confirmedHash, status: "confirmed" });
     } catch (err) {
+      relayError("broadcast failed", err, { id, to });
       patchJob(id, {
         status: "failed",
         error: err instanceof Error ? err.message : "relay failed",
@@ -73,5 +88,6 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
     }
   })();
 
+  relayLog("queueRelay returning job id", { id, feeZen: feeZen.toString() });
   return { id, feeZen: feeZen.toString() };
 }

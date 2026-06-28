@@ -1,8 +1,8 @@
 # stLighter — 执行计划
 
 > **用途**:可中断、可重启的任务清单。记录已完成项、进行中项与待办,便于随时接续开发。
-> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/stLighter-dashboard-design.md`(前端复利透明度可视化)、`docs/stLighter-dashboard-uiux-spec.md`(前端 UI/UX 执行规格)、`docs/stLighter-dashboard-tone-guide.md`(视觉与文案 tone)、`docs/stLighter-frontend-plan.md`(前端工程项目计划)、`docs/todo-list.md`(待办与优先级)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
-> **最后更新**:2026-06-22
+> **关联文档**:`docs/stLighter-PRD.md`(需求)、`docs/stLighter-sequence-diagrams.md`(时序)、`docs/stLighter-dashboard-design.md`(前端复利透明度可视化)、`docs/stLighter-dashboard-uiux-spec.md`(前端 UI/UX 执行规格)、`docs/stLighter-dashboard-tone-guide.md`(视觉与文案 tone)、`docs/stLighter-frontend-plan.md`(前端工程项目计划)、`docs/stLighter-relayer-design.md`(relayer 与 BFF 校验)、`docs/todo-list.md`(待办与优先级)、`docs/ZenStaker-Phase1-PRD.md`(底层)、`AUDIT_DELTA.md`(审计差异)。
+> **最后更新**:2026-06-27
 
 ---
 
@@ -23,7 +23,7 @@
 | **ltzen-frontend M0–M4** | ✅ Horizen 四页闭环(含 gasless deposit/redeem)；见 `stLighter-frontend-plan.md` |
 | **ltzen-frontend Design D1–D4** | ✅ 品牌 uplift 落地；见 `stLighter-frontend-design-uplift-plan.md` |
 | **ltzen-frontend M5 Bridge** | ⏳ 导航预留 `/bridge`，页面未实现 |
-| **Relayer / gasless** | ⏳ **P0** — redeemWithSig 测试网 E2E → [rrelayer](https://github.com/joshstevens19/rrelayer) 接入；见 `todo-list.md` |
+| **Relayer / gasless** | ⏳ **P0-B** — BFF `validate.ts` ✅；浏览器 E2E + rrelayer 联调验收待完成 |
 | CI 覆盖率门槛 | ✅ 限 `src/stlighter/*`,90%(LtZEN 100%、StLighter 91.67%,见构建发现) |
 | Proxy 可升级 | ✅ UUPS + ERC1967Proxy + Timelock 脚本 |
 | OFT 接线脚本 | ✅ `WireStLighterOFT` + `ConfigureStLighterOFTDVN` |
@@ -236,7 +236,7 @@ scopelint check
     ↓
 ltzen-frontend M0–M4 ✅ + Design D1–D4 ✅
     ↓
-见 todo-list.md（P0 gasless redeem + rrelayer → P1 Bridge → P2 Goldsky）
+见 todo-list.md（P0-B BFF 校验 → rrelayer 联调 → P1 Bridge → P2 Goldsky）
 ```
 
 **重启时建议**:先读本文件「当前状态快照」→ 执行阶段 1 验收命令确认基线 → 从第一个未勾选项继续。
@@ -256,6 +256,8 @@ docs/
   stLighter-dashboard-tone-guide.md # 视觉与文案 tone 指南(UI 全英文)
   stLighter-frontend-plan.md    # 前端工程计划(M0–M5)
   stLighter-frontend-design-uplift-plan.md # 前端视觉 uplift(D1–D4)
+  stLighter-relayer-design.md   # Relayer 分层、BFF 校验规格（rrelayer 无校验回调）
+  stLighter-rrelayer-setup.md   # rrelayer 部署与 env
   todo-list.md                  # 待办、偏差、优先级
   ZenStaker-Phase1-PRD.md
 
@@ -310,6 +312,7 @@ AUDIT_DELTA.md                  # 审计差异(ZenStaker + stLighter)
 
 | 日期 | 变更 |
 |------|------|
+| 2026-06-27 | 新增 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)：rrelayer 无 payload 校验回调，EIP-712 校验在 BFF；更新 rrelayer-setup / todo-list P0-B |
 | 2026-06-22 | **P0 重排**: Gasless redeem(`redeemWithSig`) 测试网 E2E + [rrelayer](https://github.com/joshstevens19/rrelayer) 接入为最高优先级;Bridge 降至 P1 |
 | 2026-06-22 | 新增 `todo-list.md`(待办/偏差/优先级);前端与执行计划快照指向该文件 |
 | 2026-06-22 | 前端审计:ltzen-frontend M0–M4 + Design D1–D4 落地;更新各计划状态快照 |

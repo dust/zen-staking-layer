@@ -1,9 +1,12 @@
 import type { Hex } from "viem";
 import type { RelayStatus } from "@/relayer/types";
+import { relayLog } from "./log";
 
 export interface RelayJob {
   status: RelayStatus;
   txHash?: Hex;
+  /** rrelayer internal transaction id (for status polling). */
+  rrelayerTxId?: string;
   feeZen?: string;
   error?: string;
   createdAt: number;
@@ -31,5 +34,13 @@ export function patchJob(id: string, patch: Partial<RelayJob>): RelayJob | undef
   if (!job) return undefined;
   const next = { ...job, ...patch };
   store().set(id, next);
+  if (patch.status !== undefined || patch.error !== undefined || patch.txHash !== undefined) {
+    relayLog("job updated", {
+      id,
+      status: next.status,
+      txHash: next.txHash,
+      error: next.error,
+    });
+  }
   return next;
 }

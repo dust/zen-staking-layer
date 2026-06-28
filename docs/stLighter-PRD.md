@@ -229,6 +229,7 @@ RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uin
 - **抢跑/审查**:无许可 relayer 降低单点审查风险;若某 relayer 不打包,用户可换 relayer 或自行上链。
 - **fee 与 deposit 顺序**:必须"先扣 fee 再 mint 份额",且 fee 不计入 `totalAssets`/份额计算,避免稀释其他持有者。
 - **零费回退**:若用户自己直接调用(非 gasless),`maxFeeZen=0`,不扣费——gasless 是可选叠加层,不破坏直接调用路径。
+- **运营 relayer 广播前校验**:自建 BFF([`stLighter-relayer-design.md`](./stLighter-relayer-design.md))在调用 rrelayer 前校验 EIP-712、nonce、deadline 并 `simulateContract`,避免无效 tx 消耗 relayer 原生 gas;rrelayer 本身仅 allowlist `to` 地址,不提供业务 payload 插件。
 
 ### 6.6 Harvest keeper 激励(背景与可选方案,暂无定论)
 

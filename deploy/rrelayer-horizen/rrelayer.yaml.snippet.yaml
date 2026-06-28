@@ -1,0 +1,29 @@
+# Merge into your rrelayer project rrelayer.yaml (Horizen network block + gas_providers).
+#
+# Prerequisites:
+#   - gas-stub running (docker compose — see README.md)
+#   - For compose: endpoint uses service name `gas-stub` on the same Docker network
+#   - For local rrelayer start (host): endpoint http://localhost:8787
+
+networks:
+  - name: horizen_testnet
+    chain_id: 2651420
+    provider_urls:
+      - https://horizen-testnet.rpc.caldera.xyz/http
+    block_explorer_url: https://horizen.calderaexplorer.xyz
+    max_gas_price_multiplier: 4
+    gas_bump_blocks_every:
+      slow: 10
+      medium: 5
+      fast: 4
+      super_fast: 2
+    gas_provider: CUSTOM
+    # ... your existing permissions / allowlist for StLighter proxy ...
+
+gas_providers:
+  custom:
+    # Docker compose (rrelayer + gas-stub on same network):
+    endpoint: "http://gas-stub:8787"
+    # Host-only rrelayer start (no compose network):
+    # endpoint: "http://localhost:8787"
+    supported_chains: [2651420]
