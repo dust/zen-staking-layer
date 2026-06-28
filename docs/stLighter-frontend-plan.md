@@ -17,7 +17,7 @@
 | **M4** Transparency + 打磨 | ✅ | `useTransparency`、`RawMetricsTable`/`AddressList`/`HarvestHistory`(占位)、`BottomTabBar`、暂停仅挡 deposit |
 | **M5** Base Bridge | ⏳ | 导航已预留 `/bridge`，**页面与 `useBridge` 未实现**；待 Base ltZEN + OFT 接线 |
 | **Design Uplift D1–D4** | ✅ | 见 [`stLighter-frontend-design-uplift-plan.md`](./stLighter-frontend-design-uplift-plan.md) |
-| **Relayer 后端** | ⏳ | **P0 最高优先级** — 见 [`todo-list.md`](./todo-list.md) §P0（redeemWithSig 测试网 → [rrelayer](https://github.com/joshstevens19/rrelayer)） |
+| **Relayer 后端** | ⏳ | **P0** — BFF 校验设计见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)；`validate.ts` + rrelayer 联调见 [`todo-list.md`](./todo-list.md) §P0-B |
 
 偏差与待办见 [`todo-list.md`](./todo-list.md)。
 
@@ -50,7 +50,7 @@ M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅
     ↓
 Design D1 ✅ → D2 ✅ → D3 ✅ → D4 ✅
     ↓
-M5 (Bridge) ⏳  ·  **当前优先 P0**: gasless redeem + rrelayer — [`todo-list.md`](./todo-list.md)
+M5 (Bridge) ⏳  ·  **当前优先 P0-B**: BFF validate/simulate → rrelayer 联调 — [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) · [`todo-list.md`](./todo-list.md)
 ```
 
 **重启时建议**:读 [`todo-list.md`](./todo-list.md) P0 项 → 对照本文件 §M5 验收。
@@ -129,6 +129,10 @@ ltzen-frontend/
 > 「构造 typed-data → 钱包签名 → 选候选端点提交 → 轮询 `getStatus` 直到 mined/failed」。
 > 具体 relayer 协议(自建 / 第三方)在 `httpRelayer.ts` 内实现,**UI 与业务 hook 不依赖具体端点**,
 > 后续换 relayer 只改这一层。首版接入 Horizen 的 gasless deposit/redeem;Base 的 gasless 跨链复用同一接口(M5)。
+>
+> **BFF 校验层(P0-B)**: rrelayer 不提供 EIP-712 payload 校验回调;生产路径经 `POST /api/relay`,
+> 在 `src/server/relay/` 内做 `verifyTypedData` + nonce/deadline + `simulateContract` 后再广播。
+> 详见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)。
 
 ---
 
@@ -228,5 +232,5 @@ ltzen-frontend/
 - **faucet 速率**:MockZEN 每次 256 ZEN 上限,按钮需处理"领取过于频繁/gas 不足"反馈。
 - **RPC 稳定性**:Caldera testnet RPC 若不稳,需要 TanStack Query 重试 + 骨架屏兜底。
 - **Base 接入(M5)**:依赖 Base ltZEN 已部署 + Horizen⇄Base OFT peer/DVN 接线;未就绪时 Base 页禁用并提示,Horizen 闭环独立先行。
-- **relayer 服务**:M2 不接真实 relayer。测试网默认 `DirectContractRelayer` 直连 `depositWithSigAndPermit`(验证 EIP-712,无 approve);`MockRelayer` 仅 UI 演练;`HttpRelayer` 待后端就绪。`feeZen` 由 relayer 动态报价,前端只签 `maxFeeZen` 上限。
+- **relayer 服务**:M2 不接真实 relayer。测试网默认 `DirectContractRelayer` 直连 `depositWithSigAndPermit`(验证 EIP-712,无 approve);`MockRelayer` 仅 UI 演练;`HttpRelayer` + BFF 见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)。`feeZen` 由 relayer 动态报价,前端只签 `maxFeeZen` 上限;**广播前校验在 BFF**,不在 rrelayer 内。
 - **跨链接收地址**:bridge 允许填他人地址,UI 必须二次确认("发送到非本人地址不可撤销"),并校验地址格式,防误填。

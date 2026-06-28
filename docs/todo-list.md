@@ -1,13 +1,14 @@
 # stLighter / ltZEN — 待办与优先级
 
 > **用途**:可执行待办、合理偏差、优先级排序。状态快照见各专项计划,本文不重复里程碑明细。
-> **最后更新**:2026-06-22
+> **最后更新**:2026-06-27
 >
 > | 文档 | 内容 |
 > |------|------|
 > | [`stLighter-execution-plan.md`](./stLighter-execution-plan.md) | 合约/测试/部署阶段 |
 > | [`stLighter-frontend-plan.md`](./stLighter-frontend-plan.md) | 前端 M0–M5 里程碑 |
 > | [`stLighter-frontend-design-uplift-plan.md`](./stLighter-frontend-design-uplift-plan.md) | 视觉 D1–D4 |
+| [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) | Relayer 分层、rrelayer 边界、BFF 校验规格 |
 
 ---
 
@@ -15,7 +16,8 @@
 
 - **合约**: StLighter / LtZEN、gasless(`depositWithSigAndPermit` / `redeemWithSig`)、UUPS + Timelock、OFT 脚本；**81** 单测通过。
 - **前端**: `ltzen-frontend` **M0–M4**（Horizen 四页）；**Design D1–D4** 品牌 uplift。
-- **Gasless 前端**: `useDeposit` / `useRedeem` + BFF `/api/relay`（P0-B 代码已落地；rrelayer 实例联调待完成）
+- **Gasless 前端**: `useDeposit` / `useRedeem` + BFF `/api/relay`（P0-B encode/rrelayer 已落地；**BFF 校验 + rrelayer 联调**待完成）
+- **Relayer 设计文档**: [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)（rrelayer 无校验回调 → 校验在 BFF）
 
 ---
 
@@ -50,16 +52,23 @@
 
 #### P0-B — 接入 [rrelayer](https://github.com/joshstevens19/rrelayer)（直至生产级 gasless 完成） 🔄 进行中
 
-> 部署与 env 见 [`stLighter-rrelayer-setup.md`](./stLighter-rrelayer-setup.md)
+> 部署与 env 见 [`stLighter-rrelayer-setup.md`](./stLighter-rrelayer-setup.md)。  
+> **架构结论**: rrelayer **不支持**自定义 payload 校验回调；EIP-712 校验在 BFF 实现 — 见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)。
 
-- [ ] **PoC 部署**: Horizen Testnet 上 rrelayer + StLighter proxy allowlist
-- [x] **BFF 适配层**: Next.js `POST/GET /api/relay` + `src/server/relay/*`（encode + rrelayer `writeContract`）
+- [x] **PoC 部署**: Horizen Testnet 上 rrelayer + StLighter proxy allowlist + `disable_native_transfer`（本地已启动）
+- [x] **BFF 适配层**: Next.js `POST/GET /api/relay` + `src/server/relay/*`（encode + rrelayer `sendTransaction`）
 - [x] **前端切换**: `NEXT_PUBLIC_USE_RELAYER_BFF=1` → `HttpRelayer` 走同源 `/api`
-- [ ] **联调验收**: 用户零 gas；relayer 为 `tx.from`；`feeZen` 动态返回
-- [ ] **deposit + redeem 双路径**: BFF 已编码两条入口，待 rrelayer 实例联调
-- [ ] **运维**: gas 监控、API key 轮换、smoke 脚本
+- [x] **BFF 广播前校验**:
+  - [x] `validate.ts`: EIP-712 `verifyTypedData` + 链上 `nonces(user)` + `deadline`
+  - [x] calldata 与已验证 message / `feeZen` 一致（`metaTxContractCall` 共享 encode/simulate）
+  - [x] `simulateContract` 通过后再 `broadcastContractCall`
+  - [ ] 负向用例验收（见 [`gasless-acceptance.md`](./gasless-acceptance.md) P0-B）
+- [x] **Horizen gas sidecar**: `deploy/rrelayer-horizen/` compose + `gas_provider: CUSTOM`（解决 `max_priority_fee: 0`）
+- [x] **联调验收（redeem）**: 2026-06-27 浏览器 E2E — 用户零 gas；relayer 为 `tx.from`；[explorer tx](https://horizen-testnet.explorer.caldera.xyz/tx/0x556979f05cb88dad15e7db6ff75df3bc001e7a1321777f5e110323a2260f6acb)
+- [ ] **deposit E2E** ⏸ **暂缓**：ZEN gasless 存入不纯粹（至少一次链上 `approve`）；permit/allowance 策略待与 Horizen 官方沟通；BFF encode 已就绪
+- [ ] **运维**: gas 监控、API key 轮换、webhook 低余额（可选）、smoke 脚本
 
-**P0 完成标准**: P0-A 测试网签字通过 + P0-B 生产路径 rrelayer 代发且前后端闭环。
+**P0 完成标准（当前）**: P0-A 测试网签字通过 + P0-B **redeem** rrelayer 代发闭环 + BFF 校验/simulate 上线。Deposit 真 relayer 验收随 Horizen 对齐后补。
 
 ---
 
@@ -87,9 +96,9 @@
 ## 建议接续顺序
 
 ```
-P0-B  rrelayer 部署 + BFF 联调（真 gasless）  ← 当前
+P0-B  负向用例 → 运维 smoke；deposit gasless E2E 待 Horizen 对齐  ← 当前
   → P1    Bridge / 双链测试网
   → P2    Goldsky / 安全评审
 ```
 
-重启开发时:从 **P0-B**（[`stLighter-rrelayer-setup.md`](./stLighter-rrelayer-setup.md)）开始。
+重启开发时:读 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) → [`deploy/rrelayer-horizen/`](../deploy/rrelayer-horizen/) gas 配置 → [`stLighter-rrelayer-setup.md`](./stLighter-rrelayer-setup.md) 联调。

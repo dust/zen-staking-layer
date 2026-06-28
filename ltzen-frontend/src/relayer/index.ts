@@ -12,6 +12,7 @@ import { bffEndpoint, hasRelayer, relayerEndpoints, useMockRelayerOnly, useRelay
 import { DirectContractRelayer } from "./directContractRelayer";
 import { HttpRelayer } from "./httpRelayer";
 import { MockRelayer } from "./mockRelayer";
+import { relayClientLog } from "./relayDebug";
 import type { Relayer } from "./types";
 
 export * from "./types";
@@ -25,8 +26,17 @@ export function createRelayer(config: Config): Relayer {
     const endpoint =
       relayerEndpoints[0] ?? (useRelayerBff ? bffEndpoint : undefined);
     if (!endpoint) throw new Error("relayer endpoint not configured");
+    relayClientLog("createRelayer → HttpRelayer", {
+      endpoint,
+      useRelayerBff,
+      relayerEndpoints,
+    });
     return new HttpRelayer(endpoint);
   }
-  if (useMockRelayerOnly) return new MockRelayer();
+  if (useMockRelayerOnly) {
+    relayClientLog("createRelayer → MockRelayer");
+    return new MockRelayer();
+  }
+  relayClientLog("createRelayer → DirectContractRelayer");
   return new DirectContractRelayer(config);
 }

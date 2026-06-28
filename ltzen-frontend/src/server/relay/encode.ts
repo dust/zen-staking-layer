@@ -8,13 +8,15 @@ export interface EncodedMetaTx {
   feeZen: bigint;
 }
 
-/** Build StLighter calldata + relayer-chosen feeZen for depositWithSigAndPermit / redeemWithSig. */
-export function encodeMetaTx(req: RelayRequest, feeZen: bigint): EncodedMetaTx {
-  const to = req.verifyingContract;
+type MetaTxFunctionName = "depositWithSigAndPermit" | "redeemWithSig";
 
+/** Args passed to StLighter meta-tx entrypoints (shared by encode + simulate). */
+export function metaTxContractCall(
+  req: RelayRequest,
+  feeZen: bigint,
+): { functionName: MetaTxFunctionName; args: readonly unknown[] } {
   if (req.kind === "redeemWithSig") {
-    const data = encodeFunctionData({
-      abi: StLighterAbi,
+    return {
       functionName: "redeemWithSig",
       args: [
         BigInt(req.amount),
@@ -25,15 +27,13 @@ export function encodeMetaTx(req: RelayRequest, feeZen: bigint): EncodedMetaTx {
         BigInt(req.deadline),
         req.signature,
       ],
-    });
-    return { to, data, feeZen };
+    };
   }
 
   if (req.kind === "depositWithSigAndPermit") {
     if (!req.permit) throw new Error("depositWithSigAndPermit requires permit");
     const p = req.permit;
-    const data = encodeFunctionData({
-      abi: StLighterAbi,
+    return {
       functionName: "depositWithSigAndPermit",
       args: [
         BigInt(req.amount),
@@ -48,9 +48,20 @@ export function encodeMetaTx(req: RelayRequest, feeZen: bigint): EncodedMetaTx {
         p.r,
         p.s,
       ],
-    });
-    return { to, data, feeZen };
+    };
   }
 
   throw new Error(`unsupported relay kind: ${req.kind}`);
+}
+
+/** Build StLighter calldata + relayer-chosen feeZen for depositWithSigAndPermit / redeemWithSig. */
+export function encodeMetaTx(req: RelayRequest, feeZen: bigint): EncodedMetaTx {
+  const to = req.verifyingContract;
+  const { functionName, args } = metaTxContractCall(req, feeZen);
+  const data = encodeFunctionData({
+    abi: StLighterAbi,
+    functionName,
+    args: args as never,
+  });
+  return { to, data, feeZen };
 }

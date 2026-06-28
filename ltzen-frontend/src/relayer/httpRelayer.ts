@@ -12,6 +12,7 @@
  */
 
 import type { Relayer, RelayRequest, RelayResult, RelayHandle, RelayStatus } from "./types";
+import { relayClientLog } from "./relayDebug";
 
 const POLL_MS = 1_500;
 const TIMEOUT_MS = 30_000;
@@ -33,11 +34,14 @@ interface ServerStatus {
   error?: string;
 }
 
+/** Map BFF / external relayer status strings into our RelayStatus state machine. */
 function mapStatus(s: string | undefined): RelayStatus {
   switch (s) {
+    case "submitting":
     case "pending":
     case "submitted":
     case "broadcasting":
+    case "relaying":
       return "relaying";
     case "confirmed":
     case "mined":
@@ -46,7 +50,10 @@ function mapStatus(s: string | undefined): RelayStatus {
     case "failed":
     case "reverted":
       return "failed";
+    case "timeout":
+      return "timeout";
     default:
+      relayClientLog("mapStatus: unknown server status, treating as relaying", { status: s });
       return "relaying";
   }
 }
@@ -75,25 +82,40 @@ class HttpRelayHandle implements RelayHandle {
 
   private async poll() {
     const deadline = Date.now() + TIMEOUT_MS;
-    this.emit({ status: "relaying" });
+    relayClientLog("poll start", { id: this.id, endpoint: this.endpoint });
 
     while (!this.stopped) {
       if (Date.now() > deadline) {
+        relayClientLog("poll timeout", { id: this.id });
         this.emit({ status: "timeout" });
         return;
       }
       try {
-        const res = await fetch(resolveEndpoint(this.endpoint, `/relay/${this.id}`), {
+        const url = resolveEndpoint(this.endpoint, `/relay/${this.id}`);
+        const res = await fetch(url, {
           headers: { accept: "application/json" },
         });
         if (res.ok) {
           const body = (await res.json()) as ServerStatus;
           const status = mapStatus(body.status);
+          relayClientLog("poll tick", {
+            id: this.id,
+            httpStatus: res.status,
+            serverStatus: body.status,
+            mapped: status,
+            txHash: body.txHash,
+            error: body.error,
+          });
           this.emit({ status, txHash: body.txHash, feeZen: body.feeZen, error: body.error });
           if (this.stopped) return;
+        } else {
+          relayClientLog("poll http error", { id: this.id, httpStatus: res.status });
         }
-      } catch {
-        // transient — keep polling until the deadline (don't kill the track on one bad fetch).
+      } catch (err) {
+        relayClientLog("poll fetch error", {
+          id: this.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
@@ -120,15 +142,26 @@ export class HttpRelayer implements Relayer {
   }
 
   async submit(req: RelayRequest): Promise<RelayHandle> {
-    const res = await fetch(resolveEndpoint(this.endpoint, "/relay"), {
+    const url = resolveEndpoint(this.endpoint, "/relay");
+    relayClientLog("submit POST", { url, kind: req.kind, user: req.user });
+    const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(req),
     });
     if (!res.ok) {
-      throw new Error(`relayer rejected submission (${res.status})`);
+      let detail = "";
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body.error) detail = `: ${body.error}`;
+      } catch {
+        /* ignore */
+      }
+      relayClientLog("submit rejected", { httpStatus: res.status, detail });
+      throw new Error(`relayer rejected submission (${res.status})${detail}`);
     }
-    const { id } = (await res.json()) as { id: string };
-    return new HttpRelayHandle(id, this.endpoint);
+    const payload = (await res.json()) as { id: string; feeZen?: string };
+    relayClientLog("submit accepted", { id: payload.id, feeZen: payload.feeZen });
+    return new HttpRelayHandle(payload.id, this.endpoint);
   }
 }
