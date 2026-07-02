@@ -1,258 +1,235 @@
-# Staker
+# ZenStaker
 
-Staker is a flexible, configurable staking contract. Staker makes it easy to distribute onchain staking rewards for any ERC20 token, including DAO governance tokens.
+A staking platform for the **ZEN token**, built on top of [Tally's audited Staker contracts](https://github.com/withtally/staker).
 
-## How it works:
+Users stake ZEN to earn ZEN rewards. The smart-contract layer is a thin, additive wrapper over the audited base: the only changes are view-only helper functions that reduce RPC round-trips for the frontend. All write-path logic (stake, withdraw, claim) is inherited unchanged.
 
-### 1. Deploy and configure a Staker
-- Staker is deployed with a single staking token.
-- Staker is deployed with an admin, such as a DAO.
-- Staker is configured to collect and distribute reward tokens.
+---
 
-### 2. Tokenholders stake
-- Tokenholders of the staking token can deposit those tokens in Staker.
-- There is no delay to deposit or withdraw.
-- If the staking token is a governance token, depositors can delegate their staked tokens' voting power to themselves or someone else.
-- The depositor sets a claimer who can claim the staking rewards, such as themselves or someone else.
+## Project goal
 
-### 3. Staker distributes rewards
-- The admin sends rewards into Staker.
-- Optionally, the admin sets eligibility criteria for rewards.
-- Staker distributes those rewards over time.
-- Each tokenholder's reward is proportional to their staked balance over time.
-- Claimers can claim their accrued rewards at any time.
+ZenStaker gives Horizen holders a native staking experience:
 
-When Staker is used for a protocol or DAO, the rewards are generally funded by protocol revenue and/or issuance of the native token from the treasury.
+1. **Stake ZEN** - deposit any amount of ZEN into an on-chain position.
+2. **Earn ZEN rewards** - rewards accrue continuously, proportional to each user's share of total staked ZEN.
+3. **Claim at any time** - no lock-up periods; rewards can be claimed whenever the user wants.
+4. **Delegate** - each deposit designates a delegatee address (governance-forwarding is out of scope for Phase 1; a non-voting surrogate holds the tokens).
+5. **Custom claimer** - reward collection can be delegated to a separate address (e.g. a vesting contract).
 
-## Implementation details:
+The frontend reads all the data it needs in as few RPC calls as possible by calling the batch view helpers added to `ZenStaker.sol`.
 
-Staker can be deployed as an immutable contract with minimal governance. It does have some admin functions:
+---
 
-- Adding a new source of rewards.
-- Changing the eligibility oracle or the emergency pause guardian.
-- Overriding eligibility for a particular address.
+## User-facing features
 
-The staking token can be an `ERC20` token, including `ERC20Votes` governance tokens. Staker splits up all voting power in Staker by creating a surrogate contract for each delegate.
+### Stake
 
-Staker distributes rewards over a fixed period of time. This minimizes discontinuities from flash staking, and prevents frontrunning attacks, aimed at gaining a disproportionate share of rewards, ahead of reward distributions.
+Deposit ZEN into a new position. Each deposit gets a unique ID and designates:
+- a **delegatee** - the address that receives the deposit's (non-voting) surrogate delegation;
+- an optional **claimer** - a separate address authorised to claim rewards on the owner's behalf.
 
-### Staking system
+Two paths:
+- `approve` + `stake(amount, delegatee)` - two transactions.
+- `permitAndStake(amount, delegatee, claimer, deadline, v, r, s)` - single transaction using an EIP-2612 signature (better UX).
 
-The staking system accepts user stake, delegates their voting power, and distributes rewards for eligible stakers.
+### Stake more
 
-```mermaid
+Add ZEN to an existing deposit without opening a new one:  
+`stakeMore(depositId, amount)` - owner only; preserves the existing delegatee and claimer.
 
-stateDiagram-v2
-    direction TB
+### Claim rewards
 
-    User --> CUF: Stakes tokens
+Collect accrued ZEN rewards for a deposit:  
+`claimReward(depositId)` - callable by the deposit **owner** or its **claimer**.  
+Rewards are sent directly to the caller. There are no fees (fee is fixed at 0 in Phase 1).
 
-    state Staker {
-        state "Key User Functions" as CUF {
-            stake --> claimReward
-            claimReward --> withdraw
-        }
+### Withdraw
 
-        state "Key State" as KS {
-            rewardRate
-            deposits
-        }
+Pull staked ZEN out of a deposit (partially or fully):  
+`withdraw(depositId, amount)` - owner only.  
+Rewards are **not** claimed automatically; call `claimReward` first to avoid leaving them stranded.
 
-        state "Admin Functions" as CAF {
-            setRewardNotifier
-            setEarningPowerCalculator
-        }
-    }
+### Change delegatee
 
-    state DelegationSurrogate {
-        state "Per Delegatee" as PD {
-            HoldsTokens
-            DelegatesVotes
-        }
-    }
+Reassign the surrogate delegation of an existing deposit:  
+`alterDelegatee(depositId, newDelegatee)` - owner only.
 
-    KS  --> DelegationSurrogate: Holds tokens per delegatee
-    DelegationSurrogate --> Delegatee: Delegates voting power
-    Admin --> CAF: e.g. governance
+### Change claimer
 
-    RewardNotifier --> Staker: Tells Staker about new rewards
-    EarningPowerCalculator --> Staker: Calculates eligibility
+Reassign the address authorised to collect rewards for a deposit:  
+`alterClaimer(depositId, newClaimer)` - owner only.
 
+---
+
+## Architecture
 
 ```
+ZenStaker (src/ZenStaker.sol)
+  ├── inherits Staker (src/Staker.sol)          ← audited by Sherlock, Offbeat, Cantina
+  ├── inherits StakerPermitAndStake              ← EIP-2612 single-tx stake
+  └── adds view helpers (no new state)
+        getDepositInfo(id)
+        getDepositsInfo(ids[])
+        getGlobalState()
+        getDepositorSummary(addr)
+        getDepositorFullSummary(addr, ids[])
 
-### Earning Power Calculator
+ZenDelegationSurrogate (src/ZenStaker.sol)
+  └── inherits DelegationSurrogate               ← holds staked tokens, no vote delegation
 
-The earning power calculator determines which depositors are eligible for rewards—and the rate at which those rewards are earned—based on their stake and their governance delegatee. The calculator is a modular component of the staker, which can be customized and updated by owner of the Staker, such as a DAO. One provided implementation uses an oracle. An oracle is needed because eligibility depends on the off-chain behavior of DAO delegates.
-
-```mermaid
-stateDiagram-v2
-    direction TB
-
-    state EarningPowerCalculator {
-        state "Public Functions" as PF {
-            GetEarningPower: getEarningPower()
-        }
-
-        state "Score Oracle Functions" as SOF {
-            UpdateScore: updateDelegateeScore()
-        }
-
-        state "Owner Functions" as OF {
-            OverrideScore: overrideDelegateeScore()
-            SetScoreLock: setDelegateeScoreLock()
-            SetGuardian: setOraclePauseGuardian()
-        }
-
-        state "Guardian Functions" as GF {
-            SetOracleState: setOracleState()
-        }
-
-
-    }
-
-    ScoreOracle --> SOF: Updates scores
-    Owner --> OF: Admin controls
-    Guardian --> GF: Emergency pause
-    PF --> Staker: Returns earning power to staking system
+IdentityEarningPowerCalculator (src/calculators/)
+  └── earning power == stake (1:1), used in Phase 1
 ```
 
-## Usage
+### What was changed vs. the audited base
 
-The Staker repository is designed to be used as a library. Once added to your project, it can be used to assemble, configure, and deploy an instance of Staker appropriate for your project.
+All changes are **additive only**. No write-path logic, storage layout, or function behaviour was altered.
 
-### Installation
+| Change | Kind | Behavioural impact |
+|--------|------|--------------------|
+| `src/ZenStaker.sol` - new file | New concrete implementation | Inherits audited base; adds view helpers |
+| `StakeDeposited.owner` → `indexed` | Event schema | None - enables efficient frontend filtering |
+| `StakeWithdrawn.owner` → `indexed` | Event schema | None - enables efficient frontend filtering |
 
-#### Foundry
+See [AUDIT_DELTA.md](AUDIT_DELTA.md) for the full audit-diff rationale.
 
-Add Staker as a dependency:
+---
 
-```bash
-forge install withtally/staker
+## Frontend integration
+
+The frontend reads on-chain state through the view helpers and listens to indexed events to discover deposit IDs (deposit IDs are not enumerable on-chain).
+
+Key contract calls:
+
+| What to display | Function |
+|-----------------|----------|
+| Protocol-wide ZEN staked & reward rate | `getGlobalState()` |
+| User's total staked (no deposit IDs needed) | `getDepositorSummary(addr)` |
+| User's total staked + unclaimed rewards | `getDepositorFullSummary(addr, ids[])` |
+| Per-deposit breakdown | `getDepositsInfo(ids[])` |
+| Discover deposit IDs | `StakeDeposited` events filtered by `owner` (indexed) |
+
+For the complete ethers.js integration guide (TypeScript snippets, ABI, error handling, event subscription) see [docs/frontend-integration.md](docs/frontend-integration.md).
+
+---
+
+## Repository layout
+
+```
+src/
+  ZenStaker.sol                          # ZEN-specific concrete implementation
+  Staker.sol                             # Audited base (Tally)
+  calculators/
+    IdentityEarningPowerCalculator.sol   # Phase 1: earning power == stake
+  extensions/
+    StakerPermitAndStake.sol             # EIP-2612 single-tx stake
+    ...
+script/
+  DeployZenStaker.s.sol                  # Foundry deployment script
+  ConfigureRewardNotifier.s.sol          # Post-deploy admin script
+scripts/
+  e2e-zen-staking.js                     # Node.js end-to-end test (ethers v6)
+docs/
+  frontend-integration.md               # ethers.js integration guide
+audits/                                  # All upstream audit reports
+AUDIT_DELTA.md                          # Change summary for auditors
 ```
 
-#### Hardhat
-
-Staker is not currently distributed as a package on npm, but it can still be added to a HardHat project by referencing the github repository directly.
-
-Add the following lines to to your `package.json` in the `dependencies` key:
-
-```json
-"dependencies": {
-    "@openzeppelin/contracts": "^5.0.2",
-    "staker": "github:withtally/staker#v1.0.1"
-  }
-```
-
-Note that because the `staker` package is pinned to a version branch on GitHub. To upgrade to a new version of Staker in the future, you cannot expect an upgrade to a new version simply by running `npm upgrade`. Instead, you will have to update the tag referenced in the `pacakage.json` and re-run `npm install`.
-
-### Import and Assemble a Staker
-
-To create a concrete implementation, import Staker and the desired extensions. Create a new contract that inherits from Staker and the extensions of choice, and implement the constructor, along with any method overrides in accordance with your desired set of features and customizations.
-
-For example, here is a concrete implementation of the Staker that:
-
-* Uses an [ERC20Votes](https://docs.openzeppelin.com/contracts/5.x/api/token/erc20#ERC20Votes) style governance token as its staking token (via the `StakerDelegateSurrogateVotes` extension)
-* Uses a staking token that includes permit functionality, and provides convenience staking methods that use this functionality (via the `StakerPermitAndStake` extension)
-* Allows users to take actions via EIP712 signatures (via the `StakerOnBehalf` extension)
-* Allows a maximum claim fee of 1 (18 decimal) reward token, but configures the Staker with claim fees turned off to start
-
-```solidity
-pragma solidity 0.8.28;
-
-import {Staker} staker/Staker.sol;
-import {StakerDelegateSurrogateVotes} from "staker/extensions/StakerDelegateSurrogateVotes.sol";
-import {StakerPermitAndStake} from "staker/extensions/StakerPermitAndStake.sol";
-import {StakerOnBehalf} from "staker/extensions/StakerOnBehalf.sol";
-
-contract MyStaker is
-  Staker,
-  StakerDelegateSurrogateVotes,
-  StakerPermitAndStake
-  StakerOnBehalf
-{
-  constructor(
-    IERC20 _rewardsToken,
-    IERC20Staking _stakeToken,
-    IEarningPowerCalculator _earningPowerCalculator,
-    uint256 _maxBumpTip,
-    address _admin
-  )
-    Staker(_rewardsToken, _stakeToken, _earningPowerCalculator, _maxBumpTip, _admin)
-    StakerPermitAndStake(_stakeToken)
-    StakerDelegateSurrogateVotes(_stakeToken)
-    EIP712("MyStaker", "1")
-  {
-    // Override the maximum reward token fee for claiming rewards
-    MAX_CLAIM_FEE = 1e18;
-    // At deployment, there should be no reward claiming fee
-    _setClaimFeeParameters(ClaimFeeParameters({feeAmount: 0, feeCollector: address(0)}));
-  }
-}
-```
-
-### Testing
-
-Foundry users can also import test-related contracts into their own tests if desired:
-
-```solidity
-pragma solidity 0.8.28;
-
-import {StakerTestBase} from "staker-test/StakerTestBase.sol";
-
-contract MyStakerTest is StakerTestBase {
-    // ... Your test implementations
-}
-```
-
-Hardhat users cannot, by definition, import test contracts into their own tests. Any testing infrastructure for JavaScript tests must be written by the downstream consumer of the Staker package.
+---
 
 ## Development
 
-These contracts were built and tested with care by the team at [ScopeLift](https://scopelift.co).
+### Prerequisites
 
-### Build and test
+- [Foundry](https://getfoundry.sh) - for Solidity build and tests
+- Node.js ≥ 18 + npm - for the e2e script
 
-This project uses [Foundry](https://github.com/foundry-rs/foundry). Follow [these instructions](https://github.com/foundry-rs/foundry#installation) to install it.
-
-Clone the repo.
-
-Set up your .env file
-
-```bash
-cp .env.template .env
-# edit the .env to fill in values
-```
-
-Install dependencies & run tests.
+### Build
 
 ```bash
 forge install
 forge build
+```
+
+### Solidity tests
+
+```bash
 forge test
 ```
 
-### Spec and lint
+### End-to-end script
 
-This project uses [scopelint](https://github.com/ScopeLift/scopelint) for linting and spec generation. Follow [these instructions](https://github.com/ScopeLift/scopelint?tab=readme-ov-file#installation) to install it.
+The e2e scripts deploy the contract stack and exercise the entire staking lifecycle (stake → accrue rewards → claim → withdraw).
 
-To use scopelint's linting functionality, run:
-
+#### Upgradeable variant (ZenStakerUpgradeable)
+**Against a local Anvil node (no .env needed):**
 ```bash
-scopelint check # check formatting
-scopelint fmt # apply formatting changes
+npm install
+npm run e2e:anvil
 ```
 
-To use scopelint's spec generation functionality, run:
-
+**Against a testnet:**
 ```bash
-scopelint spec
+cp .env.template .env
+# fill in: RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY
+npm run e2e
 ```
 
-This command will use the names of the contract's unit tests to generate a human readable spec. It will list each contract, its constituent functions, and the human readable description of functionality each unit test aims to assert.
+#### Non-upgradeable variant (ZenStaker)
+**Against a local Anvil node (no .env needed):**
+```bash
+npm run e2e:staker:anvil
+```
+
+**Against a testnet:**
+```bash
+cp .env.template .env
+# fill in: RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY
+npm run e2e:staker
+```
+
+### Deployment (Foundry)
+
+To deploy the **non-upgradeable** `ZenStaker` implementation using Foundry, you will use the provided scripts in the `script/` directory.
+
+#### 1. Deploy ZenStaker & IdentityEarningPowerCalculator
+Export the following environment variables (or set them in `.env`):
+* `ZEN_TOKEN_ADDRESS`: Address of the deployed ZEN ERC20 token.
+* `ADMIN_ADDRESS`: Address of the Horizen multisig (becomes staker admin).
+* `PRIVATE_KEY`: Deployer private key (hex, with or without 0x prefix).
+* `MAX_BUMP_TIP` (Optional): Maximum bump tip (defaults to 0).
+
+Execute the deploy script:
+```bash
+forge script script/DeployZenStaker.s.sol --rpc-url $RPC_URL --broadcast
+```
+
+#### 2. Configure Reward Notifiers (Post-Deploy)
+To authorize a contract or account to send rewards to the staker, export these variables:
+* `STAKER_ADDRESS`: Address of the deployed `ZenStaker` contract.
+* `REWARD_NOTIFIER_ADDRESS`: Address of the reward notifier to enable.
+* `PRIVATE_KEY`: Admin private key (must be the `ADMIN_ADDRESS` specified during deploy).
+
+Execute the configuration script:
+```bash
+forge script script/ConfigureRewardNotifier.s.sol --rpc-url $RPC_URL --broadcast
+```
+
+---
+
+## Audits
+
+ZenStaker inherits the Tally Staker base at tag `v1.0.1`, which was audited by:
+
+- [Sherlock](audits/2024_12_Staker_Sherlock_Audit_Report.pdf) (Nov 2024 contest + Jan 2025 public contest)
+- [Offbeat Security](audits/2025_01_Reward_Notifiers_Offbeat_Security_Audit_Report.pdf) (Jan 2025)
+- Cantina (public contest)
+- ToB + Code4rena on the original UniStaker foundation (see [audits/unistaker/](audits/unistaker/))
+
+The ZenStaker additions (view helpers + event indexing) are stateless and require no re-audit of core logic; see [AUDIT_DELTA.md](AUDIT_DELTA.md).
+
+---
 
 ## License
 
-The code in this repository is licensed under the [GNU Affero General Public License](LICENSE) unless otherwise indicated.
-
-Copyright (C) 2025 Tally
+AGPL-3.0-only - see [LICENSE](LICENSE).

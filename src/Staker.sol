@@ -43,7 +43,7 @@ abstract contract Staker is INotifiableRewardReceiver, Multicall {
   /// @notice Emitted when stake is deposited by a depositor, either to a new deposit or one that
   /// already exists.
   event StakeDeposited(
-    address owner,
+    address indexed owner,
     DepositIdentifier indexed depositId,
     uint256 amount,
     uint256 depositBalance,
@@ -52,7 +52,7 @@ abstract contract Staker is INotifiableRewardReceiver, Multicall {
 
   /// @notice Emitted when a depositor withdraws some portion of stake from a given deposit.
   event StakeWithdrawn(
-    address owner,
+    address indexed owner,
     DepositIdentifier indexed depositId,
     uint256 amount,
     uint256 depositBalance,
