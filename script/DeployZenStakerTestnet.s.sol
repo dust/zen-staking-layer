@@ -3,14 +3,13 @@ pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IEarningPowerCalculator} from "../src/interfaces/IEarningPowerCalculator.sol";
 import {IdentityEarningPowerCalculator} from "../src/calculators/IdentityEarningPowerCalculator.sol";
-import {ZenStakerUpgradeable} from "../src/ZenStakerUpgradeable.sol";
+import {ZenStaker} from "../src/ZenStaker.sol";
 import {ERC20VotesMock} from "../test/mocks/MockERC20Votes.sol";
 
 /// @notice Testnet deployment: deploys a public-mint ERC20 test token, then
-/// IdentityEarningPowerCalculator + ZenStakerUpgradeable (impl) + ERC1967Proxy.
+/// IdentityEarningPowerCalculator + ZenStaker.
 /// The deployer becomes the staker admin.
 ///
 /// Required env:
@@ -21,8 +20,7 @@ contract DeployZenStakerTestnet is Script {
     returns (
       ERC20VotesMock testToken,
       IdentityEarningPowerCalculator calculator,
-      ZenStakerUpgradeable implementation,
-      ZenStakerUpgradeable proxy
+      ZenStaker staker
     )
   {
     uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -36,16 +34,13 @@ contract DeployZenStakerTestnet is Script {
     calculator = new IdentityEarningPowerCalculator();
     console2.log("IdentityEarningPowerCalculator:", address(calculator));
 
-    implementation = new ZenStakerUpgradeable(IERC20(address(testToken)));
-    console2.log("ZenStakerUpgradeable (impl):   ", address(implementation));
-
-    bytes memory initData = abi.encodeCall(
-      ZenStakerUpgradeable.initialize,
-      (deployer, IEarningPowerCalculator(address(calculator)), uint256(0))
+    staker = new ZenStaker(
+      IERC20(address(testToken)),
+      IEarningPowerCalculator(address(calculator)),
+      0,
+      deployer
     );
-    proxy =
-      ZenStakerUpgradeable(address(new ERC1967Proxy(address(implementation), initData)));
-    console2.log("ZenStakerUpgradeable (proxy):  ", address(proxy));
+    console2.log("ZenStaker:                     ", address(staker));
     console2.log("Admin (deployer):              ", deployer);
 
     vm.stopBroadcast();

@@ -76,3 +76,20 @@ type RewardNotifiedEvent @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+# Unified, chronologically-ordered activity feed for the user history view.
+# orderKey packs (blockNumber, logIndex) into one strictly-increasing cursor so
+# the merged timeline paginates via orderKey_lt with no per-type holes.
+# Kept last so the existing entities keep their original schema positions.
+type Activity @entity(immutable: true) {
+  id: Bytes!
+  kind: String!
+  account: Bytes!
+  depositId: BigInt!
+  amount: BigInt!
+  orderKey: BigInt!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

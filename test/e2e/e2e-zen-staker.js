@@ -18,7 +18,7 @@
  *
  * -- Testnet mode (default) ------------------------------------------------
  *   cp .env.template .env   # fill in keys + RPC
- *   npm run e2e:non-upgradeable
+ *   npm run e2e
  *
  *   Required .env vars:
  *     RPC_URL               testnet JSON-RPC endpoint
@@ -27,9 +27,9 @@
  *     USER2_PRIVATE_KEY
  *
  * -- Anvil mode ------------------------------------------------------------
- *   npm run e2e:non-upgradeable -- --anvil           (spawns anvil on default port 8545)
- *   npm run e2e:non-upgradeable -- --anvil 9545      (custom port)
- *   USE_ANVIL=true npm run e2e:non-upgradeable       (env var alternative)
+ *   npm run e2e:anvil                                (spawns anvil on default port 8545)
+ *   node test/e2e/e2e-zen-staker.js --anvil 9545      (custom port)
+ *   USE_ANVIL=true npm run e2e                        (env var alternative)
  *
  *   Requires Foundry installed (https://getfoundry.sh).
  *   No .env vars needed — Anvil's built-in funded test accounts are used.
@@ -69,6 +69,8 @@ const TOP_UP_AMOUNT   = ethers.parseEther("0.005");
 
 const INITIAL_MINT     = ethers.parseEther("100000"); // minted to each user
 const REWARD_AMOUNT    = ethers.parseEther("86400");  // 86 400 ZEN -> ~1 ZEN/s over 30 days
+const ACCUMULATOR_REWARD_AMOUNT = ethers.parseEther("86400");
+const REWARD_WINDOW_SECONDS = 30 * 24 * 60 * 60;
 const USER1_STAKE      = ethers.parseEther("1000");
 const USER2_STAKE      = ethers.parseEther("500");
 const USER1_STAKE_MORE = ethers.parseEther("500");
@@ -295,6 +297,7 @@ async function run() {
   const mockTokenArtifact  = loadArtifact("MockERC20Votes.sol", "ERC20VotesMock");
   const calculatorArtifact = loadArtifact("IdentityEarningPowerCalculator.sol", "IdentityEarningPowerCalculator");
   const zenStakerArtifact  = loadArtifact("ZenStaker.sol", "ZenStaker");
+  const rewardAccumulatorArtifact = loadArtifact("RewardAccumulator.sol", "RewardAccumulator");
 
   // -- 1: ETH Balance Check & Top-Up ------------------------------------------
   section("1 - ETH Balance Check & Top-Up");
@@ -395,13 +398,35 @@ async function run() {
   assert(await staker.REWARD_TOKEN() === await staker.STAKE_TOKEN(), "REWARD_TOKEN == STAKE_TOKEN (ZEN-on-ZEN enforced)");
   assert(await staker.admin()        === deployer.address,            "admin == deployer");
 
-  // -- 5: Configure Reward Notifier --------------------------------------------
-  section("5 - Configure Reward Notifier (deployer as direct notifier)");
+  // -- 5: Deploy RewardAccumulator and configure it as the sole reward notifier ---
+  section("5 - Deploy RewardAccumulator and configure it as the sole reward notifier");
 
-  const setNotifierTx = await staker.connect(deployer).setRewardNotifier(deployer.address, true);
+  const accumulatorFactory = new ethers.ContractFactory(
+    rewardAccumulatorArtifact.abi, rewardAccumulatorArtifact.bytecode, deployer
+  );
+  const accumulatorContract = await accumulatorFactory.deploy(
+    stakerAddress,
+    await zenToken.getAddress(),
+    REWARD_WINDOW_SECONDS,
+    false
+  );
+  const accumulatorReceipt = await accumulatorContract.deploymentTransaction().wait();
+  const accumulatorAddress = await accumulatorContract.getAddress();
+  logTx("Deploy RewardAccumulator", accumulatorContract.deploymentTransaction(), accumulatorReceipt);
+  console.log(`  Contract : ${accumulatorAddress}`);
+
+  const setNotifierTx = await staker.connect(deployer).setRewardNotifier(accumulatorAddress, true);
   const setNotifierRx = await setNotifierTx.wait();
-  logTx("setRewardNotifier(deployer, true)", setNotifierTx, setNotifierRx);
-  assert(await staker.isRewardNotifier(deployer.address), "deployer is reward notifier");
+  logTx("setRewardNotifier(accumulator, true)", setNotifierTx, setNotifierRx);
+  assert(await staker.isRewardNotifier(accumulatorAddress), "reward accumulator is reward notifier");
+
+  // The deployer is also authorized directly so it can cover the very first
+  // reward window itself, mirroring the real deployment procedure: the
+  // accumulator only takes over starting from the second window onward.
+  const setDeployerNotifierTx = await staker.connect(deployer).setRewardNotifier(deployer.address, true);
+  const setDeployerNotifierRx = await setDeployerNotifierTx.wait();
+  logTx("setRewardNotifier(deployer, true)", setDeployerNotifierTx, setDeployerNotifierRx);
+  assert(await staker.isRewardNotifier(deployer.address), "deployer is reward notifier (covers first window)");
 
   await printGlobalState(staker, "after setup, before any stakes");
 
@@ -467,22 +492,57 @@ async function run() {
   assert(batchBal[0] === USER1_STAKE, "batch: deposit1 balance correct");
   assert(batchBal[1] === USER2_STAKE, "batch: deposit2 balance correct");
 
-  // -- 8: Distribute rewards ----------------------------------------------------
-  section("8 - Distribute rewards via notifyRewardAmount");
+  // -- 8: Notify the first reward window directly, then fund RewardAccumulator for the next one ---
+  section("8 - Notify first reward window directly, fund RewardAccumulator for the next one");
 
-  const transferRwdTx = await zenToken.connect(deployer).transfer(await staker.getAddress(), REWARD_AMOUNT);
-  const transferRwdRx = await transferRwdTx.wait();
-  logTx(`Transfer ${ethers.formatEther(REWARD_AMOUNT)} ZEN to staker`, transferRwdTx, transferRwdRx);
+  // Mirrors the real deployment procedure: the very first reward window is sent
+  // directly to the staker (bypassing the accumulator) so stakers start earning
+  // immediately, instead of waiting for a full `timeWindow` to elapse before the
+  // accumulator can flush anything.
+  const transferFirstRewardTx = await zenToken.connect(deployer).transfer(stakerAddress, REWARD_AMOUNT);
+  const transferFirstRewardRx = await transferFirstRewardTx.wait();
+  logTx(`Transfer ${ethers.formatEther(REWARD_AMOUNT)} ZEN directly to ZenStaker (first window)`, transferFirstRewardTx, transferFirstRewardRx);
 
-  const notifyTx = await staker.connect(deployer).notifyRewardAmount(REWARD_AMOUNT);
-  const notifyRx = await notifyTx.wait();
-  logTx(`notifyRewardAmount(${ethers.formatEther(REWARD_AMOUNT)} ZEN)`, notifyTx, notifyRx);
+  const notifyFirstTx = await staker.connect(deployer).notifyRewardAmount(REWARD_AMOUNT);
+  const notifyFirstRx = await notifyFirstTx.wait();
+  logTx("notifyRewardAmount(first window)", notifyFirstTx, notifyFirstRx);
 
-  const gsRewards = await printGlobalState(staker, "after notifyRewardAmount");
-  assert(gsRewards.rewardRate    > 0n, "rewardRate > 0 after notification");
-  assert(gsRewards.rewardEndTime > 0n, "rewardEndTime set");
-  console.log(`\n  Expected rate ~${ethers.formatEther(REWARD_AMOUNT / (30n * 86400n))} ZEN/s`);
-  console.log(`  Actual   rate  ${ethers.formatEther(gsRewards.rewardRate)} ZEN/s`);
+  const gsFirstWindow = await printGlobalState(staker, "after first-window direct notify");
+  assert(gsFirstWindow.rewardRate > 0n, "rewardRate > 0 after first-window direct notify");
+
+  // Fund RewardAccumulator for the *next* window, exactly as ops will do going forward.
+  const mintAccumulatorTx = await zenToken.connect(deployer).mint(deployer.address, ACCUMULATOR_REWARD_AMOUNT);
+  const mintAccumulatorRx = await mintAccumulatorTx.wait();
+  logTx(`Mint ${ethers.formatEther(ACCUMULATOR_REWARD_AMOUNT)} ZEN to deployer`, mintAccumulatorTx, mintAccumulatorRx);
+
+  const approveAccumulatorTx = await zenToken.connect(deployer).approve(accumulatorAddress, ACCUMULATOR_REWARD_AMOUNT);
+  const approveAccumulatorRx = await approveAccumulatorTx.wait();
+  logTx("Approve RewardAccumulator to pull reward tokens", approveAccumulatorTx, approveAccumulatorRx);
+
+  const transferToAccumulatorTx = await accumulatorContract.connect(deployer).transferAndNotifyRewards(ACCUMULATOR_REWARD_AMOUNT);
+  const transferToAccumulatorRx = await transferToAccumulatorTx.wait();
+  logTx("Transfer rewards into RewardAccumulator", transferToAccumulatorTx, transferToAccumulatorRx);
+
+  if (USE_ANVIL) {
+    // Only on Anvil can we fast-forward past the window to prove the flush
+    // works end-to-end. On a real testnet the window hasn't elapsed yet, and
+    // sendRewardsToStaker() would legitimately revert with WaitForNextRewardTime
+    // - the funds simply stay accumulated until the real window elapses.
+    await advanceTime(provider, REWARD_WINDOW_SECONDS);
+
+    const flushTx = await accumulatorContract.connect(deployer).sendRewardsToStaker();
+    const flushRx = await flushTx.wait();
+    logTx("RewardAccumulator flushes rewards into ZenStaker (next window)", flushTx, flushRx);
+
+    const gsRewards = await printGlobalState(staker, "after reward window flush");
+    assert(gsRewards.rewardRate    > 0n, "rewardRate > 0 after accumulator flush");
+    assert(gsRewards.rewardEndTime > 0n, "rewardEndTime set");
+    console.log(`\n  Expected rate ~${ethers.formatEther(ACCUMULATOR_REWARD_AMOUNT / (30n * 86400n))} ZEN/s`);
+    console.log(`  Actual   rate  ${ethers.formatEther(gsRewards.rewardRate)} ZEN/s`);
+  } else {
+    console.log("\n  Testnet mode: skipping accumulator flush - the window hasn't elapsed yet;");
+    console.log("  funds remain accumulated until the real cadence completes it.");
+  }
 
   // -- 9: Let rewards accrue ----------------------------------------------------
   section("9 - Let rewards accrue");

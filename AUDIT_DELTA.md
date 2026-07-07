@@ -49,13 +49,6 @@ Adding `indexed` to an event parameter moves it from the log data field to a top
 - `script/DeployZenStaker.s.sol` — Foundry deployment script.
 - `script/ConfigureRewardNotifier.s.sol` — Admin post-deploy script to
   enable a reward notifier.
-- `script/DeployZenStakerUpgradeable.s.sol` — Deploys `IdentityEarningPowerCalculator`,
-  the `ZenStakerUpgradeable` implementation, and the `ERC1967Proxy` in one run.
-- `script/UpgradeZenStakerUpgradeable.s.sol` — Upgrades an existing proxy to a
-  new `ZenStakerUpgradeable` implementation. Reads `PROXY_ADDRESS`,
-  `ZEN_TOKEN_ADDRESS`, and `PRIVATE_KEY` (admin) from environment; asserts the
-  caller is the current admin before broadcasting; emits no on-chain state
-  changes beyond the ERC-1967 implementation slot update.
 
 ### New test files
 
@@ -88,65 +81,3 @@ re-audit of the core contracts. `ZenDelegationSurrogate` contains no logic
 beyond the `DelegationSurrogate` base constructor. `IdentityEarningPowerCalculator`
 is a pure passthrough already present in the audited repository.
 
----
-
-## ZenStakerUpgradeable — UUPS upgrade layer
-
-### What changed
-
-`src/ZenStakerUpgradeable.sol` is a new file. **No existing files were
-modified.** `Staker.sol`, `StakerPermitAndStake.sol`, `DelegationSurrogate.sol`,
-and all audited base contracts are untouched.
-
-### New inheritance
-
-```
-ZenStakerUpgradeable
-├── Staker                  (audited, unchanged)
-├── StakerPermitAndStake    (audited, unchanged)
-├── Initializable           (@openzeppelin/contracts v5, audited by OZ)
-└── UUPSUpgradeable         (@openzeppelin/contracts v5, audited by OZ)
-```
-
-`Initializable` and `UUPSUpgradeable` are both from `@openzeppelin/contracts`
-v5.0.2, the same dependency already audited as part of the ZenStaker scope.
-No new external dependencies were added.
-
-### Entire new audit surface (3 items)
-
-| Item | Size | Description |
-|------|------|-------------|
-| `constructor(IERC20 _token)` | 5 lines | Sets `REWARD_TOKEN`, `STAKE_TOKEN`, `MAX_CLAIM_FEE` immutables; calls `_disableInitializers()` to permanently lock the implementation contract. `address(1)` is passed as a placeholder to satisfy the non-zero checks in `Staker`'s constructor — these values are written to the implementation's own storage, which is never accessed through a proxy. |
-| `initialize(address, IEarningPowerCalculator, uint256)` | 6 lines | Replaces the constructor for proxy-side state setup. Calls existing internal setters `_setAdmin`, `_setEarningPowerCalculator`, `_setMaxBumpTip`, and `_setClaimFeeParameters` — the same setters the original `Staker` constructor calls. Protected by the `initializer` modifier (can be called exactly once). |
-| `_authorizeUpgrade(address)` | 2 lines | Overrides the OZ hook that gates `upgradeToAndCall`. Delegates entirely to `_revertIfNotAdmin()`, the same admin check already used throughout `Staker`. Upgrade authority is exclusively the `admin` address (Horizen multisig). |
-
-Everything else in `ZenStakerUpgradeable.sol` — the `surrogates` mapping,
-`_fetchOrDeploySurrogate`, and the five view helpers — is a verbatim copy from
-`ZenStaker.sol` with no behavioural differences.
-
-### Storage layout
-
-Proxy storage slots 0–15 are identical to `ZenStaker`. OZ's `Initializable`
-uses ERC-7201 namespaced storage (`keccak256("openzeppelin.storage.Initializable") - 1`),
-so it occupies a non-sequential slot that cannot collide with the sequential
-Staker layout. The ERC-1967 implementation pointer lives at
-`keccak256("eip1967.proxy.implementation") - 1`, also non-sequential.
-
-### Proxy pattern
-
-Deploy via `ERC1967Proxy` (already in `@openzeppelin/contracts` v5):
-
-1. Deploy `ZenStakerUpgradeable(zenToken)` — implementation.
-2. Deploy `ERC1967Proxy(implementation, abi.encodeCall(initialize, (admin, calculator, 0)))` — proxy.
-3. All user and admin interactions go to the **proxy address**, which delegatecalls to the implementation.
-4. To upgrade: admin calls `proxy.upgradeToAndCall(newImpl, "")`.
-
-### What was NOT changed
-
-- `Staker.sol` — untouched
-- `ZenStaker.sol` — untouched (non-upgradeable version preserved)
-- `DelegationSurrogate.sol` — untouched
-- All extension contracts — untouched
-- All interfaces — untouched
-- Write-path logic (stake, withdraw, claim, notifyRewardAmount) — untouched
-- Storage layout of existing slots — untouched

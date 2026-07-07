@@ -127,8 +127,8 @@ src/
 script/
   DeployZenStaker.s.sol                  # Foundry deployment script
   ConfigureRewardNotifier.s.sol          # Post-deploy admin script
-scripts/
-  e2e-zen-staking.js                     # Node.js end-to-end test (ethers v6)
+test/e2e/
+  e2e-zen-staker.js                      # Node.js end-to-end test (ethers v6)
 docs/
   frontend-integration.md               # ethers.js integration guide
 audits/                                  # All upstream audit reports
@@ -161,7 +161,7 @@ forge test
 
 The e2e scripts deploy the contract stack and exercise the entire staking lifecycle (stake → accrue rewards → claim → withdraw).
 
-#### Upgradeable variant (ZenStakerUpgradeable)
+#### Non-upgradeable variant (ZenStaker)
 **Against a local Anvil node (no .env needed):**
 ```bash
 npm install
@@ -173,19 +173,6 @@ npm run e2e:anvil
 cp .env.template .env
 # fill in: RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY
 npm run e2e
-```
-
-#### Non-upgradeable variant (ZenStaker)
-**Against a local Anvil node (no .env needed):**
-```bash
-npm run e2e:staker:anvil
-```
-
-**Against a testnet:**
-```bash
-cp .env.template .env
-# fill in: RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY
-npm run e2e:staker
 ```
 
 ### Deployment (Foundry)

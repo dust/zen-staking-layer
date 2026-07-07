@@ -8,6 +8,7 @@ import {
 } from "../generated/ZenStaker/ZenStaker";
 import {
   Deposit,
+  Activity as ActivityEntity,
   StakeDepositedEvent as StakeDepositedEntity,
   StakeWithdrawnEvent as StakeWithdrawnEntity,
   RewardClaimedEvent as RewardClaimedEntity,
@@ -15,7 +16,40 @@ import {
   ClaimerAlteredEvent as ClaimerAlteredEntity,
   RewardNotifiedEvent as RewardNotifiedEntity,
 } from "../generated/schema";
-import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
+import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
+
+// Records a unified Activity row for the chronological history feed, alongside
+// the per-type event entities, so the merged timeline can be queried from a
+// single, cursor-paginated entity.
+//
+// NOTE: the (blockNumber << 32) | logIndex multiplier is computed as a LOCAL,
+// not a module-level const. A module-level `BigInt.fromString(...)` global adds
+// a wasm start/init routine that interferes with graph-ts's entity type-id
+// registration, which made graph-node fail every store.set with an empty entity
+// type name. Keeping it local avoids that.
+function recordActivity(
+  kind: string,
+  account: Bytes,
+  depositId: BigInt,
+  amount: BigInt,
+  event: ethereum.Event
+): void {
+  let orderKeyShift = BigInt.fromI32(2).pow(32); // 2^32
+
+  let activity = new ActivityEntity(
+    event.transaction.hash.concatI32(event.logIndex.toI32())
+  );
+  activity.kind = kind;
+  activity.account = account;
+  activity.depositId = depositId;
+  activity.amount = amount;
+  activity.orderKey = event.block.number.times(orderKeyShift).plus(event.logIndex);
+  activity.blockNumber = event.block.number;
+  activity.logIndex = event.logIndex;
+  activity.blockTimestamp = event.block.timestamp;
+  activity.transactionHash = event.transaction.hash;
+  activity.save();
+}
 
 export function handleStakeDeposited(event: StakeDepositedEvent): void {
   let depositIdStr = event.params.depositId.toString();
@@ -48,6 +82,8 @@ export function handleStakeDeposited(event: StakeDepositedEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
+
+  recordActivity("stake", event.params.owner, event.params.depositId, event.params.amount, event);
 }
 
 export function handleStakeWithdrawn(event: StakeWithdrawnEvent): void {
@@ -81,6 +117,8 @@ export function handleStakeWithdrawn(event: StakeWithdrawnEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
+
+  recordActivity("withdraw", event.params.owner, event.params.depositId, event.params.amount, event);
 }
 
 export function handleRewardClaimed(event: RewardClaimedEvent): void {
@@ -95,6 +133,8 @@ export function handleRewardClaimed(event: RewardClaimedEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
+
+  recordActivity("claim", event.params.claimer, event.params.depositId, event.params.amount, event);
 }
 
 export function handleDelegateeAltered(event: DelegateeAlteredEvent): void {

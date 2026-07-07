@@ -2,6 +2,12 @@
 build/
 generated/
 
+# Local graph-node runtime state (docker-compose.yml: postgres + ipfs)
+data/
+
+# Generated devnet manifest (devnet/docker-compose.yml)
+subgraph.devnet.yaml
+
 # Dependency directories
 node_modules/
 jspm_packages/

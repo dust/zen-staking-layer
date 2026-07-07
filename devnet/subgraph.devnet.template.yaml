@@ -6,11 +6,12 @@ schema:
 dataSources:
   - kind: ethereum/contract
     name: ZenStaker
-    network: horizen-testnet
+    # Must match the network label configured in graph-node's `ethereum` env.
+    network: mainnet
     source:
-      address: "0x3F620A68d2a92102C3a3c75c3740146fA1d88004"
+      address: "__STAKER_ADDRESS__"
       abi: ZenStaker
-      startBlock: 20805747
+      startBlock: 0
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -23,6 +24,7 @@ dataSources:
         - DelegateeAlteredEvent
         - ClaimerAlteredEvent
         - RewardNotifiedEvent
+        - Activity
       abis:
         - name: ZenStaker
           file: ./abis/ZenStaker.json
