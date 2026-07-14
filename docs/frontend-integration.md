@@ -493,6 +493,11 @@ async function stakeZen(
 
 `permitAndStake` combines approve + stake into **a single transaction** using an EIP-2612 signature. Better UX — only one wallet confirmation required.
 
+> ⚠️ **The production ZEN token does not implement EIP-2612 `permit`** — with
+> the real token this path reverts, so production integrations must use
+> `approve` + `stake`. This section only applies to permit-capable test
+> tokens.
+
 ```typescript
 async function permitAndStake(
   signer: JsonRpcSigner,
