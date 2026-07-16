@@ -22,10 +22,12 @@ use GitHub's private vulnerability reporting on this repository
 | From Jul 27, 2026 | Extended to the **mainnet** deployment (Horizen, chain ID 26514) |
 
 - **Staking contracts & subgraph** — this repository (`src/`, `subgraphs/`).
-  In-scope testnet deployment: ZenStaker
-  [`0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31`](https://horizen-testnet.explorer.caldera.xyz/address/0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31)
-  <!-- TODO: add the testnet RewardAccumulator address; add mainnet addresses
-  and re-pin the in-scope commit when the mainnet deployment goes live -->
+  In-scope testnet deployment (see also
+  [`docs/explorer-guide.md`](docs/explorer-guide.md)):
+  - ZenStaker: [`0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31`](https://horizen-testnet.explorer.caldera.xyz/address/0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31)
+  - RewardAccumulator: [`0x06f5555fee73EDdc385b6d76FE00DB2D96ccDaE8`](https://horizen-testnet.explorer.caldera.xyz/address/0x06f5555fee73EDdc385b6d76FE00DB2D96ccDaE8)
+  <!-- TODO: add mainnet addresses and re-pin the in-scope commit when the
+  mainnet deployment goes live -->
 - **Staking dApp** — https://github.com/HorizenOfficial/staker-services,
   deployed at https://staking-testnet.horizen.io
 
@@ -54,41 +56,53 @@ are ineligible for the bounty.
 The following are documented, intended behaviors of the Phase 1 deployment;
 reports based on them are invalid.
 
-1. **RewardAccumulator direct-donation notification** —
-   `notifyAlreadyTransferredRewards` only checks that
-   `balanceOf(accumulator) − accumulatedRewards ≥ amount`, so tokens sent
-   directly to the accumulator by a third party can be "claimed" as a
-   notification by any whitelisted caller. Whitelisted notifiers are trusted
-   Horizen multisigs; this is accepted behavior.
-2. **RewardAccumulator open mode** — if the owner disables the whitelist,
-   `transferAndNotifyRewards` becomes permissionless by design (anyone may
-   donate rewards). Reward *timing* remains fixed to the schedule grid, so
-   reward-rate manipulation via high-frequency notifications is not possible.
-3. **Phase 1 configuration** — bumping is disabled (`maxBumpTip = 0`), claim
+1. **RewardAccumulator open mode & permissionless contribution** — the
+   RewardAccumulator is deployed with `whitelistEnabled = false`, so any
+   address may contribute ZEN via `transferAndNotifyRewards` /
+   `notifyAlreadyTransferredRewards`, and any address may call
+   `sendRewardsToStaker` once the time window has elapsed. Consequences that
+   follow *solely* from this permissionless design are accepted: influencing
+   the timing of a reward flush within the window-gated schedule (one flush
+   per `timeWindow`); blending a new contribution into the ongoing
+   `REWARD_DURATION` rate; calling `sendRewardsToStaker` with zero
+   accumulated rewards (transfers nothing, advances the schedule grid); and
+   crediting ZEN transferred directly to the accumulator as a notification
+   (`notifyAlreadyTransferredRewards` validates
+   `balanceOf(accumulator) − accumulatedRewards ≥ amount`). Tokens only ever
+   flow contributor → accumulator → staker → stakers, so none of these cause
+   loss. **Still in scope and NOT excluded by this note:** any path that
+   causes loss or incorrect attribution of principal or rewards, permanent
+   denial of reward distribution (bricking), extraction of more than was
+   contributed, or theft of any funds — regardless of the whitelist setting.
+2. **Phase 1 configuration** — bumping is disabled (`maxBumpTip = 0`), claim
    fees are 0 and immutable (`MAX_CLAIM_FEE = 0`), earning power is identity
    (earning power == staked balance), delegation surrogates are non-voting,
    and governance delegation is not surfaced. Reports assuming a non-Phase-1
    configuration are invalid.
-4. **Admin/owner privileges** — the ZenStaker admin and RewardAccumulator
+3. **Admin/owner privileges** — the ZenStaker admin and RewardAccumulator
    owner are Horizen Safe multisigs. Findings requiring a malicious or
    compromised admin/owner are out of scope (standard trusted-role
    assumption).
-5. **`permitAndStake` non-functional with production ZEN** — the entry point
+4. **`permitAndStake` non-functional with production ZEN** — the entry point
    is inherited from the Staker framework, but the production ZEN token does
    not implement EIP-2612 `permit`; the function reverting with the real
    token is expected.
-6. **Same-block accrual and idempotent claims** — staking and claiming in the
+5. **Same-block accrual and idempotent claims** — staking and claiming in the
    same block yields zero rewards by design (flash-stake prevention); a
    second claim in the same block/multicall returns zero instead of
    reverting.
-7. **Permissionless, time-gated reward release** — `sendRewardsToStaker` is
-   callable by anyone once the time window has elapsed; calling it with zero
-   accumulated rewards transfers nothing and advances the schedule grid to
-   the latest elapsed window.
-8. **Delegation is bookkeeping-only in Phase 1** — `alterDelegatee` updates
+6. **Delegation is bookkeeping-only in Phase 1** — `alterDelegatee` updates
    the deposit's delegatee and surrogate assignment, but Phase 1 surrogates
    are non-voting, so no governance power is conferred or movable.
-9. **Empty-pool reward semantics** — rewards notified while total earning
-   power is zero are handled as documented intentional behavior.
-   <!-- TODO: state the exact intended behavior (how such rewards are
-   preserved / how the reward timeline extends) -->
+7. **Empty-pool reward semantics** — while total earning power is zero, the
+   reward-per-token accumulator does not advance; rewards attributable to
+   such intervals are not distributed to any staker, are not rolled into
+   subsequent reward periods, and remain undistributed in the contract
+   balance. This is inherited, documented behavior of the audited Staker
+   framework, made practically unreachable by the RewardAccumulator's
+   scheduled release into a funded pool.
+8. **Event schema delta from the audited base** — `StakeDeposited.owner` and
+   `StakeWithdrawn.owner` were made `indexed` in the base `Staker.sol`. This
+   changes only the EVM log layout (data field → topic slot); no function
+   body, storage, or observable on-chain behavior differs from the audited
+   version. See [`AUDIT_DELTA.md`](AUDIT_DELTA.md) for the full delta.
