@@ -83,10 +83,18 @@ reports based on them are invalid.
    owner are Horizen Safe multisigs. Findings requiring a malicious or
    compromised admin/owner are out of scope (standard trusted-role
    assumption).
-4. **`permitAndStake` non-functional with production ZEN** — the entry point
-   is inherited from the Staker framework, but the production ZEN token does
-   not implement EIP-2612 `permit`; the function reverting with the real
-   token is expected.
+4. **`permitAndStake` behavior with production ZEN** — the `permitAndStake` /
+   `permitAndStakeMore` entry points are inherited from the Staker framework.
+   The production ZEN token does not implement EIP-2612 `permit`, but the
+   inherited code wraps the `permit` call in `try/catch`, so a failed or
+   unsupported permit does not itself revert — execution falls through to
+   the staking step. Consequently: (a) with no allowance, the subsequent
+   `transferFrom` reverts (expected — the gasless single-tx path is simply
+   unavailable on a non-permit token); (b) with a pre-existing ERC-20
+   allowance, `permitAndStake` succeeds and stakes correctly even with dummy
+   signature parameters. Both outcomes are expected and not vulnerabilities;
+   reports that "permit is ignored / silently swallowed" describe this
+   documented, audited try/catch design.
 5. **Same-block accrual and idempotent claims** — staking and claiming in the
    same block yields zero rewards by design (flash-stake prevention); a
    second claim in the same block/multicall returns zero instead of

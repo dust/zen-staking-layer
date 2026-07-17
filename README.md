@@ -30,7 +30,7 @@ Deposit ZEN into a new position. Each deposit gets a unique ID and designates:
 
 Two paths:
 - `approve` + `stake(amount, delegatee)` - two transactions.
-- `permitAndStake(amount, delegatee, claimer, deadline, v, r, s)` - single transaction using an EIP-2612 signature. **Note:** the production ZEN token does not implement EIP-2612 `permit`, so this path reverts with the real token; it only works with permit-capable test tokens.
+- `permitAndStake(amount, delegatee, claimer, deadline, v, r, s)` - single transaction using an EIP-2612 signature. **Note:** the production ZEN token does not implement EIP-2612 `permit`. The inherited code swallows the failed permit (`try/catch`), so without a pre-existing allowance the call reverts at `transferFrom` — the single-transaction path only works with permit-capable test tokens.
 
 ### Stake more
 
