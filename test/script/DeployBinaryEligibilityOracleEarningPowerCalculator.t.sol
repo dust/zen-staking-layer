@@ -8,11 +8,12 @@ import {DeployBinaryEligibilityOracleEarningPowerCalculatorFake} from
 import {IEarningPowerCalculator} from "../../src/interfaces/IEarningPowerCalculator.sol";
 import {ERC20Fake} from "../fakes/ERC20Fake.sol";
 import {ERC20VotesMock} from "../mocks/MockERC20Votes.sol";
+import {BytecodeHelpers} from "../helpers/BytecodeHelpers.sol";
 
 import {BinaryEligibilityOracleEarningPowerCalculator} from
   "../../src/calculators/BinaryEligibilityOracleEarningPowerCalculator.sol";
 
-contract DeployBinaryEligibilityOracleEarningPowerCalculatorTest is Test {
+contract DeployBinaryEligibilityOracleEarningPowerCalculatorTest is Test, BytecodeHelpers {
   ERC20Fake rewardToken;
   ERC20VotesMock govToken;
   DeployBinaryEligibilityOracleEarningPowerCalculatorFake deployScript;
@@ -82,6 +83,6 @@ contract Run is DeployBinaryEligibilityOracleEarningPowerCalculatorTest {
       expectedPowerCalculator := create(0, add(bytecode, 0x20), mload(bytecode))
     }
 
-    assertEq(deployedPowerCalculator.code, expectedPowerCalculator.code);
+    assertEq(_stripMetadata(deployedPowerCalculator.code), _stripMetadata(expectedPowerCalculator.code));
   }
 }

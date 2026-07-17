@@ -1,0 +1,44 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: ZenStaker
+    # Must match the network label configured in graph-node's `ethereum` env.
+    network: mainnet
+    source:
+      address: "__STAKER_ADDRESS__"
+      abi: ZenStaker
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+        - StakeDepositedEvent
+        - StakeWithdrawnEvent
+        - RewardClaimedEvent
+        - DelegateeAlteredEvent
+        - ClaimerAlteredEvent
+        - RewardNotifiedEvent
+        - Activity
+      abis:
+        - name: ZenStaker
+          file: ./abis/ZenStaker.json
+      eventHandlers:
+        - event: StakeDeposited(indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleStakeDeposited
+        - event: StakeWithdrawn(indexed address,indexed uint256,uint256,uint256,uint256)
+          handler: handleStakeWithdrawn
+        - event: RewardClaimed(indexed uint256,indexed address,uint256,uint256)
+          handler: handleRewardClaimed
+        - event: DelegateeAltered(indexed uint256,address,address,uint256)
+          handler: handleDelegateeAltered
+        - event: ClaimerAltered(indexed uint256,indexed address,indexed address,uint256)
+          handler: handleClaimerAltered
+        - event: RewardNotified(uint256,address)
+          handler: handleRewardNotified
+      file: ./src/zen-staker.ts

@@ -7,8 +7,9 @@ import {TransferRewardNotifier} from "../../src/notifiers/TransferRewardNotifier
 import {DeployTransferRewardNotifierFake} from "../fakes/DeployTransferRewardNotifierFake.sol";
 import {ERC20Fake} from "../fakes/ERC20Fake.sol";
 import {ERC20VotesMock} from "../mocks/MockERC20Votes.sol";
+import {BytecodeHelpers} from "../helpers/BytecodeHelpers.sol";
 
-contract DeployTransferRewardNotifierTest is Test {
+contract DeployTransferRewardNotifierTest is Test, BytecodeHelpers {
   ERC20Fake rewardToken;
   ERC20VotesMock govToken;
   DeployTransferRewardNotifierFake deployScript;
@@ -56,6 +57,6 @@ contract Run is DeployTransferRewardNotifierTest {
       expectedNotifier := create(0, add(bytecode, 0x20), mload(bytecode))
     }
 
-    assertEq(deployedNotifier.code, expectedNotifier.code);
+    assertEq(_stripMetadata(deployedNotifier.code), _stripMetadata(expectedNotifier.code));
   }
 }

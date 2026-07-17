@@ -8,8 +8,9 @@ import {DeployBaseFake} from "../fakes/DeployBaseFake.sol";
 import {ERC20Fake} from "../fakes/ERC20Fake.sol";
 import {ERC20VotesMock} from "../mocks/MockERC20Votes.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {BytecodeHelpers} from "../helpers/BytecodeHelpers.sol";
 
-contract DeployMintRewardNotifierTest is Test {
+contract DeployMintRewardNotifierTest is Test, BytecodeHelpers {
   ERC20Fake rewardToken;
   ERC20VotesMock govToken;
   DeployBaseFake deployScript;
@@ -59,6 +60,6 @@ contract Run is DeployMintRewardNotifierTest {
       expectedNotifier := create(0, add(bytecode, 0x20), mload(bytecode))
     }
 
-    assertEq(deployedNotifier.code, expectedNotifier.code);
+    assertEq(_stripMetadata(deployedNotifier.code), _stripMetadata(expectedNotifier.code));
   }
 }

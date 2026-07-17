@@ -1,0 +1,144 @@
+name: zenstaker-devnet
+
+# Full local devnet for ZenStaker:
+#   1. anvil               -> local EVM node (chain id 31337)
+#   2. contracts           -> deploys via script/DeployZenStakerTestnet.s.sol (one-shot)
+#   3. postgres + ipfs     -> graph-node backing services
+#   4. graph-node          -> indexer, pointed at anvil
+#   5. subgraph-deployer   -> reads the deployed ZenStaker address and deploys the subgraph (one-shot)
+#
+# State persistence:
+#   All state is persisted to ./data (bind mounts):
+#     - anvil chain state -> ./data/anvil/anvil-state.json
+#     - graph-node index   -> ./data/postgres
+#     - ipfs               -> ./data/ipfs
+#   `docker compose stop` / `up` keeps everything; the deploy one-shots are
+#   idempotent (they skip when the chain/subgraph are already initialized).
+#
+# Usage (from this folder):
+#   docker compose up           # follow logs; Ctrl-C detaches
+#   docker compose up -d         # background
+#   docker compose stop          # stop, KEEP state (resume with `up`)
+#   docker compose down          # remove containers, KEEP state in ./data
+#   sudo rm -rf ./data           # full wipe (postgres dir is root-owned).
+#                                # Wipe all-or-nothing: a partial wipe leaves
+#                                # the subgraph indexing a stale chain.
+#
+# Endpoints once up:
+#   Anvil RPC        : http://localhost:8545
+#   GraphQL          : http://localhost:8000/subgraphs/name/zen-staker
+#   Graph admin RPC  : http://localhost:8020
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:latest
+    # Runs as root so it can write the bind-mounted state dir (auto-created
+    # root-owned by docker), consistent with postgres/ipfs.
+    user: "0:0"
+    # --block-time keeps the chain head moving so graph-node keeps indexing.
+    # --state loads ./data/anvil/anvil-state.json on boot (if present) and
+    # dumps it on exit; --state-interval also dumps every 5s as a SIGKILL guard.
+    entrypoint: ["anvil"]
+    command:
+      [
+        "--host",
+        "0.0.0.0",
+        "--chain-id",
+        "31337",
+        "--block-time",
+        "2",
+        "--state",
+        "/state/anvil-state.json",
+        "--state-interval",
+        "5",
+      ]
+    volumes:
+      - ./data/anvil:/state
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "cast", "block-number", "--rpc-url", "http://localhost:8545"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  contracts:
+    image: ghcr.io/foundry-rs/foundry:latest
+    depends_on:
+      anvil:
+        condition: service_healthy
+    user: "${DEVNET_UID:-1000}:${DEVNET_GID:-1000}"
+    working_dir: /repo
+    environment:
+      # Anvil default account #3 (publicly known dev key, funded with 10000 ETH).
+      PRIVATE_KEY: "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"
+      RPC_URL: "http://anvil:8545"
+      HOME: "/tmp"
+      FOUNDRY_DISABLE_NIGHTLY_WARNING: "true"
+    volumes:
+      - ../:/repo
+    entrypoint: ["sh", "/repo/devnet/deploy-contracts.sh"]
+    restart: "no"
+
+  postgres:
+    image: postgres:14
+    command:
+      [
+        "postgres",
+        "-cshared_preload_libraries=pg_stat_statements",
+        "-cmax_connections=200",
+      ]
+    environment:
+      POSTGRES_USER: graph-node
+      POSTGRES_PASSWORD: let-me-in
+      POSTGRES_DB: graph-node
+      PGDATA: "/var/lib/postgresql/data"
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  ipfs:
+    image: ipfs/kubo:v0.17.0
+    volumes:
+      - ./data/ipfs:/data/ipfs
+
+  graph-node:
+    image: graphprotocol/graph-node
+    depends_on:
+      - ipfs
+      - postgres
+      - anvil
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8020:8020"
+      - "8030:8030"
+      - "8040:8040"
+    environment:
+      postgres_host: postgres
+      postgres_user: graph-node
+      postgres_pass: let-me-in
+      postgres_db: graph-node
+      ipfs: "ipfs:5001"
+      # The network label "mainnet" must match `network:` in the subgraph manifest.
+      ethereum: "mainnet:http://anvil:8545"
+      GRAPH_LOG: info
+
+  subgraph-deployer:
+    image: node:20-bookworm
+    depends_on:
+      graph-node:
+        condition: service_started
+      contracts:
+        condition: service_completed_successfully
+    user: "${DEVNET_UID:-1000}:${DEVNET_GID:-1000}"
+    working_dir: /repo/subgraphs
+    environment:
+      HOME: "/tmp"
+      npm_config_cache: "/tmp/.npm"
+      GRAPH_NODE: "http://graph-node:8020/"
+      IPFS_URL: "http://ipfs:5001"
+    volumes:
+      - ../:/repo
+    entrypoint: ["bash", "/repo/devnet/deploy-subgraph.sh"]
+    restart: "no"
