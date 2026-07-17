@@ -22,8 +22,9 @@ No storage layout was changed.
   and `StakerPermitAndStake`. Contains `ZenDelegationSurrogate`, a minimal
   non-voting concrete implementation of `DelegationSurrogate` that holds
   staked tokens without delegating any governance voting power. Adds
-  view-only helper functions (listed below). No overrides of any
-  state-changing functions.
+  view-only helper functions (listed below). Implements the required virtual
+  functions (`_fetchOrDeploySurrogate`, `surrogates`) to use the non-voting
+  surrogate; no inherited state-changing function is overridden or altered.
 
 ### Modified in Staker.sol
 

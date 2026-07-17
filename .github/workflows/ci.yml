@@ -6,6 +6,10 @@ on:
   push:
     branches:
       - main
+      - dev
+
+permissions:
+  contents: read
 
 env:
   FOUNDRY_PROFILE: ci
@@ -15,10 +19,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1.9.0
 
       - name: Build contracts
         run: |
@@ -28,10 +36,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1.9.0
 
       # https://twitter.com/PaulRBerg/status/1611116650664796166
       - name: Generate fuzz seed with 1 day TTL
@@ -45,13 +57,20 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # lcov-reporter-action posts the coverage comment
     env:
       FOUNDRY_PROFILE: coverage
     steps:
-      - uses: actions/checkout@v3
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1.9.0
 
       # https://twitter.com/PaulRBerg/status/1611116650664796166
       - name: Generate fuzz seed with 1 day TTL
@@ -81,15 +100,17 @@ jobs:
       # not as useful, and this action cannot fail CI based on a minimum coverage threshold, which
       # is why we use both in this way.
       - name: Post coverage report
-        if: github.event_name == 'pull_request' # This action fails when ran outside of a pull request.
-        uses: romeovs/lcov-reporter-action@v0.3.1
+        # Only on same-repo PRs: the action fails outside pull requests, and fork
+        # PRs get a read-only GITHUB_TOKEN that cannot post comments.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: romeovs/lcov-reporter-action@dda1c9b1fa1622b225e9acd87a248751dbcc6ada # v0.3.1
         with:
           delete-old-comments: true
           lcov-file: ./lcov.info
           github-token: ${{ secrets.GITHUB_TOKEN }} # Adds a coverage summary comment to the PR.
 
       - name: Verify minimum coverage
-        uses: zgosalvez/github-actions-report-lcov@v2
+        uses: zgosalvez/github-actions-report-lcov@3da0a768e560002b2f9d4f4ba06a132dbeb00d40 # v2
         with:
           coverage-files: ./lcov.info
           minimum-coverage: 99.5
@@ -97,15 +118,19 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a # v1.9.0
         with:
           cache: false
 
       - name: Install scopelint
-        uses: engineerd/configurator@v0.0.8
+        uses: engineerd/configurator@479197cb150e720c848c8dfbe12da101471258e3 # v0.0.8
         with:
           name: scopelint
           repo: ScopeLift/scopelint
@@ -126,10 +151,14 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Run Slither
-        uses: crytic/slither-action@v0.3.0
+        uses: crytic/slither-action@6ef3a33e56de4e8f59488cf60858b5c1bf4967c0 # v0.3.0
         id: slither # Required to reference this step in the next step.
         with:
           fail-on: none # Required to avoid failing the CI run regardless of findings.
@@ -137,6 +166,30 @@ jobs:
           slither-args: --filter-paths "./lib|./test" --exclude naming-convention,solc-version
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v2
+        # Skip on fork PRs: their read-only GITHUB_TOKEN cannot write security events.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3
         with:
           sarif_file: ${{ steps.slither.outputs.sarif }}
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git . --redact --exit-code 1

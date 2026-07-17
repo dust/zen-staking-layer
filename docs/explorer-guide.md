@@ -60,7 +60,7 @@ owner and claimer.
 | Field | Value |
 |---|---|
 | `_amount` | Amount to stake, in wei (must be ≤ approved amount) |
-| `_delegatee` | Address to receive governance voting power. Use your own address if you don't want to delegate to someone else. Cannot be the zero address. |
+| `_delegatee` | Address that receives the deposit's surrogate delegation (non-voting in Phase 1 — no governance power is conferred). Use your own address if you don't want to delegate to someone else. Cannot be the zero address. |
 
 **`stake(uint256 _amount, address _delegatee, address _claimer)`** — same as above, but lets you
 set a different address as the rewards claimer (e.g. a vesting contract).
@@ -68,7 +68,7 @@ set a different address as the rewards claimer (e.g. a vesting contract).
 | Field | Value |
 |---|---|
 | `_amount` | Amount to stake, in wei |
-| `_delegatee` | Address to receive governance voting power |
+| `_delegatee` | Address that receives the deposit's surrogate delegation (non-voting in Phase 1) |
 | `_claimer` | Address allowed to call `claimReward` for this deposit |
 
 Both variants return a `depositId` — find it by inspecting the transaction receipt's
