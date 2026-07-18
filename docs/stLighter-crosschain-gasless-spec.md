@@ -47,6 +47,8 @@
 
 ## 2. 双路径模型
 
+* sameChain
+
 ```mermaid
 flowchart TB
   subgraph sameChain [Path_SameChain_Horizen]
@@ -59,6 +61,13 @@ flowchart TB
     ltZEN_h --> red_std --> ZEN_wallet
   end
 
+```
+
+* xchainStake
+
+```mermaid
+flowchart TB
+  
   subgraph xchainStake [Path_CrossChain_Stake]
     ZEN_base[User_ZEN_on_Base]
     bridge_in[Bridge_ZEN_to_Receiver]
@@ -71,6 +80,13 @@ flowchart TB
     recv -->|timeout_or_cancel_signed| withdraw[User_sovereign_withdraw]
   end
 
+```
+
+* xchainRedeem
+
+```mermaid
+flowchart TB
+  
   subgraph xchainRedeem [Path_Redeem_to_Base]
     ltZEN2[ltZEN_on_Horizen]
     gasless_red[redeemWithSig_plus_ltZEN_permit]
