@@ -2,7 +2,8 @@
 
 > **用途**: relayer 分层职责、rrelayer 能力边界、BFF 广播前校验规格。实现前以本文 + [`stLighter-rrelayer-setup.md`](./stLighter-rrelayer-setup.md) 为准。
 > **关联**: [`stLighter-PRD.md`](./stLighter-PRD.md) §6、`todo-list.md` §P0-B、`ltzen-frontend/src/server/relay/`
-> **最后更新**: 2026-06-27
+> **跨链扩展（2026-07-18）**: 跨链 stake 强制 L3 relayer、Receiver 所有权/会计校验、费用原则见 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) §3 / §5.2。本文仍覆盖同链 EIP-712 校验基线；跨链入账校验在 Receiver + BFF 落地时按该规范增补。
+> **最后更新**: 2026-07-18（交叉引用跨链 gasless 规范）
 
 ---
 
