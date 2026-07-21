@@ -1,9 +1,9 @@
 # stLighter 跨链与 Gasless 规范
 
 > **用途**: 产品原则、双路径用户旅程、半编排状态机、合约信任边界、前端/BFF 行为、非目标与落地里程碑。  
-> **状态**: 需求已锁定（2026-07-18 访谈；Q8 修订；**Base 到账锁定 B1** + 地址确认 / L3 失败可恢复 / 桥退款路由）。本阶段为文档规范，**不**包含合约/前端实现。  
-> **关联**: [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)、[`gasless-acceptance.md`](./gasless-acceptance.md)、[`stLighter-frontend-plan.md`](./stLighter-frontend-plan.md)、[`Lighter-Bridge-Zen-Staking.md`](./Lighter-Bridge-Zen-Staking.md)、`ltzen-frontend/src/lib/chainGating.ts`  
-> **最后更新**: 2026-07-18（锁定 Redeem to Base → B1）
+> **状态**: 需求已锁定（2026-07-18 访谈；Q8 / B1 修订；**2026-07-21 Station 设计锁定** — 见 [`stLighter-station-design.md`](./stLighter-station-design.md)）。本阶段为文档规范，**不**包含合约/前端实现。  
+> **关联**: [`stLighter-station-design.md`](./stLighter-station-design.md)（InboundStation / EgressStation 权威细节）、[`stLighter-relayer-design.md`](./stLighter-relayer-design.md)、[`gasless-acceptance.md`](./gasless-acceptance.md)、[`stLighter-frontend-plan.md`](./stLighter-frontend-plan.md)、[`Lighter-Bridge-Zen-Staking.md`](./Lighter-Bridge-Zen-Staking.md)、`ltzen-frontend/src/lib/chainGating.ts`  
+> **最后更新**: 2026-07-21（Station 设计回链）
 
 ---
 
@@ -36,14 +36,14 @@
 | 术语 | 定义 |
 |------|------|
 | **gasless** | 用户**不为该笔协议写入交易**支付本链原生 gas；由 relayer 代发。≠「零链上授权 / 零签名」。 |
-| **meaningful gasless** | 用户在目标链无 ETH 也能完成关键写入，且不依赖 ZEN 的 permit。包括：ltZEN `redeemWithSig`；跨链 stake 中接收合约持仓后的 `depositWithSig*`；**Redeem to Base** 中 L3 上 redeem 与出桥由 relayer 代发（用户不落袋 L3 ZEN 后再自付 gas 桥出）。 |
+| **meaningful gasless** | 用户在目标链无 ETH 也能完成关键写入。包括：ltZEN `redeemWithSig`；跨链 stake 经 **InboundStation** 持仓后由 relayer 调 Station→`StLighter.deposit`；Redeem to Base 经 **EgressStation** 由 relayer 代发 credit/bridge。 |
 | **meaningless gasless** | 对外宣称「ZEN deposit 完全免授权、免一切链上操作」，或在仍需 `approve` 时隐瞒该步。**禁止。** |
 | **半编排** | 前端/BFF 串起固定步骤向导；每步可有用户确认；状态可持久化与恢复；不要求后端长期、原子地跟踪全部跨链消息至终态（那是「真·编排」，非本规范 MVP）。 |
-| **共享独立接收合约 (Receiver / Inbound)** | Horizen 上一个共享地址，接收**入金**跨链 ZEN；内部会计记录所有者；与 StLighter **弱耦合**。 |
-| **跨链 stake** | Base ZEN →（桥至 Inbound Receiver）→ L3 `depositWithSig*`（relayer）→ 用户 Horizen 钱包收到 ltZEN。 |
+| **共享入站车站 (InboundStation)** | Horizen 上共享合约：LZ 入金会计（`lzCompose` 仅 credit）；所有者签名后由 relayer 调 `stakeToStLighter` → `StLighter.deposit`；或 withdraw。**专用**于 stLighter 跨链 stake。详见 [`stLighter-station-design.md`](./stLighter-station-design.md)。 |
+| **跨链 stake** | Base ZEN →（LZ + compose → InboundStation）→ relayer `stakeToStLighter` → Horizen ltZEN。 |
 | **同链 stake/redeem** | 用户钱包已在 Horizen 持有 ZEN / ltZEN；gasless redeem 终点为 **Horizen 用户钱包中的 ZEN**。 |
-| **Redeem to Base** | gasless：L3 上 `redeemWithSig`（+ ltZEN permit）并由协议出金路径发起 ZEN→Base 跨链；**资产终点为用户指定的 Base 地址（B1）**。用户 L3 无 ETH 时不得因「ZEN 已进自己钱包却无法出桥」而卡死。 |
-| **Egress（出金路径）** | Horizen 上弱耦合模块/合约：承接 redeem 产出的 ZEN、发起桥出、在失败/退款时记账并可签名恢复；**不是** Base 侧 Receiver。 |
+| **Redeem to Base** | gasless：`redeemWithSig(receiver=EgressStation)` → `creditFromRedeem` → 另 tx `bridgeToBase` → **Base 用户指定地址（B1）**。 |
+| **出站车站 (EgressStation)** | 承接 redeem ZEN、会计、**仅自身调桥**、退款可恢复；不是 Base 侧 Receiver。详见 Station 设计文档。 |
 
 ---
 
@@ -107,13 +107,14 @@ flowchart TB
 
 ### 2.2 Path B — 跨链 stake（Base → Horizen ltZEN）
 
-1. 用户在 Base 发起桥出；**到账地址 = 共享 Receiver**，不是用户 Horizen 钱包。
-2. Receiver 会计将跨链资产记到**所有者**（由桥 payload / memo 绑定；实现选型见 §3.4）。
-3. 用户签名授权 `depositWithSig*`（含明确的 `maxFeeZen`）；**L3 上强制由 relayer 代发**。
-4. ltZEN mint 至用户 Horizen 地址（终点固定，不可选 Base）。
-5. 若超时或用户取消：所有者凭**所有权签名**撤回未 stake 的 ZEN（默认退至用户 Horizen 地址；退回 Base 为可选显式动作，非 MVP 必做）。
+1. 用户在 Base 发起桥出；到账经 LZ **收 token + `lzCompose`**，compose **仅**向 **InboundStation** `credit(owner, assets)`（**不**在 compose 内 stake）。
+2. 用户签名 `StakeToStLighter`；**L3 上由 relayer** 调 InboundStation → Station 调 `StLighter.deposit`（不走 `depositWithSig` 抽 user 钱包）。
+3. ltZEN mint 至签名中的 `ltZenReceiver`（语义同现有 `StLighter.deposit`）；跨链 stake **终点固定 Horizen ltZEN**。
+4. 未 stake 贷记可签 `withdrawToHorizen` 撤回。
 
-**绕过 ZEN 无 permit 的关键点**: 跨链 ZEN 由 Receiver 持有并在其授权下进入 StLighter，用户无需在 L3 对 StLighter 做 ZEN `approve`，也无需在 L3 有 ETH。
+细节与 EIP-712 → [`stLighter-station-design.md`](./stLighter-station-design.md)。
+
+**绕过 ZEN 无 permit**: 跨链 ZEN 由 InboundStation 持有并在 Station 路径进入 StLighter；用户无需在 L3 对 StLighter 做 ZEN `approve`，也无需 L3 ETH。
 
 ### 2.3 两条 redeem 产品入口（修订）
 
@@ -126,14 +127,12 @@ flowchart TB
 
 ### 2.4 Path C — Redeem to Base（目标形态）
 
-1. 用户签名一次（或协议约定的最小签名集），约束：金额、`maxFeeZen`（及桥费上限若拆分）、**Base 收款地址 `dest`**。
-2. Relayer 在 L3 执行 `redeemWithSig`（ltZEN permit）；赎回的 ZEN **进入 Egress 出金路径**，**默认不**先打入用户 L3 钱包作为完成态。
-3. 同一半编排流内发起 ZEN→Base 跨链；**成功终态** = ZEN 到达签名约束的 **Base `dest`（B1）**。
-4. **完备性约束**：用户 L3 无 ETH 时仍须能完成到 Base，或进入 §2.5 的 `recoverable_hold` 后签名续跑；**禁止**停在「ZEN 已在用户 Horizen 钱包、出桥需自付 gas」。
-5. **不做 Base 侧出金 Receiver（B2）** 作为默认路径。
+1. Relayer 同 tx：`redeemWithSig(..., receiver=EgressStation)` + `EgressStation.creditFromRedeem`（用户预签，防抢记）。
+2. **另 tx**：用户签 `BridgeToBase` → relayer 调 EgressStation → **仅 Station 调桥** → Base `dest`（B1）。
+3. 失败/退款留在 Egress 会计，可重试或 `withdrawToHorizen`。
+4. **完备性约束**与 B1 配套见 §2.5；合约细节见 Station 设计文档。
 
-> **修订说明（原 Q8=B 作废）**：原「先 redeem 到用户钱包再单独 bridge」在 L3 无 ETH 时语义不完备。  
-> **到账形态（2026-07-18）**：锁定 **B1**（直接到用户指定 Base 地址）。
+> **修订说明（原 Q8=B 作废）**；**到账 B1**；**Station 专用化 2026-07-21**。
 
 ### 2.5 Redeem to Base — B1 硬性配套（地址确认 · L3 可恢复 · 退款路由）
 
@@ -167,10 +166,10 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 
 | 要求 | 说明 |
 |------|------|
-| 退款接收方 | 桥配置的 `refundAddress` / 等价字段必须是 **Egress 合约**（或协议控制的入账通道），**禁止**为 relayer EOA、BFF 热钱包、或未记账地址。 |
-| `msg.sender` 陷阱 | 若桥默认把退款打给 `msg.sender`，则出桥调用必须由 **Egress**（或经 Egress 明确授权的模块）发起，而不是裸 relayer 直接调桥；relayer 只代发「调 Egress」的交易。 |
-| 入账会计 | 退款到账后须增加该用户在 Egress 的可恢复余额，并发事件供索引/前端进入 `recoverable_hold`。 |
-| 验收 | 负向用例：模拟桥失败/退款 → 断言余额在 Egress 用户会计下，且 relayer 地址 ZEN 余额不增加。 |
+| 退款接收方 | 桥配置的 `refundAddress` / 等价字段必须是 **EgressStation**，**禁止**为 relayer EOA、BFF 热钱包、或未记账地址。 |
+| `msg.sender` 陷阱 | 出桥调用必须由 **EgressStation** 发起；relayer 只代发「调 EgressStation」的交易。 |
+| 入账会计 | 退款到账后须增加该用户在 EgressStation 的可恢复余额，并发事件供索引/前端进入 `recoverable_hold`。 |
+| 验收 | 负向用例：模拟桥失败/退款 → 断言余额在 EgressStation 用户会计下，且 relayer 地址 ZEN 余额不增加。 |
 | ADR | 具体桥的 refund 参数名与调用方式在出金 ADR 中写死，并附对照表。 |
 
 ---
@@ -182,22 +181,18 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 
 | 组件 | 职责 | 不得做 |
 |------|------|--------|
-| **StLighter** | 池化 stake/redeem、汇率、`depositWithSig*` / `redeemWithSig`、扣 fee | 不强制内嵌具体桥厂商逻辑；出金可经独立弱耦合模块 |
-| **Inbound Receiver（共享、独立）** | 收跨链**入金** ZEN；会计；校验所有权签名后 deposit / withdraw | 不继承 StLighter；不做任意 `call`；不做兑换 |
-| **Egress 路径（Redeem to Base）** | 承接 redeem 产出的 ZEN；**由合约自身发起桥出**；失败/退款会计；签名重试/改 dest/同链提取；L3 由 relayer 代发「调 Egress」 | 不得以用户 L3 空 gas 钱包为唯一失败落点；**不得**让桥退款进入 relayer EOA；不做 Base 侧默认 Receiver |
-| **ltZEN** | ERC20 + permit + OFT（多链流通） | 不负责 ZEN 桥入/桥出会计 |
-| **Relayer + BFF** | 校验签名后代发 L3 写入（调 StLighter / Inbound / **Egress**）；`fee ≤ maxFeeZen`；校验签名中的 Base `dest` | 不得改写用户签名的 `dest`；不得作为桥 refund 收款方 |
-| **桥（实现 ADR）** | 入金：Base→Inbound Receiver + 绑定所有者；出金：L3→**用户指定 Base `dest`（B1）**；refund→Egress | 规范不绑定具体桥厂商 |
+| **StLighter** | 池化 stake/redeem、汇率、`depositWithSig*` / `redeemWithSig`、扣 fee | 不强制内嵌具体桥厂商逻辑；出金经 EgressStation |
+| **InboundStation** | 入金会计；`lzCompose` 仅 credit；`stakeToStLighter` / `withdrawToHorizen` | 不在 compose 内 stake；不做开放 Call[]；不并入 StLighter |
+| **EgressStation** | redeem 入账；**自身调桥**；退款会计；重试 / withdraw | 退款不得进 relayer；不做默认 B2 |
+| **ltZEN** | ERC20 + permit + OFT | 不负责 ZEN 桥入/桥出会计 |
+| **Relayer + BFF** | 代发 Station / StLighter；校验 EIP-712 与 `dest` | 不得改写签名字段；不得当 refund 收款方 |
+| **桥** | 入：LZ + compose→Inbound；出：Egress→Base `dest`；refund→EgressStation | 厂商细节见 ADR |
 
-### 3.2 Inbound Receiver 能力（规范要求）
+### 3.2 InboundStation / EgressStation
 
-- **共享单例**（或经治理升级的代理），服务所有用户。
-- **会计**: `owner → credited ZEN balance`（或等价 depositId 模型）；入账仅来自认可的桥/入金通道。
-- **主权操作**（须所有者签名，EIP-712 或等价）:
-  - `depositToStLighter(amount, maxFeeZen, …)` → 调用 StLighter `depositWithSig*` / 协议约定接口，ltZEN 给所有者（或签名指定的 receiver，默认所有者）。
-  - `withdraw(amount, to)` → 默认 `to` 为所有者 Horizen 地址。
-  - （可选）与出金模块协作的显式动作——不得削弱 §2.4 完备性约束。
-- **弱耦合**: 仅通过稳定外部接口与 StLighter 交互；不并入 StLighter 存储布局。
+权威细节（动作、EIP-712、compose 边界、交接）→ [`stLighter-station-design.md`](./stLighter-station-design.md)。
+
+摘要：共享共池会计；**专用** stLighter；模板动作；入站 stake = Station→`deposit`；出站 = redeem+credit 同 tx、bridge 另 tx；仅 Egress 调桥。
 
 ### 3.3 Relayer / 费用
 
@@ -209,27 +204,24 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 
 ### 3.4 桥选型（开放，约束固定）
 
-**入金**只要求：到账 Inbound Receiver；payload 绑定所有者；未 stake 余额可签名撤回。
+**入金**只要求：LZ 到账 **InboundStation**；`lzCompose` 绑定 owner；未 stake 可签名撤回。
 
 **出金（Redeem to Base）**要求：
 
 1. 终态到账 = 签名约束的 Base `dest`（**B1**）；
-2. L3 无用户 ETH 假设下仍能推进；失败/退款进入 Egress `recoverable_hold`（§2.5.2）；
-3. 桥退款路由满足 §2.5.3。
+2. L3 无用户 ETH 假设下仍能推进；失败/退款进入 **EgressStation** `recoverable_hold`（§2.5.2）；
+3. 桥退款路由满足 §2.5.3（refund → EgressStation）。
 
-具体 Stargate / LayerZero / 其他 → **另开实现 ADR**（须含 refund 参数对照与负向验收）。
+具体 LayerZero / 其他 → **另开实现 ADR**（须含 refund 参数对照与负向验收）。
 
 ### 3.5 撤回默认（入金）
 
 - MVP：未 stake ZEN **默认退回用户 Horizen 地址**。
 - 退回 Base：可选能力，需显式签名；非跨链 stake MVP 阻塞项。
 
-### 3.6 Egress 能力摘要（出金）
+### 3.6 EgressStation 能力摘要
 
-- 会计：用户可恢复 ZEN 余额（含桥退款入账）。
-- 签名动作：`bridgeToBase(amount, dest, maxFee…)`、`withdrawToHorizen(amount, to)`（同链提取）、可选改 `dest` 后重试。
-- 出桥调用：**Egress 为桥交互的主体**（或经其明确委托的模块），保证 refund → Egress。
-- 与 StLighter 弱耦合：redeem 产出转入 Egress 的方式在实现中定义（redeem 的 `receiver` 参数指向 Egress、或 relayer 原子多步等），但须保持用户主权与可恢复性。
+见 [`stLighter-station-design.md`](./stLighter-station-design.md) §4.2 / §5 / §6。上级 §2.5 的 B1 / 可恢复 / 退款路由仍然适用，合约名统一为 **EgressStation**。
 
 ---
 
@@ -239,7 +231,7 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 
 - 每步有明确 **phase**、可展示的卡点原因、explorer / 桥状态链接（若有）。
 - 进度可持久化（localStorage 或等价），刷新可续跑。
-- **资金安全**: 任何失败不得导致不可达余额；卡在 Receiver 时必须能走签名撤回。
+- **资金安全**: 任何失败不得导致不可达余额；卡在 **InboundStation / EgressStation** 时必须能走签名撤回。
 - 安全优先于少点击：可合并确认，但不可跳过关键签名（`maxFeeZen`、withdraw 目标）。
 
 ### 4.2 跨链 stake 状态机
@@ -309,7 +301,7 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 ### 5.3 文案与开关
 
 - **禁止**: 「Gasless stake — no approvals ever」类文案用于 ZEN deposit。
-- **跨链 stake**: 明确到账为协议 Inbound Receiver；展示 fee / `maxFeeZen`。
+- **跨链 stake**: 明确到账为 **InboundStation**（compose 仅 credit）；展示 fee / `maxFeeZen`。
 - **同链 redeem vs Redeem to Base**: 终点文案分离（「Receive ZEN on Horizen」vs 「Receive ZEN on Base」）。
 - **Redeem to Base / B1**: 签名前展示 `dest`、不可逆提示（改地址时强化）、Base 实到预估；`recoverable_hold` 须说明资金在协议出金账户、可重试或改为 Horizen 提取。
 - **同链 deposit gasless**: 若仍需 `approve`，分步展示授权与签名。
@@ -341,9 +333,9 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 |----|------|------|
 | **M-doc** | 本规范 + 旧文档交叉链接 | ✅ 本文档任务 |
 | **M0** | 同链 gasless redeem 保持；同链 deposit 按本规范诚实表述（可仍要求 approve） | 文案 / 验收更新 |
-| **M1** | 共享 Receiver：会计、所有权签名、withdraw、弱耦合 deposit | 合约 + 测试 |
-| **M2** | 跨链 stake 半编排 UI + BFF 强制 relayer deposit | 前端 + BFF |
-| **M3** | Redeem to Base：Egress + B1 到账 + §2.5（地址确认 / L3 可恢复 / 退款路由）+ 半编排 UI + BFF | 合约/集成 + 前端 + BFF + 退款负向验收 |
+| **M1** | **InboundStation / EgressStation**（见 Station 设计 S1–S2） | 合约 + 测试 |
+| **M2** | 跨链 stake 半编排 UI + BFF（Station stake） | 前端 + BFF |
+| **M3** | Redeem to Base：credit 同 tx + bridge 另 tx + §2.5 | 合约/集成 + 前端 + BFF |
 | **M4** | 回写 `stLighter-frontend-plan.md`、uiux-spec、`gasless-acceptance.md`、`chainGating.ts` | 文档 + 代码对齐 |
 
 桥协议 ADR 可与 M1 并行，但 M2 依赖「入账绑定所有者」已落地。
@@ -355,7 +347,8 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 | 旧假设 | 状态 |
 |--------|------|
 | Base **仅** ltZEN OFT bridge，不在 Base 发起 stake | **部分取代**：新增 Base 上 **cross_chain_stake**；仍不在 Base 执行同链 `deposit`/`redeem` |
-| gasless deposit P0-B 因 ZEN 无 permit 无限期暂缓 | **分流**：同链 deposit 暂缓理由仍成立；**跨链**用 Receiver 路径提供 meaningful gasless deposit |
+| gasless deposit P0-B 因 ZEN 无 permit 无限期暂缓 | **分流**：同链 deposit 暂缓理由仍成立；**跨链**用 **InboundStation → deposit** 提供 meaningful gasless |
+| Receiver / Egress 泛称 | **正式名** InboundStation / EgressStation — [`stLighter-station-design.md`](./stLighter-station-design.md) |
 | `canGasless(Base) = bridge` only | **待 M4 修订**：增加跨链 stake 强制 L3 relayer 语义 |
 
 权威顺序：冲突时以**本文** > frontend-plan 首版范围表 > 代码注释。
@@ -387,11 +380,11 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 
 ## Appendix B — 与实现相关的开放项（不阻塞已锁定决策）
 
-1. 桥协议与 payload 编码（入金 / 出金可各一份 ADR；**出金 ADR 必须含 §2.5.3 refund 对照与负向验收**）。
-2. Inbound Receiver 会计模型：`mapping(address => uint256)` vs depositId 队列。
-3. 入金撤回是否支持 relayer 代发（建议：是）。
-4. 同链 deposit 是否引入 Permit2 / 无限 approve（与跨链路径独立）。
-5. ~~Redeem to Base Base 到账形态~~ → **已锁定 B1**（见 §2.4 / §2.5 / Q8b）。
-6. Redeem to Base 是单笔 compose 还是 relayer 顺序多笔；桥费与 `maxFeeZen` 如何合并展示。
-7. Egress 与 StLighter 的资金交接方式（`redeem` 的 `receiver=Egress` vs 多步）。
-8. `recoverable_hold` 下「改 dest」是否允许无限次；是否要冷却/限额防滥用。
+1. 桥协议与 payload 编码（入金 compose / 出金 ADR；**出金须含 §2.5.3 refund 对照与负向验收**）。
+2. Station 会计模型与 `unassigned`/`rescue` — 见 [`stLighter-station-design.md`](./stLighter-station-design.md) Appendix B。
+3. 入金撤回 / Egress withdraw 均建议支持 relayer 代发。
+4. 同链 deposit 是否引入 Permit2（与 Station 路径独立）。
+5. ~~Base 到账形态~~ → **已锁定 B1**。
+6. ~~开放 Call[] / 通用 Station~~ → **已放弃**；专用模板见 Station 设计。
+7. ~~redeem→Egress 交接~~ → **已锁定**：同 tx redeem + `creditFromRedeem`；bridge **另 tx**。
+8. `recoverable_hold` 下改 `dest` 次数/限额（产品可选）。

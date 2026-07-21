@@ -1,8 +1,9 @@
 # Lighter Bridge & Zen Staking — 背景与索引
 
 > **权威规范（跨链 + gasless）**: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)  
+> **Station 合约设计**: [`stLighter-station-design.md`](./stLighter-station-design.md)  
 > **本文用途**: 历史背景摘要与文档入口；不再展开产品细则。  
-> **最后更新**: 2026-07-18
+> **最后更新**: 2026-07-21
 
 ---
 
@@ -16,17 +17,19 @@ Horizen (ZEN) 生态中，ZEN 主要在 **Base** 发行；本仓库的 Staker / 
 
 动机与目标已收敛为：
 
-1. 不提供无意义的「完美 gasless」宣传；保留有意义的真零 gas（尤其 ltZEN redeem、跨链 Receiver 路径上的 L3 deposit）。
-2. 提供跨链 stake（Base ZEN → Horizen ltZEN）与 Redeem to Base（Horizen ltZEN → **用户指定 Base 地址**；L3 段 gasless；失败可恢复；桥退款进 Egress）。
-3. 同链路径与跨链路径分离；跨链入金打入**共享独立接收合约**，再由 relayer 强制代发 `depositWithSig*`；同链 gasless redeem 终点为 Horizen 用户钱包。
+1. 不提供无意义的「完美 gasless」宣传；保留有意义的真零 gas（ltZEN redeem、Station 路径上的 L3 写入）。
+2. 跨链 stake（Base ZEN → **InboundStation** → Horizen ltZEN）与 Redeem to Base（→ **EgressStation** → 用户指定 Base 地址；失败可恢复；退款进 Egress）。
+3. 同链与跨链路径分离；`lzCompose` **仅入账**，stake / 出桥由用户签名 + relayer 半编排。
 
-**完整原则、状态机、信任边界、非目标与里程碑** → 见 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)。
+**产品原则** → [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)  
+**Station 接口与 EIP-712** → [`stLighter-station-design.md`](./stLighter-station-design.md)
 
 ## 相关文档
 
 | 文档 | 内容 |
 |------|------|
-| [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) | 跨链 / gasless **权威规范** |
+| [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) | 跨链 / gasless **产品权威规范** |
+| [`stLighter-station-design.md`](./stLighter-station-design.md) | **InboundStation / EgressStation** 设计 |
 | [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) | Relayer / BFF 校验 |
 | [`gasless-acceptance.md`](./gasless-acceptance.md) | Gasless 手动验收 |
 | [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) | ltZEN OFT 参考 |
