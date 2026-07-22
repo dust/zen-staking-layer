@@ -26,6 +26,7 @@ import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Nonce
 import {Staker} from "../Staker.sol";
 import {ZenStaker} from "../ZenStaker.sol";
 import {ILtZEN} from "./ILtZEN.sol";
+import {IStationDepositPayer} from "./station/IStationDepositPayer.sol";
 
 /// @title StLighter
 /// @notice Pooled liquid-staking protocol for ZEN, built on the audited ZenStaker. User deposits
@@ -61,8 +62,9 @@ contract StLighter is
   uint8 public constant DECIMALS_OFFSET = 3;
 
   /// @notice EIP-712 type hash for gasless deposit.
+  /// @dev `payer` is the ZEN source: the user (same-chain) or an `IStationDepositPayer` station.
   bytes32 public constant DEPOSIT_WITH_SIG_TYPEHASH = keccak256(
-    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)"
+    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address user,uint256 nonce,uint256 deadline)"
   );
 
   /// @notice EIP-712 type hash for gasless redeem.
@@ -113,6 +115,7 @@ contract StLighter is
   error StLighter__ExpiredDeadline();
   error StLighter__InvalidSignature();
   error StLighter__GasFeeExceedsMax();
+  error StLighter__PayerMustBeUser();
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -205,7 +208,7 @@ contract StLighter is
     whenNotPaused
     returns (uint256 shares)
   {
-    return _deposit(msg.sender, _assets, _receiver, 0, address(0));
+    return _deposit(msg.sender, msg.sender, _assets, _receiver, 0, address(0));
   }
 
   /// @notice Deposit in one tx via ZEN EIP-2612 permit (no prior `approve`). Mirrors ZenStaker
@@ -221,20 +224,24 @@ contract StLighter is
     try IERC20Permit(address(_zen))
       .permit(msg.sender, address(this), _assets, _deadline, _v, _r, _s) {}
       catch {}
-    return _deposit(msg.sender, _assets, _receiver, 0, address(0));
+    return _deposit(msg.sender, msg.sender, _assets, _receiver, 0, address(0));
   }
 
+  /// @notice Gasless deposit. `payer` may be the user (pull via allowance) or a station that
+  /// implements `IStationDepositPayer.payForDeposit`.
   function depositWithSig(
     uint256 _assets,
     address _receiver,
     uint256 _maxFeeZen,
     uint256 _feeZen,
+    address _payer,
     address _user,
     uint256 _deadline,
     bytes calldata _signature
   ) external nonReentrant whenNotPaused returns (uint256 shares) {
     _revertIfPastDeadline(_deadline);
     _enforceGaslessFeeLimits(_feeZen, _maxFeeZen);
+    if (_payer == address(0) || _user == address(0)) revert StLighter__ZeroAddress();
     _revertIfSignatureInvalid(
       _user,
       _hashTypedDataV4(
@@ -244,6 +251,7 @@ contract StLighter is
             _assets,
             _receiver,
             _maxFeeZen,
+            _payer,
             _user,
             _useNonce(_user),
             _deadline
@@ -252,16 +260,17 @@ contract StLighter is
       ),
       _signature
     );
-    return _deposit(_user, _assets, _receiver, _feeZen, msg.sender);
+    return _deposit(_user, _payer, _assets, _receiver, _feeZen, msg.sender);
   }
 
   /// @notice Gasless deposit with EIP-712 authorization plus ZEN permit — no on-chain `approve`
-  /// (PRD §6.4).
+  /// (PRD §6.4). `payer` must equal `_user` (wallet-held ZEN only).
   function depositWithSigAndPermit(
     uint256 _assets,
     address _receiver,
     uint256 _maxFeeZen,
     uint256 _feeZen,
+    address _payer,
     address _user,
     uint256 _deadline,
     bytes calldata _signature,
@@ -272,6 +281,8 @@ contract StLighter is
   ) external nonReentrant whenNotPaused returns (uint256 shares) {
     _revertIfPastDeadline(_deadline);
     _enforceGaslessFeeLimits(_feeZen, _maxFeeZen);
+    if (_payer == address(0) || _user == address(0)) revert StLighter__ZeroAddress();
+    if (_payer != _user) revert StLighter__PayerMustBeUser();
     _revertIfSignatureInvalid(
       _user,
       _hashTypedDataV4(
@@ -281,6 +292,7 @@ contract StLighter is
             _assets,
             _receiver,
             _maxFeeZen,
+            _payer,
             _user,
             _useNonce(_user),
             _deadline
@@ -292,10 +304,11 @@ contract StLighter is
     try IERC20Permit(address(_zen))
       .permit(_user, address(this), _assets, _permitDeadline, _v, _r, _s) {}
       catch {}
-    return _deposit(_user, _assets, _receiver, _feeZen, msg.sender);
+    return _deposit(_user, _payer, _assets, _receiver, _feeZen, msg.sender);
   }
 
   function _deposit(
+    address _user,
     address _payer,
     uint256 _assets,
     address _receiver,
@@ -306,11 +319,15 @@ contract StLighter is
     if (_gasFee >= _assets) revert StLighter__GasFeeExceedsMax();
     _harvest();
 
-    _zen.safeTransferFrom(_payer, address(this), _assets);
+    if (_payer == _user) {
+      _zen.safeTransferFrom(_user, address(this), _assets);
+    } else {
+      IStationDepositPayer(_payer).payForDeposit(_user, _assets);
+    }
 
     if (_gasFee != 0) {
       _zen.safeTransfer(_relayer, _gasFee);
-      emit GaslessFeePaid(_payer, _relayer, _gasFee);
+      emit GaslessFeePaid(_user, _relayer, _gasFee);
     }
 
     uint256 netAssets = _assets - _gasFee;
@@ -322,7 +339,7 @@ contract StLighter is
     issuedShares += shares;
     _ltZen.mint(_receiver, shares);
 
-    emit Deposited(_payer, _receiver, netAssets, shares);
+    emit Deposited(_user, _receiver, netAssets, shares);
   }
 
   function redeem(uint256 _shares, address _receiver)

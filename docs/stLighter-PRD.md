@@ -201,7 +201,7 @@ gas 费始终以 **ZEN** 结算给 relayer,但来源随操作而异:
 每个 gasless 操作的 typed-data 至少包含:`操作参数` + `depositor/用户地址` + `maxFeeZen` + `nonce` + `deadline`。例如:
 
 ```
-DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)
+DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address user,uint256 nonce,uint256 deadline)
 RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)
 ```
 
@@ -212,10 +212,10 @@ RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uin
 ### 6.4 流程示例:gasless deposit
 
 ```
-1. 用户离线签 DepositWithSig(assets, receiver, maxFeeZen, user, nonce, deadline)
-   并对 ZEN 给协议授权(用 ZEN 的 EIP-2612 permit 一并签,彻底免 on-chain approve)
-2. relayer 上链调用 depositWithSig(...签名, ...permit), 自付 ETH gas
-3. 协议校验签名/nonce/deadline → 用 permit 拉取 assets ZEN
+1. 用户离线签 DepositWithSig(assets, receiver, maxFeeZen, payer, user, nonce, deadline)
+   并对 ZEN 给协议授权(用 ZEN 的 EIP-2612 permit 一并签,彻底免 on-chain approve；同链 `payer == user`)
+2. relayer 上链调用 depositWithSig(...签名) 或 depositWithSigAndPermit(...签名, ...permit), 自付 ETH gas
+3. 协议校验签名/nonce/deadline → 从 `payer` 拉取 assets ZEN（user 钱包或 Station `payForDeposit`）
 4. 协议计算 fee(≤ maxFeeZen)→ 转 fee 给 relayer(tx.origin 或签名指定的 relayer 收款地址)
 5. 用 (assets - fee) 走正常 deposit 路径:_harvest → 质押 → mint ltZEN 给 receiver
 ```

@@ -97,6 +97,7 @@ export class DirectContractRelayer implements Relayer {
               BigInt(req.maxFeeZen),
               feeZen,
               req.user,
+              req.user,
               BigInt(req.deadline),
               req.signature,
               BigInt(permit.deadline),

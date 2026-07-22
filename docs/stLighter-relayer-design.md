@@ -96,7 +96,7 @@
 与 `StLighter.sol` typehash 对齐:
 
 ```
-DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)
+DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address user,uint256 nonce,uint256 deadline)
 RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)
 ```
 

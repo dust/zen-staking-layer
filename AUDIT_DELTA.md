@@ -90,7 +90,6 @@ is a pure passthrough already present in the audited repository.
 
 ---
 
-<<<<<<< HEAD
 ## stLighter (liquid staking layer)
 
 stLighter is a **new subsystem** built on top of the deployed ZenStaker. It does
@@ -204,7 +203,20 @@ individual uncovered-line numbers. Raise the threshold once `forge coverage` sup
   reference existing Horizen ↔ Base ZEN/USDC bridge settings.
 - Planned proxy upgrade path for StLighter must preserve storage layout across
   implementation versions; ltZEN `minter` migrates via `setMinter` on upgrade.
-=======
+
+### Station + `depositWithSig` payer (additive breaking change)
+
+| Item | Notes |
+|------|-------|
+| `src/stlighter/station/*` | New inbound/egress stations + `ZenOftStationBridge` (non-upgradeable). Compose/redeem credit via EIP-712 + Nonces; stake via `depositWithSig(payer=Station)`; egress via OFT `send` with `refundAddress=Egress`. |
+| `IStationDepositPayer` | Callback interface; Station implements `payForDeposit`. |
+| `StLighter.depositWithSig` / `depositWithSigAndPermit` | **Breaking typehash**: adds `payer`. When `payer != user`, pulls ZEN via `IStationDepositPayer(payer).payForDeposit`. `depositWithSigAndPermit` requires `payer == user`. |
+
+This does **not** touch audited `Staker` write paths. StLighter remains net-new / in-scope for stLighter audit.
+
+
+---
+
 ## ZenStakerUpgradeable — UUPS upgrade layer
 
 ### What changed
@@ -265,4 +277,3 @@ Deploy via `ERC1967Proxy` (already in `@openzeppelin/contracts` v5):
 - All interfaces — untouched
 - Write-path logic (stake, withdraw, claim, notifyRewardAmount) — untouched
 - Storage layout of existing slots — untouched
->>>>>>> HZN-2898/additional-view-functions

@@ -147,6 +147,7 @@ async function verifyStLighterSignature(
       assets: assetsOrShares,
       receiver: req.receiver,
       maxFeeZen,
+      payer: req.user,
       user: req.user,
       nonce: chainNonce,
       deadline,

@@ -29,7 +29,8 @@ Horizen (ZEN) 生态中，ZEN 主要在 **Base** 发行；本仓库的 Staker / 
 | 文档 | 内容 |
 |------|------|
 | [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) | 跨链 / gasless **产品权威规范** |
-| [`stLighter-station-design.md`](./stLighter-station-design.md) | **InboundStation / EgressStation** 设计 |
+| [`stLighter-station-design.md`](./stLighter-station-design.md) | **InboundStation / EgressStation** 需求设计 |
+| [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md) | Station **合约实现计划** |
 | [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) | Relayer / BFF 校验 |
 | [`gasless-acceptance.md`](./gasless-acceptance.md) | Gasless 手动验收 |
 | [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) | ltZEN OFT 参考 |

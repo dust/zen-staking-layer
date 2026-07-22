@@ -3,8 +3,8 @@
 > **用途**: 跨链 stake / Redeem to Base 专用车站合约的职责、动作模板、EIP-712、入账/出桥交接与安全约束。  
 > **定位**: **仅服务 stLighter** 跨链场景（专用化）；不做通用开放 `Call[]` 执行器。  
 > **上级规范**: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)（产品原则、B1、gasless、状态机）。冲突时产品原则以上级为准；**合约接口与交接细节以本文为准**。  
-> **状态**: 需求已锁定（2026-07-21 访谈 Q11–Q31）；本阶段为设计规范，**不含**合约实现。  
-> **最后更新**: 2026-07-21
+> **状态**: 需求已锁定（2026-07-21 访谈 Q11–Q31）；实现计划见 [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md)。**P0 代码已落地**（`InboundStation` + 单测，见 `src/stlighter/station/`）。  
+> **最后更新**: 2026-07-21（P0 实现）
 
 ---
 
@@ -52,7 +52,7 @@ flowchart LR
     SL[StLighter_deposit]
     ltZEN[ltZEN_to_receiver]
     BaseZEN --> LZ --> InS
-    InS -->|stakeToStLighter_relayer| SL --> ltZEN
+    InS -->|depositWithSig_payer_Station| SL --> ltZEN
   end
 
   subgraph outbound [Redeem_to_Base]
@@ -70,20 +70,21 @@ flowchart LR
 
 ## 3. 与 StLighter 的交接（专用路径）
 
-### 3.1 入站 stake（不走 `depositWithSig`）
+### 3.1 入站 stake（走 `depositWithSig` + `payer`）
 
-`StLighter.depositWithSig` 从 **`_user` 钱包** `transferFrom`，无法直接抽 Station 贷记余额。
+`StLighter.depositWithSig` 的 EIP-712 含 **`payer`**：同链为用户钱包；跨链为 `InboundStation`。
 
 **锁定路径**:
 
-1. 用户签 `StakeToStLighter`（InboundStation 域）。
-2. Relayer 调 `InboundStation.stakeToStLighter(...)`。
-3. Station：校验签名与 nonce → 扣 `credited[owner]` → 可选将 `feeZen ≤ maxFeeZen` 转给 `msg.sender`（relayer）→ `ZEN.approve(StLighter, net)` → `StLighter.deposit(net, ltZenReceiver)`。
+1. Compose / trusted composer：用户签 `CreditFromCompose`（InboundStation 域 + Nonces）→ 仅 `_credit`（**禁止**自动 stake）。
+2. 用户签 `DepositWithSig(..., payer=InboundStation, user=owner)`（**StLighter** 域 + StLighter Nonces）。
+3. Relayer 调 `StLighter.depositWithSig(...)`；StLighter 调 `InboundStation.payForDeposit(user, assets)` 扣贷记并转 ZEN；再扣 `feeZen`、mint ltZEN。
 
-此时 `msg.sender`（对 StLighter）为 Station，符合现有 `_deposit` 的 payer 语义。  
-**Gasless** = 用户不为调 Station / StLighter 的 L3 tx 付 gas。
+**不**经 Station `forceApprove` / `stakeToStLighter`。Station 与 StLighter 的 nonce **分离**（credit/withdraw vs deposit）。
 
-`ltZenReceiver`：完全遵循 `StLighter.deposit` 现有 `receiver` 参数，不增不减。
+`ltZenReceiver`：完全遵循现有 `receiver` 参数。
+
+Gasless = 用户不为 L3 stake tx 付 gas。
 
 ### 3.2 出站 redeem → Egress 入账（两步同 tx，两阶段出桥）
 
@@ -108,8 +109,8 @@ flowchart LR
 
 | 动作 | 谁触发 | 说明 |
 |------|--------|------|
-| `lzCompose` / 入金适配 | LZ executor | **仅** `credit(owner, assets)`；**禁止** stake |
-| `stakeToStLighter` | relayer + owner EIP-712 | §3.1 |
+| `lzCompose` / 入金适配 | LZ executor + owner EIP-712 | **仅** `credit`；payload 含 compose 签名；**禁止** stake |
+| `payForDeposit` | **仅** StLighter | Station 扣贷记并转 ZEN；由 `depositWithSig` 触发 |
 | `withdrawToHorizen` | relayer（推荐）+ owner EIP-712 | 未 stake 贷记提到 `to`（默认 owner） |
 
 ### 4.2 EgressStation
@@ -128,16 +129,14 @@ flowchart LR
 
 ### 5.1 Inbound：`lzCompose` 仅 credit
 
-LayerZero **收 token** 与 **`lzCompose`** 为两步；入账信任 LZ 通道（endpoint / peer / guid）。
+LayerZero **收 token** 与 **`lzCompose`** 为两步；入账信任 LZ 通道（endpoint / peer）**加上** owner EIP-712 + Station Nonces（优先于仅用 guid 防重放）。
 
 **Compose 边界（硬性）**:
 
-- 解码 payload：至少 `owner`、`assets`（及实现所需字段）。
-- 校验 LZ 来源与 guid 防重放。
+- 解码 payload：至少 `owner`、`assets`、`deadline`、`signature`（及实现所需字段）。
+- 校验 LZ 来源；幂等靠 **Station Nonces**（`CreditFromCompose`），不单独依赖 `usedGuids[guid]`。
 - 执行 `credited[owner] += assets`（或等价）。
 - **不得**调用 StLighter / 不得自动 stake。
-
-**不**在 payload 内嵌套 owner EIP-712（Q29=A）。若未来「桥发送者 ≠ owner」再议。
 
 ### 5.2 Egress：仅 Station 调桥 + refund → Station
 
@@ -215,7 +214,7 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 4. **出桥仅 Egress 调用**；refund 回 Egress。  
 5. **relayer 不得改写** 签名中的 `dest` / `ltZenReceiver` / `assets`。  
 6. **`lzCompose` 不 stake**。  
-7. 批末如有 `approve`，Station 应清零对 StLighter 的残余 allowance（实现注意）。
+7. Station **无**对 StLighter 的长期 allowance（stake 走 `payForDeposit`）。
 
 ---
 
@@ -225,7 +224,7 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 |--------------|------------|
 | 共享独立接收合约 / Inbound Receiver | **InboundStation** |
 | Egress / 出金路径 | **EgressStation** |
-| 跨链 stake 的 L3 depositWithSig | **InboundStation.stakeToStLighter → StLighter.deposit** |
+| 跨链 stake 的 L3 depositWithSig | **`StLighter.depositWithSig(..., payer=InboundStation)` → `payForDeposit`** |
 
 产品层仍称「跨链 stake / Redeem to Base」；实现与 ABI 用 Station 名。
 
@@ -233,13 +232,17 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 
 ## 10. 实现里程碑（相对上级 §7）
 
+编码结构、存储、算法与测试拆分 → [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md)。  
+Compose payload / LZ 接线 → [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md)。
+
 | ID | 内容 |
 |----|------|
-| S1 | `InboundStation`：会计、`lzCompose` credit、`stakeToStLighter`、`withdrawToHorizen`、测试 |
+| S1 | `InboundStation`：会计、compose EIP-712 credit、`payForDeposit`、`withdrawToHorizen`；`StLighter` `payer`；测试 |
 | S2 | `EgressStation`：`creditFromRedeem`、`bridgeToBase`、refund 会计、`withdrawToHorizen`、负向退款测试 |
+| S5a | `lzCompose` + payload v1（✅） |
+| S5b | `ZenOftStationBridge`（✅） |
 | S3 | BFF：校验 Station EIP-712；编排 redeem+credit 同 tx；bridge 另 tx |
 | S4 | 前端半编排向导 + 地址确认（B1） |
-| S5 | 出金/入金桥 ADR（LZ 参数、compose payload 编码、refund 对照表） |
 | S6 | `rescue` / unassigned（可后于 S1–S4） |
 
 ---
@@ -254,16 +257,16 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 | Q15 | 半通用模板，必要时专用 → **Q18=C 专用** |
 | Q17 | 接受推荐 MVP 动作集 |
 | Q18 | **C** 明确仅服务 stLighter 跨链 stake/redeem |
-| Q19 | 入站：**Station 调 `StLighter.deposit`**，不走 `depositWithSig` 抽 user |
+| Q19 | 入站：**`depositWithSig` + `payer=Station`**（修订：原「Station 调 deposit」作废） |
 | Q20 | 出站：同 tx `redeemWithSig` + `creditFromRedeem` |
 | Q21 | credit 防抢：**用户 EIP-712 预授权** |
 | Q22 | credit 与 bridge：**固定两阶段（另 tx）** |
-| Q23 | 入账绑定：**LZ payload + compose**；信任 LZ 两步 |
+| Q23 | 入账绑定：**LZ + compose + owner EIP-712/Nonces**（修订：优先于仅 guid） |
 | Q24 | 无主资金：治理救援；实现上 MVP 拒收非法入金 |
 | Q25 | compose **仅 credit**，不 stake |
-| Q27 | 每站每用户 **单 nonce** + 酌情 deadline；不按动作拆 nonce |
+| Q27 | 每站每用户 **单 nonce** + 酌情 deadline；不按动作拆 nonce（与 StLighter nonce 分离） |
 | Q28 | **仅 EgressStation 调桥** |
-| Q29 | compose payload **不**嵌套 owner EIP-712 |
+| Q29 | compose payload **嵌套** owner EIP-712（修订：原「不嵌套」作废） |
 | Q30 | 「两套签名」= `CreditFromRedeem` + `BridgeToBase` EIP-712 |
 | Q31 | EIP-712 字段表通过 |
 
@@ -275,4 +278,4 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 2. `unassigned` 与 `rescue` 权限、超时参数。  
 3. Egress 退款如何映射回 `owner`（桥回调携带 id / 本地 pending 表）。  
 4. `maxFeeZen` 在 Station stake / bridge 与 StLighter redeem fee 的叠加展示。  
-5. Inbound / Egress 是否 UUPS；治理谁有权改 LZ peer / StLighter 地址。  
+5. Inbound / Egress：**非 UUPS**（可重新部署；前端切地址）；治理谁有权改 LZ peer / StLighter 地址。  

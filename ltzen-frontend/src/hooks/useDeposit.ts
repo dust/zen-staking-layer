@@ -168,6 +168,7 @@ export function useDeposit({ amountWei }: UseDepositArgs) {
         assets: amountWei,
         receiver: account,
         maxFeeZen,
+        payer: account,
         user: account,
         deadline,
       });

@@ -17,6 +17,7 @@ export const DEPOSIT_WITH_SIG_TYPES = {
     { name: "assets", type: "uint256" },
     { name: "receiver", type: "address" },
     { name: "maxFeeZen", type: "uint256" },
+    { name: "payer", type: "address" },
     { name: "user", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
@@ -122,6 +123,8 @@ export interface DepositWithSigParams {
   assets: bigint;
   receiver: Address;
   maxFeeZen: bigint;
+  /** ZEN source: user wallet (same-chain) or InboundStation (cross-chain credit). */
+  payer: Address;
   user: Address;
   deadline: bigint;
 }
