@@ -17,9 +17,11 @@ import {RewardAccumulator} from "../src/RewardAccumulator.sol";
 ///   ZEN_TOKEN_ADDRESS        — address of the deployed ZEN ERC20 token
 ///   ADMIN_ADDRESS            — address of the Horizen multisig (final staker admin)
 ///   PRIVATE_KEY              — deployer private key (hex, with or without 0x prefix)
-///   REWARD_NOTIFIER_ADDRESS  — additional address to authorize as reward notifier
 ///
 /// Optional:
+///   REWARD_NOTIFIER_ADDRESS  — additional address to authorize as reward notifier, defaults to
+///                              the zero address. When zero (or unset), the RewardAccumulator is
+///                              the only authorized reward notifier.
 ///   MAX_BUMP_TIP             — uint256, defaults to 0
 ///   TIME_WINDOW              — uint256, defaults to 30 days
 ///   WHITELIST_ENABLED        — bool, defaults to false
@@ -43,7 +45,7 @@ contract DeployZenStakerWithRewardAccumulator is Script {
   {
     address zenToken = vm.envAddress("ZEN_TOKEN_ADDRESS");
     address admin = vm.envAddress("ADMIN_ADDRESS");
-    address rewardNotifier = vm.envAddress("REWARD_NOTIFIER_ADDRESS");
+    address rewardNotifier = vm.envOr("REWARD_NOTIFIER_ADDRESS", address(0));
     uint256 maxBumpTip = vm.envOr("MAX_BUMP_TIP", uint256(0));
     uint256 timeWindow = vm.envOr("TIME_WINDOW", uint256(30 days));
     bool whitelistEnabled = vm.envOr("WHITELIST_ENABLED", false);
@@ -75,12 +77,16 @@ contract DeployZenStakerWithRewardAccumulator is Script {
     console2.log("RewardAccumulator:           ", address(accumulator));
 
     staker.setRewardNotifier(address(accumulator), true);
-    staker.setRewardNotifier(rewardNotifier, true);
+    if (rewardNotifier != address(0)) staker.setRewardNotifier(rewardNotifier, true);
     staker.setAdmin(admin);
 
     console2.log("Admin:                        ", admin);
     console2.log("ZEN token:                    ", zenToken);
-    console2.log("Additional reward notifier:   ", rewardNotifier);
+    if (rewardNotifier != address(0)) {
+      console2.log("Additional reward notifier:   ", rewardNotifier);
+    } else {
+      console2.log("Additional reward notifier:    none (accumulator only)");
+    }
     console2.log("Time window:                  ", timeWindow);
     console2.log("Whitelist enabled:            ", whitelistEnabled);
 
