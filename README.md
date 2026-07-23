@@ -6,6 +6,19 @@ Users stake ZEN to earn ZEN rewards. The smart-contract layer is a thin, additiv
 
 ---
 
+## Security & bug bounty
+
+Security issues are covered by the Horizen bug bounty program on Immunefi: **https://immunefi.com/bug-bounty/horizen**. Please report privately there, or via this repo's *Security → Report a vulnerability* — **not** through public issues or pull requests. Scope, impacts, rewards, rules of engagement (PoC execution is local-only), and the full known-issue list live on the program page and in [`SECURITY.md`](SECURITY.md).
+
+**Before reporting, please check the known behaviors.** The staking contracts are a thin, additive wrapper over the audited Tally/ScopeLift Staker base; the one Horizen-specific contract is `RewardAccumulator`, and its permissionless open-mode behavior is **documented and accepted** (see [`SECURITY.md`](SECURITY.md#known-behaviors-not-vulnerabilities)). In particular, the following are **out of scope** — they are timing effects with no loss, not vulnerabilities:
+
+- an **empty / zero-reward `sendRewardsToStaker()` flush** advancing the reward-window grid and delaying a later deposit by up to one window (self-healing, full delivery); and
+- a **sub-`REWARD_DURATION` (dust) contribution** reverting the flush via the inherited `Staker__InvalidRewardRate` guard (atomic and recoverable — anyone can top the balance above the threshold; funds are never stuck and nothing is stolen).
+
+Loss or incorrect attribution of principal/rewards, permanent denial of distribution via a *different* mechanism, over-extraction, or theft remain **in scope**.
+
+---
+
 ## Project goal
 
 ZenStaker gives Horizen holders a native staking experience:

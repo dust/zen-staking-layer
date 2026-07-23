@@ -37,6 +37,8 @@ Configuration functions (owner-only, `Ownable`): `setTimeWindow`, `setWhitelistE
 
 An important consequence: **the first window is empty by construction.** The accumulator can flush funds only after the first `timeWindow` has fully elapsed, so rewards routed through the accumulator reach stakers no earlier than one window after deployment. The bootstrap procedure below covers the first reward.
 
+**Known behavior (intended, not a vulnerability).** Because `sendRewardsToStaker()` is permissionless in open mode and the schedule grid advances independently of the amount delivered, two effects are intended and accepted (out of scope for the bug bounty — see [`SECURITY.md`](../SECURITY.md) "Known behaviors" item 1): (a) a **zero-reward flush** — calling `sendRewardsToStaker()` while `accumulatedRewards == 0` transfers nothing but still advances `lastRewardTime`, so rewards funded later in that window are delivered at the next window boundary (a timing effect of at most one `timeWindow`, delivered in full, self-healing); and (b) a **sub-`REWARD_DURATION` ("dust") contribution** — a total below `REWARD_DURATION` (2,592,000 wei) makes the inherited `Staker.notifyRewardAmount` guard revert with `Staker__InvalidRewardRate`, reverting the flush atomically (the schedule does not advance, `accumulatedRewards` is monotonic, and topping the balance above the threshold unblocks it). In steady state an infra keeper flushes promptly and real reward contributions are far above the dust threshold, so neither effect delays actual reward delivery.
+
 ## 2. Deployment procedure
 
 Roles involved:
