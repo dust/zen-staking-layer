@@ -6,11 +6,11 @@ schema:
 dataSources:
   - kind: ethereum/contract
     name: ZenStaker
-    network: horizen-testnet
+    network: horizen-mainnet
     source:
-      address: "0x3F620A68d2a92102C3a3c75c3740146fA1d88004"
+      address: "0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31"
       abi: ZenStaker
-      startBlock: 20805747
+      startBlock: 21318408
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
