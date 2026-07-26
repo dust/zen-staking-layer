@@ -10,22 +10,20 @@ import {
   ILayerZeroEndpointV2
 } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 
-/// @notice Configures LayerZero ULN (DVN + confirmations) for ltZEN on one chain.
+/// @notice Configures LayerZero ULN (DVN + confirmations) for an OApp (ltZEN or ZEN OFT/adapter).
 ///
-/// Copy values from the live Horizen **ZenTokenOFT**
-/// (`0x57da2D504bf8b83Ef304759d9f2648522D7a9280`) Horizen ↔ Base path — see
-/// `docs/stLighter-oft-reference.md`. StargateOFTUSDC
-/// (`0x3a1293Bdb83bBbDd5Ebf4fAc96605aD2021BbC0f`) is a secondary cross-check.
+/// Copy values from a live Horizen ↔ Base OFT path — see `docs/stLighter-oft-reference.md`
+/// (testnet table + `getConfig` commands) and `docs/stLighter-deploy-checklist.md` §1 / §C1.
 ///
 /// Required env vars:
-///   LT_ZEN_LOCAL       — ltZEN on the chain you are broadcasting to
+///   OAPP_LOCAL         — OApp to configure (preferred); falls back to `LT_ZEN_LOCAL`
 ///   LZ_ENDPOINT        — LayerZero EndpointV2 on this chain
 ///   PEER_EID           — remote chain endpoint id
-///   LZ_SEND_LIB        — send library (e.g. SendUln302)
-///   LZ_RECEIVE_LIB     — receive library (e.g. ReceiveUln302)
+///   LZ_SEND_LIB        — send library (e.g. SendUln302) — must be THIS chain's lib
+///   LZ_RECEIVE_LIB     — receive library (e.g. ReceiveUln302) — must be THIS chain's lib
 ///   LZ_CONFIRMATIONS   — block confirmations (uint64)
 ///   DVN_ADDRESSES      — comma-separated required DVN addresses (sorted ascending)
-///   PRIVATE_KEY        — OFT owner (timelock executor / governance)
+///   PRIVATE_KEY        — OApp owner (timelock executor / governance)
 ///
 /// Optional:
 ///   DVN_OPTIONAL_ADDRESSES — comma-separated optional DVNs (default empty)
@@ -34,7 +32,9 @@ contract ConfigureStLighterOFTDVN is Script {
   uint32 internal constant CONFIG_TYPE_ULN = 2;
 
   function run() external {
-    address ltZen = vm.envAddress("LT_ZEN_LOCAL");
+    address oapp = vm.envExists("OAPP_LOCAL")
+      ? vm.envAddress("OAPP_LOCAL")
+      : vm.envAddress("LT_ZEN_LOCAL");
     address endpointAddr = vm.envAddress("LZ_ENDPOINT");
     uint32 peerEid = uint32(vm.envUint("PEER_EID"));
     address sendLib = vm.envAddress("LZ_SEND_LIB");
@@ -64,14 +64,14 @@ contract ConfigureStLighterOFTDVN is Script {
     ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(endpointAddr);
 
     vm.startBroadcast(ownerKey);
-    endpoint.setConfig(ltZen, sendLib, sendParams);
-    endpoint.setConfig(ltZen, receiveLib, receiveParams);
+    endpoint.setConfig(oapp, sendLib, sendParams);
+    endpoint.setConfig(oapp, receiveLib, receiveParams);
     vm.stopBroadcast();
 
-    console2.log("ULN configured for ltZEN:", ltZen);
-    console2.log("Peer eid:              ", peerEid);
-    console2.log("Confirmations:         ", confirmations);
-    console2.log("Required DVNs:         ", requiredDvns.length);
+    console2.log("ULN configured for OApp:", oapp);
+    console2.log("Peer eid:             ", peerEid);
+    console2.log("Confirmations:        ", confirmations);
+    console2.log("Required DVNs:        ", requiredDvns.length);
   }
 
   function _parseAddressList(string memory _csv) private view returns (address[] memory addrs) {

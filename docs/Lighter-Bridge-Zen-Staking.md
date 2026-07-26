@@ -1,8 +1,37 @@
-我对Horizen(ZEN)生态比较了解，它现在主要发行在Base链上，而这个Staker将部署在Horizen mainnet(L3, Base链的应用层), 目前在设计一个在它基础上的包装产品(stLighter: Lighter for Horizen Staking Program)，有如下特征：
-1. 整个项目完全开源。
-2. 多链部署，用户可以切换Base/Horizen网络即可查看当前链下的资产Dashboard. 其中Base链上的操作则需要增加跨链的相关操作，目前可以使用Layerzero/stargate进行整合，为了简单产品设计。目前暂不展开跨链及Base上进行Staking操作的相关设计，但是在Horizen网络上设计时，刚应该预留和保持这种扩展能力和接口。
-3. stLighter会发行池化的zen stakeholder token（暂命名为:ltZEN），是一个更先进的ERC Token, 比如支持EIP-2612(考虑直接继承openzeppelin相关库即可)，用户参与stake/redeem时，增加/减少stLighter protocol在 Hoirzen Staker的份额，同时mint/burn这个池化的token(ltZEN).
+# Lighter Bridge & Zen Staking — 背景与索引
 
-**2026.6.25重要调整**
-## 关于跨链及gasless操作的调整
-#### 背景
+> **权威规范（跨链 + gasless）**: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)  
+> **Station 合约设计**: [`stLighter-station-design.md`](./stLighter-station-design.md)  
+> **本文用途**: 历史背景摘要与文档入口；不再展开产品细则。  
+> **最后更新**: 2026-07-25
+
+---
+
+## 背景
+
+Horizen (ZEN) 生态中，ZEN **主要在 Base 以普通 ERC20 发行**；跨链经已有 **`ZenTokenOFTAdapter`（OFTAdapter，lock/unlock）**。Horizen 上 ZEN 为 **原生 LayerZero `ZenTokenOFT`**。本仓库的 Staker / stLighter 部署在 **Horizen mainnet (L3)**。stLighter 发行池化份额代币 **ltZEN**（EIP-2612 + LayerZero OFT 等），用户通过增加/减少协议在 ZenStaker 中的份额来 mint/burn ltZEN。
+
+早期产品设想（多链 Dashboard、Base 侧跨链能力预留、Horizen 闭环优先）见仓库内 frontend / PRD 文档。ZEN **不支持** 可靠的 EIP-2612 deposit gasless 叙事，因此不存在完美的 ZEN deposit gasless（同链 approve；跨链 Base 腿亦可能需要 `approve(adapter)`）。
+
+## 2026-06-25 起：跨链及 gasless 方向调整
+
+动机与目标已收敛为：
+
+1. 不提供无意义的「完美 gasless」宣传；保留有意义的真零 gas（ltZEN redeem、Station 路径上的 L3 写入）。
+2. 跨链 stake（Base ZEN → **InboundStation** → Horizen ltZEN）与 Redeem to Base（→ **EgressStation** → 用户指定 Base 地址；失败可恢复；退款进 Egress）。
+3. 同链与跨链路径分离；`lzCompose` **仅入账**，stake / 出桥由用户签名 + relayer 半编排。
+
+**产品原则** → [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)  
+**Station 接口与 EIP-712** → [`stLighter-station-design.md`](./stLighter-station-design.md)
+
+## 相关文档
+
+| 文档 | 内容 |
+|------|------|
+| [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) | 跨链 / gasless **产品权威规范** |
+| [`stLighter-station-design.md`](./stLighter-station-design.md) | **InboundStation / EgressStation** 需求设计 |
+| [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md) | Station **合约实现计划** |
+| [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) | Relayer / BFF 校验 |
+| [`gasless-acceptance.md`](./gasless-acceptance.md) | Gasless 手动验收 |
+| [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) | ltZEN OFT 参考 |
+| [`stLighter-frontend-plan.md`](./stLighter-frontend-plan.md) | 前端工程计划（首版范围部分已被规范修订） |

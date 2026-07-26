@@ -2,7 +2,7 @@ import { createPublicClient, http } from "viem";
 import StLighterAbi from "@/abi/StLighter.json";
 import { horizen } from "@/config/chains";
 import type { RelayRequest } from "@/relayer/types";
-import { rrelayerConfigured, relayerFeeBps } from "./config";
+import { rrelayerConfigured, relayerFeeBps, stLighterAddress } from "./config";
 import { computeFeeZen } from "./fee";
 import { encodeMetaTx } from "./encode";
 import { createJob, patchJob } from "./jobs";
@@ -20,12 +20,22 @@ function hubPublicClient() {
 }
 
 async function feeBasisWei(req: RelayRequest): Promise<bigint> {
-  if (req.kind === "depositWithSigAndPermit") {
+  if (
+    req.kind === "depositWithSigAndPermit" ||
+    req.kind === "depositWithSig" ||
+    req.kind === "withdrawToHorizen" ||
+    req.kind === "bridgeToBase" ||
+    req.kind === "egressWithdrawToHorizen"
+  ) {
     return BigInt(req.amount);
   }
+  // redeemWithSig / redeemAndCredit: amount is shares
   const client = hubPublicClient();
+  const stLighter =
+    req.kind === "redeemAndCredit" ? stLighterAddress() : req.verifyingContract;
+  if (!stLighter) throw new Error("StLighter address not configured");
   return client.readContract({
-    address: req.verifyingContract,
+    address: stLighter,
     abi: StLighterAbi,
     functionName: "previewRedeem",
     args: [BigInt(req.amount)],
@@ -46,7 +56,10 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   relayLog("assertRequest ok");
 
   const basis = await feeBasisWei(req);
-  const feeZen = computeFeeZen(BigInt(req.maxFeeZen), basis, relayerFeeBps());
+  const feeZen =
+    req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen"
+      ? 0n
+      : computeFeeZen(BigInt(req.maxFeeZen || "0"), basis, relayerFeeBps());
   relayLog("fee computed", {
     basis: basis.toString(),
     feeZen: feeZen.toString(),
@@ -57,11 +70,12 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   await validateRelayRequest(req, feeZen, basis);
   relayLog("validateRelayRequest ok");
 
-  const { to, data } = encodeMetaTx(req, feeZen);
+  const { to, data, value } = encodeMetaTx(req, feeZen);
   relayLog("encoded meta-tx", {
     to,
     dataLen: data.length,
     selector: data.slice(0, 10),
+    value: value.toString(),
   });
 
   const id = crypto.randomUUID();
@@ -71,8 +85,8 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   void (async () => {
     try {
       patchJob(id, { status: "relaying" });
-      relayLog("broadcast start", { id, to });
-      const { rrelayerTxId, hash } = await broadcastContractCall(to, data);
+      relayLog("broadcast start", { id, to, value: value.toString() });
+      const { rrelayerTxId, hash } = await broadcastContractCall(to, data, value);
       relayLog("broadcast sent", { id, rrelayerTxId, hash });
       patchJob(id, { txHash: hash, rrelayerTxId });
       relayLog("waitForRrelayerTx start", { id, rrelayerTxId, hash });

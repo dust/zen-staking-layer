@@ -1,12 +1,5 @@
 /**
  * Direct contract relayer (M2/M3 testnet — no backend relayer required).
- *
- * After the user signs the meta-tx off-chain, this implementation broadcasts the matching
- * StLighter entrypoint from the connected wallet:
- *   - depositWithSigAndPermit (deposit): DepositWithSig + ZEN Permit, no separate approve.
- *   - redeemWithSig (redeem): RedeemWithSig only — redeem burns ltZEN internally, no permit.
- * The user pays gas for that one transaction. Production will swap to HttpRelayer so the relayer
- * wallet submits and the fee is taken from the proceeds.
  */
 
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";
@@ -81,6 +74,7 @@ export class DirectContractRelayer implements Relayer {
         throw new Error("depositWithSigAndPermit requires a ZEN permit signature");
       }
       const permit = req.permit;
+      const payer = req.payer ?? req.user;
       return new DirectRelayHandle(
         this.config,
         req.chainId,
@@ -96,6 +90,8 @@ export class DirectContractRelayer implements Relayer {
               req.receiver,
               BigInt(req.maxFeeZen),
               feeZen,
+              payer,
+              req.relayer,
               req.user,
               BigInt(req.deadline),
               req.signature,
@@ -103,6 +99,34 @@ export class DirectContractRelayer implements Relayer {
               permit.v,
               permit.r,
               permit.s,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "depositWithSig") {
+      if (!req.payer) throw new Error("depositWithSig requires payer");
+      const payer = req.payer;
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.stLighter,
+            functionName: "depositWithSig",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
+              BigInt(req.maxFeeZen),
+              feeZen,
+              payer,
+              req.relayer,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
             ],
           }),
       );
@@ -124,6 +148,105 @@ export class DirectContractRelayer implements Relayer {
               req.receiver,
               BigInt(req.maxFeeZen),
               feeZen,
+              req.relayer,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "redeemAndCredit") {
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.egressStation,
+            functionName: "redeemAndCredit",
+            args: [
+              BigInt(req.amount),
+              BigInt(req.maxFeeZen),
+              feeZen,
+              req.relayer,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "withdrawToHorizen") {
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.inboundStation,
+            functionName: "withdrawToHorizen",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "bridgeToBase") {
+      const value = BigInt(req.nativeValue ?? "0");
+      if (value <= 0n) throw new Error("bridgeToBase requires nativeValue > 0");
+      const extraOptions = req.extraOptions ?? ("0x" as Hex);
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.egressStation,
+            functionName: "bridgeToBase",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
+              BigInt(req.maxFeeZen),
+              feeZen,
+              req.relayer,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+              extraOptions,
+            ],
+            value,
+          }),
+      );
+    }
+
+    if (req.kind === "egressWithdrawToHorizen") {
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.egressStation,
+            functionName: "withdrawToHorizen",
+            args: [
+              BigInt(req.amount),
+              req.receiver,
               req.user,
               BigInt(req.deadline),
               req.signature,

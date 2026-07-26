@@ -36,13 +36,20 @@ export function getRrelayerClients(): Promise<RrelayerClients> {
   return cached;
 }
 
-function wrapRrelayerError(err: unknown): Error {
+export function wrapRrelayerError(err: unknown): Error {
   if (err && typeof err === "object" && "response" in err) {
     const ax = err as { response?: { status?: number; data?: unknown }; message?: string };
-    const body =
-      typeof ax.response?.data === "string"
-        ? ax.response.data
-        : JSON.stringify(ax.response?.data ?? {});
+    let body = "";
+    try {
+      body =
+        typeof ax.response?.data === "string"
+          ? ax.response.data
+          : JSON.stringify(ax.response?.data ?? {}, (_k, v) =>
+              typeof v === "bigint" ? v.toString() : v,
+            );
+    } catch {
+      body = String(ax.response?.data ?? ax.message ?? "request failed");
+    }
     return new Error(
       `rrelayer API ${ax.response?.status ?? "?"}: ${body || ax.message || "request failed"}`,
     );
@@ -124,11 +131,16 @@ export interface BroadcastResult {
 }
 
 /** Submit via rrelayer REST API (not viem sendTransaction — avoids SDK providerUrl:"TODO" bug). */
-export async function broadcastContractCall(to: Hex, data: Hex): Promise<BroadcastResult> {
+export async function broadcastContractCall(
+  to: Hex,
+  data: Hex,
+  value: bigint = 0n,
+): Promise<BroadcastResult> {
   relayLog("broadcastContractCall: relayer.transaction.send", {
     to,
     dataLen: data.length,
     selector: data.slice(0, 10),
+    value: value.toString(),
   });
   const started = Date.now();
   try {
@@ -136,6 +148,8 @@ export async function broadcastContractCall(to: Hex, data: Hex): Promise<Broadca
     const sent = await relayer.transaction.send({
       to,
       data,
+      // rrelayer REST JSON cannot serialize bigint — must send decimal string.
+      ...(value > 0n ? { value: value.toString() } : {}),
       speed: TransactionSpeed.FAST,
     });
     relayLog("broadcastContractCall: rrelayer accepted", {

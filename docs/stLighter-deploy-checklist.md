@@ -1,100 +1,619 @@
-# stLighter 主网部署 Checklist
+# stLighter Testnet Redeploy Checklist
 
-> 双链接线与 DVN 复制在**实际测试网/主网环境**执行；本清单仅作顺序与验收参考。  
-> OFT 参考：`docs/stLighter-oft-reference.md` · 治理脚本：`script/DeployStLighterTimelock.s.sol`
+> **Primary scope**: fresh deploy to **Horizen Testnet** (`2651420`) + **Base Sepolia** (`84532`).  
+> Topology authority: [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0 · OFT refs: [`stLighter-oft-reference.md`](./stLighter-oft-reference.md)  
+> OFT debug memos: [`stLighter-oft-debug-cases.md`](./stLighter-oft-debug-cases.md)  
+> Station design: [`stLighter-station-design.md`](./stLighter-station-design.md) · Compose/bridge ADR: [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §1–§2  
+> Product: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) (Path B stake / Path C Redeem to Base)
+>
+> | Wave | Scope | Status in this doc |
+> |------|--------|--------------------|
+> | **A** | Hub+spoke + InboundStation + cross-chain stake | Phases A–F |
+> | **B** | EgressStation + `ZenOftStationBridge` + Redeem to Base | Phases G–I |
+>
+> **Still out of this checklist**: production Timelock hard-cutover (testnet: deployer EOA as `GOVERNANCE_ADDRESS`); post-send LZ failure ops playbook beyond MVP.
 
-## 前置条件
+## 0. Topology (do not confuse)
 
-- [ ] ZenStaker 已在 Horizen 主网部署并运行
-- [ ] ZEN 代币地址、LayerZero Endpoint V2、DVN 列表已确认（可复制现有 ZenTokenOFT 配置）
-- [ ] 治理多签 / Timelock 地址已定
-- [ ] `.env` 已按 `.env.template` 填写（**勿提交私钥**）
+| Chain | ZEN | LayerZero | ltZEN |
+|-------|-----|-----------|-------|
+| **Base Sepolia** | `MockZEN` (plain ERC20) | **`ZenTokenOFTAdapter`** locks ERC20 on `send` / unlocks on receive | Spoke OFT, `minter = 0` |
+| **Horizen Testnet** | **`ZenTokenOFT`** (native OFT = token) | Peer of Base adapter; Inbound compose + Egress OFT `send` | Hub OFT, `minter = StLighter proxy` |
 
-## 1. Horizen Hub
+Do **not** deploy `MockZEN` on Horizen for this stack. Hub stake asset = `ZenTokenOFT`.
 
-| 步骤 | 脚本 / 操作 | 验收 |
-|------|-------------|------|
-| 1.1 | `DeployStLighterHorizen.s.sol` — 部署 ltZEN + StLighter proxy + `setMinter(proxy)` | `ltZen.minter() == proxy` |
-| 1.2 | 记录 proxy / impl / ltZEN 地址 | 写入运行手册 |
-| 1.3 | `DeployStLighterTimelock.s.sol`（若尚未部署） | timelock 地址 |
-| 1.4 | 将 StLighter `owner` 与 ltZEN `owner` 移交 Timelock | `owner() == timelock` |
-| 1.5 | 验证 `feeBps == 0`，`pause` 未激活 | 只读检查 |
-| 1.6 | 小额 smoke：`deposit` → `harvest`（有奖励时）→ `redeem` | 汇率 / 份额正确 |
-
-## 2. Base Spoke
-
-| 步骤 | 脚本 / 操作 | 验收 |
-|------|-------------|------|
-| 2.1 | `DeployStLighterBase.s.sol` — 仅 ltZEN，**minter = 0** | `minter() == address(0)` |
-| 2.2 | ltZEN `owner` 移交 Timelock（与 Hub 同一治理） | `owner() == timelock` |
-| 2.3 | 确认本地无法 `mint` / `burn`（仅 OFT 跨链路径） | `test_SpokeCannotLocalMint` 同类检查 |
-
-## 3. OFT 跨链接线（测试网/主网执行）
-
-| 步骤 | 脚本 / 操作 | 验收 |
-|------|-------------|------|
-| 3.1 | `WireStLighterOFT.s.sol` — 双向 `setPeer`（EID ↔ 地址） | `peers(eid)` 非零 |
-| 3.2 | `ConfigureStLighterOFTDVN.s.sol` — ULN send/receive DVN | 与 ZenTokenOFT 对齐 |
-| 3.3 | 小额跨链：Hub → Spoke → Hub | 两链 `totalSupply` 守恒；Horizen `convertToAssets` 不变 |
-| 3.4 | 错误 peer / 未配置路径应 revert | 手动负向测试 |
-
-## 4. 治理与升级
-
-| 步骤 | 操作 | 验收 |
-|------|------|------|
-| 4.1 | Timelock 为 StLighter `owner`；升级经 `UpgradeStLighterViaTimelock.s.sol` | 非 EOA 可直接 `upgradeTo` |
-| 4.2 | 升级后 `ltZen.minter` 仍为 proxy 地址 | 存取款正常 |
-| 4.3 | 紧急 `pause` 仅挡 deposit；redeem / harvest 可用 | PRD §7 |
-
-## 5. 前端 / Dashboard（合约外）
-
-- [ ] ABI 固定：proxy 地址 + `StLighter` / `LtZEN` 接口
-- [ ] Horizen：deposit / redeem / gasless（EIP-712 + 可选 permit）
-- [ ] Base：读 ltZEN 余额；跨链桥 UI；赎回路径 = **桥回 Horizen 再 redeem**（若产品确认）
-- [ ] 双链 `totalSupply` 与 Hub `convertToAssets` 展示
-
-## 6. 安全评审（上线前）
-
-- [ ] OFT peer、DVN、确认数独立评审（参考 StargateOFTUSDC / ZenTokenOFT）
-- [ ] Proxy 升级权限仅 Timelock
-- [ ] `AUDIT_DELTA.md` stLighter 审计范围定稿
-- [ ] ltZEN 完整 `name` 字符串最终确认（symbol 已为 `ltZEN`）
-
-## 7. 开放项（非阻塞部署脚本）
-
-| 项 | 状态 |
-|----|------|
-| ltZEN 完整 name | 待定 |
-| Harvest keeper 激励 | Phase 1 无；链下 keeper 或用户自触发 |
-| 双链 live 测试 | 推迟至测试网部署阶段 |
-
-## 环境变量速查
-
-见 `.env.template`：`ZEN_TOKEN_ADDRESS`、`ADMIN_ADDRESS`、`STLighter_*`、`LZ_*`、`TIMELOCK_*` 等。
-
-
-``` shell
-forge script script/DeployMockZEN.s.sol --rpc-url=$RPC_URL --broadcast --private-key="$PRIVATE_KEY"
-
-forge script script/DeployZenStaker.s.sol --rpc-url=$RPC_URL --broadcast --private-key=$PRIVATE_KEY
-
-ZEN_STAKER=0xb1E4021B36Ad51AE548B2065Bc55A3BACa33187e
-
-forge verify-contract \
-  --rpc-url $RPC_URL \
-  --verifier blockscout \
-  --verifier-url "$RPC_URL/api" \
-  $ZEN_STAKER \
-  src/ZenStaker.sol:ZenStaker
-
-
+```mermaid
+flowchart TB
+  subgraph base [Base_Sepolia]
+    MZ[MockZEN_ERC20]
+    AD[ZenTokenOFTAdapter]
+    LTB[LtZEN_spoke]
+    MZ -->|approve_send| AD
+    AD -->|unlock_to_B1| MZ
+  end
+  subgraph hz [Horizen_Testnet]
+    ZO[ZenTokenOFT]
+    ZS[ZenStaker]
+    SL[StLighter_proxy]
+    LTH[LtZEN_hub]
+    IN[InboundStation]
+    EG[EgressStation]
+    BR[ZenOftStationBridge]
+    AD -->|LZ_inbound| ZO
+    ZO --> ZS
+    ZO --> SL
+    LTH --> SL
+    ZO -->|lzCompose| IN
+    IN -->|payForDeposit| SL
+    SL -->|redeem_receiver| EG
+    EG -->|transfer_ZEN| BR
+    BR -->|oft_send_refund_EG| ZO
+    ZO -->|LZ_outbound| AD
+  end
+  LTH <-->|peers| LTB
 ```
 
-== Logs ==
-  LtZEN:          0xF91e475D62E6181C630bf70bCd8564c29b03486B
-  Implementation: 0x0d4bE6a999279c8e5Bf7d63FDb0aB626b9275a76
-  StLighter proxy: 0xEaAF6a0CF959D0C8b18A79289F4b7c1ce16E41c6
-  ZEN:            0x3909EBEE55aa57Cd7b2ce4c05e57C24f7499203A
-  ZenStaker:      0xb1E4021B36Ad51AE548B2065Bc55A3BACa33187e
-  Timelock:       0x6dF5Ff7f16a8b08908F6B6893fD4e8D84e770679
+**Path summary**
 
+| Path | Direction | Contracts |
+|------|-----------|-----------|
+| **Wave A — cross-chain stake** | Base ZEN → Horizen ltZEN | Adapter `send(to=InboundStation, compose)` → credit → `depositWithSig(payer=Station)` |
+| **Wave B — Redeem to Base** | Horizen ltZEN → Base ZEN @ B1 | `Egress.redeemAndCredit` → `bridgeToBase` → Bridge `oft.send` → Adapter unlocks ERC20 to `dest` |
+| **Same-chain redeem** | Horizen ltZEN → Horizen ZEN | `redeem` / `redeemWithSig` to user wallet (no Egress) — keep as separate UX |
+
+---
+
+## 1. Preflight
+
+- [ ] Fund deployer on Horizen Testnet and Base Sepolia
+- [ ] Confirm LZ Endpoint V2 addresses + **eids** → `LZ_ENDPOINT_HORIZEN`, `LZ_ENDPOINT_BASE`, `HORIZEN_EID`, `BASE_EID`
+- [ ] Confirm Send/Receive ULN libs + testnet DVNs → `LZ_SEND_LIB`, `LZ_RECEIVE_LIB`, `LZ_CONFIRMATIONS`, `DVN_ADDRESSES` (see table below; do **not** cross-copy libs across chains)
+- [ ] `.env` from [`.env.template`](../.env.template): `PRIVATE_KEY`, `ADMIN_ADDRESS`, `GOVERNANCE_ADDRESS` (= deployer EOA)
+- [ ] Treat this as a **new** address book (clear stale frontend env)
+
+**RPC examples**
+
+```bash
+export HORIZEN_RPC=https://horizen-testnet.rpc.caldera.xyz/http
+export BASE_RPC=https://sepolia.base.org
+```
+
+**Testnet ULN / DVN reference** (verified against a working Base Sepolia ↔ Horizen Testnet ZEN OFT path; re-check with `getConfig` after any LZ infra change — see [`stLighter-oft-reference.md`](./stLighter-oft-reference.md))
+
+| Env | Base Sepolia (`PEER_EID=40435`) | Horizen Testnet (`PEER_EID=40245`) |
+|-----|----------------------------------|-------------------------------------|
+| `LZ_ENDPOINT` | `0x6EDCE65403992e310A62460808c4b910D972f10f` | `0x3aCAAf60502791D199a5a5F0B173D78229eBFe32` |
+| `LZ_SEND_LIB` | `0xC1868e054425D378095A003EcbA3823a5D0135C9` | `0x45841dd1ca50265Da7614fC43A361e526c0e6160` |
+| `LZ_RECEIVE_LIB` | `0x12523de19dc41c91F7d2093E0CFbB76b17012C8d` | `0xd682ECF100f6F4284138AA925348633B0611Ae21` |
+| `DVN_ADDRESSES` | `0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6` | `0xa78a78a13074ed93ad447a26ec57121f29e8fec2` |
+| `LZ_CONFIRMATIONS` | `2` | `2` |
+| eid | `40245` | `40435` |
+
+> **Common mistake**: Base `LZ_RECEIVE_LIB` is **not** `0xd682…` — that address is Horizen's receive lib. Passing the wrong lib to `setConfig` / `getConfig` on Base reverts or writes nowhere useful.
+
+---
+
+## 2. Script inventory
+
+| Script | Chain | Purpose |
+|--------|-------|---------|
+| [`DeployZenTokenOFT.s.sol`](../script/DeployZenTokenOFT.s.sol) | Horizen | Native ZEN OFT |
+| [`DeployZenStaker.s.sol`](../script/DeployZenStaker.s.sol) | Horizen | Staker |
+| [`DeployStLighterHorizen.s.sol`](../script/DeployStLighterHorizen.s.sol) | Horizen | LtZEN hub + StLighter proxy |
+| [`DeployInboundStation.s.sol`](../script/DeployInboundStation.s.sol) | Horizen | Wave A Station |
+| [`DeployEgressStation.s.sol`](../script/DeployEgressStation.s.sol) | Horizen | Wave B: Egress + ZenOftStationBridge + `setBridge` |
+| [`DeployMockZEN.s.sol`](../script/DeployMockZEN.s.sol) | Base | ERC20 ZEN faucet |
+| [`DeployZenTokenOFTAdapter.s.sol`](../script/DeployZenTokenOFTAdapter.s.sol) | Base | OFTAdapter |
+| [`DeployStLighterBase.s.sol`](../script/DeployStLighterBase.s.sol) | Base | LtZEN spoke |
+| [`WireZenOft.s.sol`](../script/WireZenOft.s.sol) | both | ZEN Adapter ↔ ZenTokenOFT `setPeer` |
+| [`WireStLighterOFT.s.sol`](../script/WireStLighterOFT.s.sol) | both | ltZEN `setPeer` |
+| [`ConfigureStLighterOFTDVN.s.sol`](../script/ConfigureStLighterOFTDVN.s.sol) | both | ULN for any OApp (`OAPP_LOCAL` or `LT_ZEN_LOCAL`) |
+
+**Wave B circular deploy** (`DeployEgressStation`):
+
+`EgressStation` needs a non-zero `bridge_` at construct time; `ZenOftStationBridge` needs a live Egress and checks `zen() == oft.token()`. Script order:
+
+```text
+1. EgressStation(zen, address(1), deployer)   // placeholder never called
+2. ZenOftStationBridge(oft, egress, BASE_EID, owner)
+3. egress.setBridge(realBridge)
+4. if owner ≠ deployer: transferOwnership(owner)  // Ownable2Step accept
+```
+
+Env inputs:
+
+| Env | Value |
+|-----|--------|
+| `ZEN_TOKEN_ADDRESS` | Horizen ZenTokenOFT (A1) |
+| `BASE_EID` | Base Sepolia LZ eid (e.g. `40245`) |
+| `GOVERNANCE_ADDRESS` / Timelock | Bridge owner; Egress final owner |
+| `PRIVATE_KEY` | deployer (temporary Egress owner for `setBridge`) |
+
+Outputs: `EGRESS_STATION_ADDRESS`, `ZEN_OFT_STATION_BRIDGE_ADDRESS`.
+
+Optional: [`DeployStLighterTimelock.s.sol`](../script/DeployStLighterTimelock.s.sol) — skip on testnet if using EOA governance.
+
+---
+
+## 3. Phase A — Horizen hub
+
+### A1 — ZenTokenOFT (Horizen ZEN)
+
+```bash
+export HORIZEN_RPC=https://horizen-testnet.rpc.caldera.xyz/http
+export BASE_RPC=https://sepolia.base.org
+export LZ_ENDPOINT_HORIZEN=0x3aCAAf60502791D199a5a5F0B173D78229eBFe32  # testnet
+
+forge script script/DeployZenTokenOFT.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+
+# → set ZEN_TOKEN_ADDRESS
+export ZEN_TOKEN_ADDRESS=0x25559440DD51adcd2EBAbFe5A9AF70F758BcBffE
+export HORIZEN_ZEN=$ZEN_TOKEN_ADDRESS
+```
+
+- [ ] `ZEN_TOKEN_ADDRESS` = printed ZenTokenOFT
+
+### A2 — ZenStaker
+
+```bash
+export ADMIN_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
+forge script script/DeployZenStaker.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+# → set ZEN_STAKER_ADDRESS
+export ZEN_STAKER_ADDRESS=0x99c8e0f8A60da19bc48c0d00Ef6594b9Da18e151
+cast send $ZEN_STAKER_ADDRESS 'setRewardNotifier(address,bool)' $(cast wallet address --private-key $USER2_PRIVATE_KEY) true --rpc-url $HORIZEN_RPC --private-key $PRIVATE_KEY
+```
+
+- [ ] Staker `STAKE_TOKEN` / reward token = A1
+
+### A3 — Governance
+
+- [ ] `GOVERNANCE_ADDRESS` = deployer EOA (or Timelock if you ran A3 optional)
+
+### A4 — LtZEN + StLighter
+
+```bash
+export GOVERNANCE_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
+forge script script/DeployStLighterHorizen.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+# → set STLIGHTER_PROXY_ADDRESS, LT_ZEN_HORIZEN
+export LT_ZEN_HORIZEN=0xA876E8bDA962F48BA00F77A4B06E615451992986
+export STLIGHTER_PROXY_ADDRESS=0x82A381e9A197c0ac9e2489F06332F849f2681029
+export ST_LIGHTER=$STLIGHTER_PROXY_ADDRESS
+export LT_ZEN=$LT_ZEN_HORIZEN
+cast call $LT_ZEN 'minter()(address)' --rpc-url $HORIZEN_RPC
+```
+
+- [ ] `ltZen.minter() == proxy`
+- [ ] Proxy initialized with A1 ZEN + A2 staker; owner = governance
+
+### A5 — InboundStation
+
+```bash
+forge script script/DeployInboundStation.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+# → set INBOUND_STATION_ADDRESS
+export INBOUND_STATION_ADDRESS=0x31AD52D4dE8164C0AF225d87237910435fb4FA6A
+export IN_STATION=$INBOUND_STATION_ADDRESS
+```
+
+- [ ] `zen()` / `zenOft()` = A1; `stLighter()` = proxy; `composeCaller()` = `LZ_ENDPOINT_HORIZEN`
+
+``` bash
+cast call $IN_STATION 'zen()(address)' --rpc-url $HORIZEN_RPC
+cast call $IN_STATION 'zenOft()(address)' --rpc-url $HORIZEN_RPC
+cast call $IN_STATION 'stLighter()(address)' --rpc-url $HORIZEN_RPC
+cast call $IN_STATION 'composeCaller()(address)' --rpc-url $HORIZEN_RPC
+```
+
+**Horizen ZEN inventory:** ZenTokenOFT has no faucet. Same-chain smoke needs ZEN bridged from Base (Phase C1 → send to EOA), then Phase D.
+
+---
+
+## 4. Phase B — Base Sepolia spoke
+
+### B1 — MockZEN
+
+```bash
+forge script script/DeployMockZEN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+# → set BASE_ZEN_TOKEN_ADDRESS
+export BASE_ZEN_TOKEN_ADDRESS=0x7543002E8fde59cdb84CAe38e5194668ac38eF7A
+export BASE_ZEN=$BASE_ZEN_TOKEN_ADDRESS
+```
+
+### B2 — ZenTokenOFTAdapter
+
+```bash
+export LZ_ENDPOINT_BASE=0x6EDCE65403992e310A62460808c4b910D972f10f
+forge script script/DeployZenTokenOFTAdapter.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+# → set BASE_ZEN_ADAPTER
+export BASE_ZEN_ADAPTER=0x09201d61A10F0629d7afE2c2883cAf328c34c1C3
+```
+
+- [ ] Adapter `token()` = MockZEN
+
+### B3 — LtZEN spoke
+
+```bash
+forge script script/DeployStLighterBase.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+# → set LT_ZEN_BASE
+export LT_ZEN_BASE=0xDDA46A46F6E162Cde0Dbc36c18fE832Bca59EF8F
+```
+
+- [ ] `minter() == address(0)`
+
+---
+
+## 5. Phase C — LayerZero wiring (two OFT pairs)
+
+### C1 — ZEN path (Adapter ↔ ZenTokenOFT)
+
+> **Both sides required.** `setPeer` + ULN must run on **Base and Horizen**. A one-sided wire (e.g. only Base peer set, Horizen `peers(BASE_EID)==0`) leaves LayerZero Scan in `WAITING FOR ULN CONFIG` / blocked — tokens lock on Base and never credit on Horizen.
+
+**On Base** (peer = Horizen ZenTokenOFT):
+
+```bash
+export HORIZEN_EID=40435
+export ZEN_OFT_LOCAL=$BASE_ZEN_ADAPTER
+export PEER_EID=$HORIZEN_EID
+export PEER_ZEN_OFT=$ZEN_TOKEN_ADDRESS
+forge script script/WireZenOft.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**On Horizen** (peer = Base adapter) — do not skip:
+
+```bash
+export BASE_EID=40245
+export ZEN_OFT_LOCAL=$ZEN_TOKEN_ADDRESS
+export PEER_EID=$BASE_EID
+export PEER_ZEN_OFT=$BASE_ZEN_ADAPTER
+forge script script/WireZenOft.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**Verify peers (both must be non-zero)**
+
+```bash
+cast call $BASE_ZEN_ADAPTER "peers(uint32)(bytes32)" $HORIZEN_EID --rpc-url $BASE_RPC
+# expect: bytes32 left-padded $ZEN_TOKEN_ADDRESS (not 0x0)
+
+cast call $ZEN_TOKEN_ADDRESS "peers(uint32)(bytes32)" $BASE_EID --rpc-url $HORIZEN_RPC
+# expect: bytes32 left-padded $BASE_ZEN_ADAPTER (not 0x0)
+```
+
+**DVN / ULN** — each chain; `OAPP_LOCAL` = local ZEN OApp, `PEER_EID` = remote eid. Script: [`ConfigureStLighterOFTDVN.s.sol`](../script/ConfigureStLighterOFTDVN.s.sol). Prefer explicit `setConfig` even if endpoint defaults exist (Scan / DVNs often wait on OApp-level ULN).
+
+**Base** (`OAPP_LOCAL` = adapter, peer eid = Horizen):
+
+```bash
+export OAPP_LOCAL=$BASE_ZEN_ADAPTER
+export PEER_EID=$HORIZEN_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_BASE
+export LZ_SEND_LIB=0xC1868e054425D378095A003EcbA3823a5D0135C9
+export LZ_RECEIVE_LIB=0x12523de19dc41c91F7d2093E0CFbB76b17012C8d
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**Horizen** (`OAPP_LOCAL` = ZenTokenOFT, peer eid = Base):
+
+```bash
+export OAPP_LOCAL=$ZEN_TOKEN_ADDRESS
+export PEER_EID=$BASE_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_HORIZEN
+export LZ_SEND_LIB=0x45841dd1ca50265Da7614fC43A361e526c0e6160
+export LZ_RECEIVE_LIB=0xd682ECF100f6F4284138AA925348633B0611Ae21
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xa78a78a13074ed93ad447a26ec57121f29e8fec2
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+How to refresh these values from a known-good OApp: [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) § Testnet ULN.
+
+**Smoke C1**
+
+- [ ] Peers non-zero both ways (commands above)
+- [ ] Base: `MockZEN.mint()` → `approve(adapter)` → `adapter.send` to **user EOA** on Horizen (empty `composeMsg`)
+- [ ] [LayerZero Scan (testnet)](https://testnet.layerzeroscan.com/) shows Delivered (not `WAITING FOR ULN CONFIG`)
+- [ ] User holds Horizen `ZenTokenOFT` balance
+
+```bash
+cast send $BASE_ZEN 'mint()' --rpc-url $BASE_RPC --private-key=$USER1_PRIVATE_KEY
+cast send $BASE_ZEN 'approve(address,uint256)' $BASE_ZEN_ADAPTER $(cast --to-wei 10000000000 ether) --rpc-url $BASE_RPC --private-key $USER1_PRIVATE_KEY
+```
+
+### C2 — ltZEN path
+
+**Horizen → set peer Base ltZEN**
+
+```bash
+export LT_ZEN_LOCAL=$LT_ZEN_HORIZEN
+export PEER_EID=$BASE_EID
+export PEER_LT_ZEN=$LT_ZEN_BASE
+forge script script/WireStLighterOFT.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**Base → set peer Horizen ltZEN**
+
+```bash
+export LT_ZEN_LOCAL=$LT_ZEN_BASE
+export PEER_EID=$HORIZEN_EID
+export PEER_LT_ZEN=$LT_ZEN_HORIZEN
+forge script script/WireStLighterOFT.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**DVN / ULN** for both ltZEN OApps — reuse the **same** per-chain `LZ_*` / `DVN_ADDRESSES` / `LZ_CONFIRMATIONS` as C1; only change `OAPP_LOCAL` (or `LT_ZEN_LOCAL`) to the local ltZEN and keep `PEER_EID` = remote.
+
+```bash
+# Base ltZEN
+export OAPP_LOCAL=$LT_ZEN_BASE
+export PEER_EID=$HORIZEN_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_BASE
+export LZ_SEND_LIB=0xC1868e054425D378095A003EcbA3823a5D0135C9
+export LZ_RECEIVE_LIB=0x12523de19dc41c91F7d2093E0CFbB76b17012C8d
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+
+# Horizen ltZEN
+export OAPP_LOCAL=$LT_ZEN_HORIZEN
+export PEER_EID=$BASE_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_HORIZEN
+export LZ_SEND_LIB=0x45841dd1ca50265Da7614fC43A361e526c0e6160
+export LZ_RECEIVE_LIB=0xd682ECF100f6F4284138AA925348633B0611Ae21
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xa78a78a13074ed93ad447a26ec57121f29e8fec2
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**Smoke C2**
+
+- [ ] After Phase D has ltZEN: Hub → Base → Hub; `issuedShares` / `convertToAssets` unchanged by bridge
+
+---
+
+## 6. Phase D — Same-chain Horizen smoke
+
+Requires Horizen ZEN from C1.
+
+- [ ] `ZEN.approve(StLighter)` + `deposit` → ltZEN minted; `issuedShares` increases
+- [ ] Optional: gasless `depositWithSigAndPermit` / DirectContractRelayer (`payer = user`)
+- [ ] `redeem` / `redeemWithSig`
+- [ ] Faucet: **Base MockZEN only** (Horizen OFT has no mint faucet)
+
+---
+
+## 7. Phase E — Wave A cross-chain stake smoke
+
+| Step | Expect |
+|------|--------|
+| E1 | Sign `CreditFromCompose` (InboundStation domain on Horizen; read `nonces` via Horizen RPC) |
+| E2 | Base: `approve(adapter)` if needed → `adapter.send(to=InboundStation, composeMsg=v1)` + LZ native fee |
+| E3 | After LZ: `InboundStation.credited(user) == amountLD` |
+| E4 | Sign `DepositWithSig(payer=Station)`; relayer/Direct → ltZEN; `credited == 0` |
+| E5 | Escape: `withdrawToHorizen` without stake |
+| E6 | Negatives: wrong payer / insufficient credit rejected |
+
+Frontend path: `/stake-crosschain` once env is filled (Phase F).  
+Redeem to Base is **Phase H** (requires Phase G deploy).
+
+---
+
+## 8. Phase F — Frontend / BFF env (Wave A)
+
+Map into `ltzen-frontend/.env.local` (see `ltzen-frontend/env.local.example`):
+
+| Frontend var | Source |
+|--------------|--------|
+| `NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS` | StLighter proxy |
+| `NEXT_PUBLIC_HORIZEN_LTZEN_ADDRESS` | LtZEN hub |
+| `NEXT_PUBLIC_HORIZEN_ZEN_ADDRESS` | ZenTokenOFT |
+| `NEXT_PUBLIC_HORIZEN_ZENSTAKER_ADDRESS` | ZenStaker |
+| `NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS` | InboundStation |
+| `NEXT_PUBLIC_BASE_LTZEN_ADDRESS` | LtZEN spoke |
+| `NEXT_PUBLIC_BASE_ZEN_ADDRESS` | MockZEN |
+| `NEXT_PUBLIC_BASE_ZEN_OFT_ADAPTER_ADDRESS` | Adapter |
+| `NEXT_PUBLIC_HORIZEN_EID` / `NEXT_PUBLIC_BASE_EID` | eids |
+
+- [ ] Relayer: DirectContractRelayer first; BFF optional
+- [ ] Transparency lists Base ERC20 + Adapter separately
+- [ ] Faucet UI only on Base (`/stake-crosschain`); Horizen `/stake` has no mint
+
+---
+
+## 9. Phase G — Wave B deploy (EgressStation + ZenOftStationBridge)
+
+**Prerequisites**: Phases A–C complete (especially **C1** ZEN peers + DVN). No new Base contracts — outbound unlocks via existing Adapter.
+
+### G1 — Deploy (Horizen)
+
+```bash         # A1 ZenTokenOFT
+export BASE_EID=40245
+export GOVERNANCE_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
+
+forge script script/DeployEgressStation.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+
+# → set:
+export EGRESS_STATION_ADDRESS=0xE852A3034062983DE015b331af0ea4c3c9bd7e5D
+# Original Bridge (minAmountLD bug) — replaced:
+# export ZEN_OFT_STATION_BRIDGE_ADDRESS=0xf9189d341642a9D047a08245078bf0B64e30215A
+# Redeployed Bridge (`minAmountLD=0` dust fix) via RedeployZenOftStationBridge:
+export ZEN_OFT_STATION_BRIDGE_ADDRESS=0xBAD0d77e9AdDa8Be5662F2bf2346ce4bb9bF9b39
+```
+
+- [x] G1 deployed (Horizen testnet) — addresses above; frontend `.env.local` wired
+- [x] Bridge redeployed after `SlippageExceeded` / dust fix; Egress `setBridge` updated
+
+Testnet: set `GOVERNANCE_ADDRESS` = deployer EOA so Egress ownership stays with the key that ran `setBridge`. If governance ≠ deployer, accept Ownable2Step on Egress after broadcast.
+
+### G2 — Post-deploy checks
+
+```bash
+export EG=$EGRESS_STATION_ADDRESS
+export BR=$ZEN_OFT_STATION_BRIDGE_ADDRESS
+
+cast call $EG 'zen()(address)' --rpc-url $HORIZEN_RPC
+cast call $EG 'stLighter()(address)' --rpc-url $HORIZEN_RPC
+cast call $EG 'bridge()(address)' --rpc-url $HORIZEN_RPC
+cast call $BR 'egress()(address)' --rpc-url $HORIZEN_RPC
+cast call $BR 'oft()(address)' --rpc-url $HORIZEN_RPC
+cast call $BR 'dstEid()(uint32)' --rpc-url $HORIZEN_RPC
+cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
+```
+
+- [ ] `Egress.zen() == ZenTokenOFT == Bridge.oft() == Bridge.zen()`
+- [ ] `Egress.stLighter() == STLIGHTER_PROXY_ADDRESS`
+- [ ] `Egress.bridge() == ZenOftStationBridge` (not placeholder)
+- [ ] `Bridge.egress() == EgressStation`
+- [ ] `Bridge.dstEid() == BASE_EID`
+- [ ] Owner of both = `GOVERNANCE_ADDRESS`
+- [ ] Egress / Bridge are **not** upgradeable proxies (plain deploys)
+
+### G3 — Relayer / funding notes
+
+- Relayer pays **Horizen native** for `bridgeToBase{value}` (LZ fee); quote via `ZenOftStationBridge.quoteBridgeNativeFee(amount, dest, extraOptions)`.
+- Optional `feeZen` on `bridgeToBase` pays the relayer in ZEN from credited assets (`feeZen < assets`, cap `MAX_GAS_FEE_ZEN = 10e18`).
+- Excess LZ native fee refunds to **EgressStation** (`receive()`), never the relayer EOA ([ADR §2](./stLighter-station-compose-adr.md)).
+- No pre-fund of Egress with ZEN required — float comes from `redeemAndCredit` → vault redeem.
+
+### G4 — rrelayer allowlist (when using BFF)
+
+Extend Horizen allowlist `to ∈ { StLighter proxy, InboundStation, EgressStation }` (Bridge is **not** called by relayer — only Egress calls Bridge).
+
+---
+
+## 10. Phase H — Wave B smoke (Redeem to Base)
+
+**Prerequisites**: Phase D or E left the user with Horizen **ltZEN**; Phase G deployed; C1 peers live.
+
+EIP-712 domains (Horizen `chainId`, `verifyingContract` = contract below):
+
+| Type | Contract | Typehash fields |
+|------|----------|-----------------|
+| `RedeemWithSig` | StLighter | **`receiver = EgressStation`**; binds **`relayer`** + `maxFeeZen` (`feeZen` unsigned) |
+| `BridgeToBase` | EgressStation | `(assets, dest, maxFeeZen, relayer, owner, nonce, deadline)` — `dest` = Base **B1** |
+| `WithdrawToHorizen` | EgressStation | escape hatch after credit |
+
+Station nonces are **separate** from StLighter nonces. Read `EgressStation.nonces(owner)` and `StLighter.nonces(owner)` independently.
+
+| Step | Expect |
+|------|--------|
+| H1 | User confirms **B1** `dest` (default = connected Base wallet; change requires explicit confirm — product §2.5.1) |
+| H2 | Sign `RedeemWithSig(receiver=Egress, relayer=…)` only (no separate CreditFromRedeem) |
+| H3 | Relayer: **`Egress.redeemAndCredit(...)`** → `credited(owner) == netZen` |
+| H4 | Sign `BridgeToBase(assets, dest=B1, maxFeeZen, relayer, …)` |
+| H5 | Relayer: `quoteBridgeNativeFee` → `Egress.bridgeToBase{value}(..., feeZen, relayer, extraOptions)` → Bridge `oft.send` → `onBridgeComplete` **in-tx**; `credited` / `pendingTotal` clear for that order |
+| H6 | After LZ delivery: Base `MockZEN.balanceOf(B1)` increases by bridged amount (minus any OFT dust rules; testnet expect full LD) |
+| H7 | Escape: after H3, skip bridge → `withdrawToHorizen` → user holds Horizen ZEN |
+| H8 | Negatives: wrong `relayer` / `feeZen > maxFeeZen`; non-Egress calling `bridgeZen`; insufficient `msg.value` for LZ fee |
+
+**Atomic redeem+credit (H3)**:
+
+```text
+EgressStation.redeemAndCredit(shares, maxFeeZen, feeZen, relayer, user, deadline, redeemSig)
+  → StLighter.redeemWithSig(receiver=Egress, …)
+  → _credit(user, assets - feeZen)
+```
+
+Redeploy note: Egress constructor takes `stLighter` (`STLIGHTER_PROXY_ADDRESS`). Upgrade StLighter for signed `relayer` first. Frontend: `NEXT_PUBLIC_RELAYER_FEE_ADDRESS` = rrelayer EOA.
+
+**B1 / recoverable** ([crosschain-gasless-spec §2.5](./stLighter-crosschain-gasless-spec.md)):
+
+- [ ] `dest` is signature-bound; UI shows irreversible Base destination before sign
+- [ ] If user abandons after credit: `withdrawToHorizen` restores Horizen ZEN
+- [ ] Pre-send bridge failures revert whole `bridgeToBase` (credit restored via tx revert) — no `onBridgeRefund` needed
+- [ ] Post-send LZ failure: out of MVP; document ops escalation only
+
+**Smoke vs same-chain redeem**: keep `/redeem` (Horizen ZEN to wallet) separate from Redeem-to-Base wizard; do not merge CTAs without endpoint copy.
+
+
+**reward**
+``` bash
+cast send $BASE_ZEN 'mint()' --rpc-url $BASE_RPC --private-key=$USER2_PRIVATE_KEY
+# bridge to horizen
+export HORIZEN_ZEN=$ZEN_TOKEN_ADDRESS
+cast send $HORIZEN_ZEN 'transfer(address,uint256)' $ZEN_STAKER_ADDRESS $(cast --to-wei 10 ether) --rpc-url $HORIZEN_RPC --private-key $USER2_PRIVATE_KEY
+cast send $ZEN_STAKER_ADDRESS 'notifyRewardAmount(uint256)' $(cast --to-wei 10 ether) --rpc-url $HORIZEN_RPC --private-key $USER2_PRIVATE_KEY
+```
+
+---
+
+## 11. Phase I — Frontend / BFF (Wave B)
+
+**Status**: Wave B UI/BFF shipped in `ltzen-frontend` (`/redeem-to-base`); enable `NEXT_PUBLIC_USE_RELAYER_BFF=1` + rrelayer allowlist/native for Egress.
+
+### I1 — Env additions
+
+| Var | Source |
+|-----|--------|
+| `NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS` | EgressStation |
+| `NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS` | ZenOftStationBridge |
+| `NEXT_PUBLIC_RELAYER_FEE_ADDRESS` | rrelayer EOA (EIP-712 `relayer` when BFF enabled) |
+
+Add to `ltzen-frontend/env.local.example` when Wave B UI lands — **done**.
+
+### I2 — Product checklist
+
+- [x] Wizard: amount → confirm B1 `dest` → sign redeem+credit → relay → sign bridge → relay+LZ wait → Base balance (`/redeem-to-base`)
+- [x] EIP-712: `CreditFromRedeem` / `BridgeToBase` / Egress `WithdrawToHorizen` (domain = Egress; Horizen chainId)
+- [x] BFF kinds: `redeemAndCredit` + `bridgeToBase` with native fee; signed `relayer` on Deposit/Redeem/Bridge
+- [x] DirectContractRelayer path for testnet (user pays Horizen gas) before forcing BFF
+- [x] `recoverable_hold` UX after credit: retry bridge (new sig/nonce) or withdraw to Horizen
+- [x] chainGating: Redeem to Base available when on Horizen (Base → switch guide)
+- [x] Transparency: list Egress + Bridge + note refundAddress = Egress
+
+### I3 — Acceptance (product)
+
+- [x] User with **no Horizen ETH** can complete Redeem to Base via BFF+relayer (meaningful gasless on L3 legs)
+- [x] Base receipt is exactly signed B1, not relayer EOA
+- [x] Same-chain Redeem copy remains “Receive ZEN on Horizen”
+
+**Testnet smoke refs (2026-07-26, BFF + rrelayer)**
+
+| Path | Horizen tx |
+|------|------------|
+| Wave B `bridgeToBase` | [`0xba09…b4e4`](https://horizen-testnet.explorer.caldera.xyz/tx/0xba09ec6bafca5a31484298fedfa38e0ae36372890a04d0dabc22053dbe75b4e4) |
+| Wave A `depositWithSig` (payer=InboundStation) | [`0x602b…0597`](https://horizen-testnet.explorer.caldera.xyz/tx/0x602bc6df52a5450d475f2383e4b853a8a208017f4068a34aed8e7ea36f290597) |
+
+---
+
+## 12. Address book (fill after broadcast)
+
+| Role | Chain | Address |
+|------|-------|---------|
+| ZenTokenOFT (ZEN) | Horizen | |
+| ZenStaker | Horizen | |
+| LtZEN hub | Horizen | |
+| StLighter proxy | Horizen | |
+| StLighter impl | Horizen | |
+| InboundStation | Horizen | |
+| EgressStation | Horizen | |
+| ZenOftStationBridge | Horizen | |
+| MockZEN | Base | |
+| ZenTokenOFTAdapter | Base | |
+| LtZEN spoke | Base | |
+| LZ Endpoint | Horizen | |
+| LZ Endpoint | Base | |
+| Horizen eid | — | |
+| Base eid | — | |
+
+---
+
+## 13. Known gaps
+
+- Wave B on-chain smoke (Phase H) still operator-run after rrelayer allowlist + native value for Egress
+- No Horizen ZEN faucet — bridge-first for same-chain smoke (Base MockZEN mint ≤256)
+- DVN/confirmations must be verified on **testnet** endpoints (mainnet ZenTokenOFT refs are guidance only); Preflight table is a snapshot — re-`getConfig` if LZ libs move
+- Incomplete Phase C1 (missing Horizen `setPeer` or either-chain ULN) → Scan `WAITING FOR ULN CONFIG` / blocked; fix wiring then **re-send** (stuck messages do not auto-retry)
+- After ULN/peer is fixed: Scan may show `Committer SUCCEEDED` + `Executor WAITING` if earlier failed sends left an **inbound nonce gap** — diagnose/fix with `Endpoint.skip` → [`stLighter-oft-debug-cases.md`](./stLighter-oft-debug-cases.md)
+- `composeCaller` assumed = Horizen LZ Endpoint; if MessagingComposer differs, set via InboundStation owner after deploy
+- Post-send LZ failure / partial refund on egress path: deferred past MVP ([ADR §2](./stLighter-station-compose-adr.md))
+
+---
+
+## Appendix — Mainnet delta
+
+When promoting to mainnet:
+
+- Prefer Timelock for StLighter / ltZEN / OFT / Station / Bridge ownership ([`DeployStLighterTimelock.s.sol`](../script/DeployStLighterTimelock.s.sol))
+- Align DVN with production Horizen ZenTokenOFT / USDC path ([`stLighter-oft-reference.md`](./stLighter-oft-reference.md))
+- Base may use production ERC20 ZEN + existing Adapter (not MockZEN)
+- Full security review: peers, proxy upgrades, Station allowlists, Egress refund routing — [`todo-list.md`](./todo-list.md) P2
+- Wave B: confirm production B1 UX + relayer native-fee treasury ops before hard-cutover

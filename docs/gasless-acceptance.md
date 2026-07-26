@@ -2,6 +2,7 @@
 
 > **P0-A** — `redeemWithSig` / `depositWithSigAndPermit` 经 `DirectContractRelayer`（用户钱包代发一笔 tx）。  
 > **P0-B** — 真 relayer（rrelayer + BFF）；校验规格见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)。
+> **产品策略（2026-07-18）**: 同链 vs 跨链 gasless 定义、禁止「完美 ZEN deposit gasless」宣传、跨链 Receiver 路径见 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)。下文「Gasless deposit P0-B 暂缓」仅适用于**同链**（钱包持 ZEN + approve）；**不**否定跨链 stake 经共享接收合约的 meaningful gasless deposit（规范 §2.2 / §7）。
 
 ## 状态
 
@@ -38,9 +39,11 @@
 
 Gas sidecar：`deploy/rrelayer-horizen/` + `gas_provider: CUSTOM`（解决 Horizen `max_priority_fee: 0`）。
 
-### Gasless deposit（P0-B 暂缓）
+### Gasless deposit（P0-B 暂缓 — 同链路径）
 
-**暂缓原因**：ZEN 存入的 gasless **不纯粹**——即使用 `depositWithSigAndPermit`，用户仍可能至少需要 **一次链上 `approve`**（ZEN token 对 StLighter 的 allowance），具体机制（permit 支持、无限 approve 策略、Horizen 官方推荐路径）**待与 Horizen 官方沟通**后再定。
+**暂缓原因（同链）**：ZEN 无 EIP-2612，gasless **不纯粹**——即使用 `depositWithSigAndPermit`，用户仍可能至少需要 **一次链上 `approve`**（ZEN token 对 StLighter 的 allowance）。产品上不得宣传为完美 gasless；策略见 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) §2.1 / §6。
+
+**跨链路径不在本暂缓范围内**：Base→Horizen 入金打入共享 Receiver 后再 `depositWithSig*`（强制 relayer）是规范选定的绕过方式；验收用例待 M1/M2 落地后另增章节。
 
 | 路径 | P0-B 状态 | 备注 |
 |------|-----------|------|

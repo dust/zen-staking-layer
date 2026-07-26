@@ -297,6 +297,16 @@
       },
       {
         "internalType": "address",
+        "name": "_payer",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_relayer",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
         "name": "_user",
         "type": "address"
       },
@@ -343,6 +353,16 @@
         "internalType": "uint256",
         "name": "_feeZen",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_payer",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_relayer",
+        "type": "address"
       },
       {
         "internalType": "address",
@@ -689,6 +709,11 @@
         "internalType": "uint256",
         "name": "_feeZen",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_relayer",
+        "type": "address"
       },
       {
         "internalType": "address",
@@ -1173,6 +1198,11 @@
   {
     "inputs": [],
     "name": "StLighter__InvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "StLighter__PayerMustBeUser",
     "type": "error"
   },
   {

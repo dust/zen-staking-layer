@@ -61,6 +61,34 @@ function lower(err: unknown): string {
   return `${parts}${fromCause}`.toLowerCase();
 }
 
+/** Best-effort human string from viem/wallet errors (for UI + console). */
+export function rawTxErrorMessage(err: unknown): string {
+  if (!err) return "unknown error";
+  if (typeof err === "string") return err;
+  const anyErr = err as {
+    shortMessage?: string;
+    message?: string;
+    details?: string;
+    cause?: { shortMessage?: string; message?: string };
+  };
+  return (
+    anyErr.shortMessage ||
+    anyErr.cause?.shortMessage ||
+    anyErr.message ||
+    anyErr.cause?.message ||
+    anyErr.details ||
+    String(err)
+  );
+}
+
+/**
+ * Dev-friendly console dump. Always safe to call from catch blocks.
+ */
+export function logTxError(context: string, err: unknown): void {
+  // Keep visible in production local debugging; browsers still gate by console filter.
+  console.error(`[ltZEN:${context}]`, rawTxErrorMessage(err), err);
+}
+
 /**
  * Map a raw thrown error to a stable category. Pure (no I/O) so it's trivially testable and
  * safe to call from any hook's catch block.
@@ -76,6 +104,7 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
   }
 
   const text = lower(err);
+  const detail = rawTxErrorMessage(err);
 
   // User rejected in wallet (viem UserRejectedRequestError / 4001). Neutral, not an error.
   if (
@@ -105,7 +134,7 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
     };
   }
 
-  if (text.includes("insufficient allowance") || text.includes("allowance")) {
+  if (text.includes("insufficient allowance") || text.includes("erc20: insufficient allowance")) {
     return {
       kind: "needs-approval",
       message: copy.errors.needsApproval,
@@ -117,7 +146,7 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
   if (
     text.includes("chain mismatch") ||
     text.includes("does not match the target chain") ||
-    text.includes("chain id") ||
+    text.includes("must match the active chainid") ||
     text.includes("wrong network")
   ) {
     return {
@@ -128,8 +157,29 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
     };
   }
 
+  // LayerZero / OFT common reverts
+  if (
+    text.includes("no peer") ||
+    text.includes("lz_path") ||
+    text.includes("onlypeer") ||
+    text.includes("invalidoptions") ||
+    text.includes("notenoughnativeto") ||
+    text.includes("0x6592671c") ||
+    text.includes("lz_uln_invalidworkeroptions")
+  ) {
+    return {
+      kind: "unknown",
+      message:
+        text.includes("0x6592671c") || text.includes("invalidworkeroptions")
+          ? "LayerZero ULN rejected executor options (LZ_ULN_InvalidWorkerOptions). Type-3 options encoding was fixed — hard-refresh and retry bridge."
+          : detail.slice(0, 240),
+      tone: "error",
+      retryable: true,
+    };
+  }
+
   // viem deadline / slippage-ish reverts during preview drift.
-  if (text.includes("deadline") || text.includes("slippage") || text.includes("rate")) {
+  if (text.includes("slippage") || (text.includes("rate") && text.includes("moved"))) {
     return { kind: "rate-moved", message: copy.errors.rateMoved, tone: "error", retryable: true };
   }
 
@@ -145,6 +195,17 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
     text.includes("internal json-rpc")
   ) {
     return { kind: "rpc", message: copy.errors.rpc, tone: "error", retryable: true };
+  }
+
+  // Prefer the wallet/viem short message over a opaque generic — needed for OFT/LZ debugging.
+  const trimmed = detail.trim();
+  if (trimmed && trimmed.toLowerCase() !== "error" && !trimmed.toLowerCase().startsWith("unknown")) {
+    return {
+      kind: "unknown",
+      message: trimmed.length > 280 ? `${trimmed.slice(0, 277)}…` : trimmed,
+      tone: "error",
+      retryable: true,
+    };
   }
 
   return { kind: "unknown", message: copy.errors.unknown, tone: "error", retryable: true };

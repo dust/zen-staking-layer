@@ -19,6 +19,9 @@ networks:
       super_fast: 2
     gas_provider: CUSTOM
     # ... your existing permissions / allowlist for StLighter proxy ...
+    # Wave A/B: also allow InboundStation + EgressStation (NOT ZenOftStationBridge).
+    # Redeem to Base needs native `value` on EgressStation.bridgeToBase — do not leave
+    # disable_native_transfer: true unless you have a per-to exception for Egress.
 
 gas_providers:
   custom:

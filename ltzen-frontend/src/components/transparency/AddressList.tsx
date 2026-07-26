@@ -20,7 +20,16 @@ export function AddressList() {
     { label: a.ltZEN, address: horizenAddress("ltZEN"), chainId: horizen.id },
     { label: a.zenStaker, address: horizenAddress("zenStaker"), chainId: horizen.id },
     { label: a.zen, address: horizenAddress("zen"), chainId: horizen.id },
+    { label: a.inboundStation, address: horizenAddress("inboundStation"), chainId: horizen.id },
+    { label: a.egressStation, address: horizenAddress("egressStation"), chainId: horizen.id },
+    {
+      label: a.zenOftStationBridge,
+      address: horizenAddress("zenOftStationBridge"),
+      chainId: horizen.id,
+    },
     { label: a.baseLtZEN, address: baseAddress("ltZEN"), chainId: base.id },
+    { label: a.baseZen, address: baseAddress("zen"), chainId: base.id },
+    { label: a.baseZenOftAdapter, address: baseAddress("zenOftAdapter"), chainId: base.id },
   ];
 
   const configured = entries.filter((e) => e.address);
@@ -29,6 +38,7 @@ export function AddressList() {
     <Card>
       <h2 className="font-display text-sm font-semibold tracking-tight text-white">{copy.transparency.addressesHeading}</h2>
       <p className="mt-1 text-xs text-zinc-500">{copy.transparency.addressesNote}</p>
+      <p className="mt-1 text-xs text-zinc-600">{copy.transparency.egressRefundNote}</p>
 
       {configured.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500">{copy.states.notConfigured}</p>

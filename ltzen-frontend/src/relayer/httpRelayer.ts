@@ -15,7 +15,7 @@ import type { Relayer, RelayRequest, RelayResult, RelayHandle, RelayStatus } fro
 import { relayClientLog } from "./relayDebug";
 
 const POLL_MS = 1_500;
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 120_000;
 
 function resolveEndpoint(base: string, path: string): string {
   if (base.startsWith("http://") || base.startsWith("https://")) {

@@ -15,7 +15,8 @@ const ICONS: Record<string, string> = {
   "/": "◎",
   "/stake": "↧",
   "/redeem": "↥",
-  "/bridge": "⇄",
+  "/stake-crosschain": "⇄",
+  "/redeem-to-base": "⇢",
   "/transparency": "◫",
 };
 

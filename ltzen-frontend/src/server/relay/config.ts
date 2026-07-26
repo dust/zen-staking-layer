@@ -24,6 +24,21 @@ export function stLighterAddress(): `0x${string}` | undefined {
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
 }
 
+export function inboundStationAddress(): `0x${string}` | undefined {
+  const v = process.env.NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS?.trim();
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
+}
+
+export function egressStationAddress(): `0x${string}` | undefined {
+  const v = process.env.NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS?.trim();
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
+}
+
+export function zenOftStationBridgeAddress(): `0x${string}` | undefined {
+  const v = process.env.NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS?.trim();
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;
+}
+
 export function ltZenAddress(): `0x${string}` | undefined {
   const v = process.env.NEXT_PUBLIC_HORIZEN_LTZEN_ADDRESS?.trim();
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined;

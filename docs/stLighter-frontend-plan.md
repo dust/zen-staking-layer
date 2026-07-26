@@ -2,11 +2,12 @@
 
 > **用途**:把三份 dashboard 文档(design / uiux-spec / tone-guide)落地为一个可实施的前端工程计划。本文是**工程计划**(技术栈、目录、里程碑、任务分解、验收),不重复 UI/交互规格本身。
 > **关联**:界面交互 [`stLighter-dashboard-uiux-spec.md`](./stLighter-dashboard-uiux-spec.md);复利叙事 [`stLighter-dashboard-design.md`](./stLighter-dashboard-design.md);视觉文案 [`stLighter-dashboard-tone-guide.md`](./stLighter-dashboard-tone-guide.md);ABI/指标 [`../abi/README.md`](../abi/README.md);**待办与优先级** [`todo-list.md`](./todo-list.md)。
-> **最后更新**:2026-06-22（M0–M4 + Design Uplift D1–D4 已落地审计）
+> **跨链 / gasless（2026-07-18）**: 产品原则与目标动作矩阵以 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) 为准。下文「首版范围 / Base 链动作」中「Base 仅 ltZEN OFT、不在 Base 做 stake」等假设**已被该规范部分取代**（新增 Base 上 cross-chain stake；同链 deposit/redeem 仍仅 Horizen）。冲突时以跨链 gasless 规范为准；代码对齐见该规范 §7 M4。
+> **最后更新**:2026-07-23（Wave A Cross-chain Stake 落地；Redeem to Base = Wave B）
 
 ---
 
-## 当前状态快照（2026-06-22 代码审计）
+## 当前状态快照（2026-07-23）
 
 | 里程碑 | 状态 | 说明 |
 |--------|------|------|
@@ -15,9 +16,11 @@
 | **M2** Stake | ✅ | `useFaucet`、`useDeposit`(标准 + `depositWithSigAndPermit` gasless)、`DirectContractRelayer`/`MockRelayer`/`HttpRelayer` 抽象 |
 | **M3** Redeem | ✅ | `useRedeem`、`RedeemForm`(份额/ZEN 切换、`redeemWithSig` gasless、末位全额提示) |
 | **M4** Transparency + 打磨 | ✅ | `useTransparency`、`RawMetricsTable`/`AddressList`/`HarvestHistory`(占位)、`BottomTabBar`、暂停仅挡 deposit |
-| **M5** Base Bridge | ⏳ | 导航已预留 `/bridge`，**页面与 `useBridge` 未实现**；待 Base ltZEN + OFT 接线 |
+| **Wave A** Cross-chain Stake | ✅ | `/stake-crosschain`：Base **ERC20 ZEN** `approve` + **ZenTokenOFTAdapter.send** + compose → InboundStation → `depositWithSig(payer=Station)`；`withdrawToHorizen`；nav「From Base」 |
+| **Wave B** Redeem to Base | ⏳ | Egress EIP-712、redeem+credit 同 tx、`bridgeToBase`、B1 确认 — **未开始** |
+| **M5** Base ltZEN Bridge | ⏳ | `/bridge` 占位；完整 OFT 页待 Wave B / P1 |
 | **Design Uplift D1–D4** | ✅ | 见 [`stLighter-frontend-design-uplift-plan.md`](./stLighter-frontend-design-uplift-plan.md) |
-| **Relayer 后端** | ⏳ | **P0** — BFF 校验设计见 [`stLighter-relayer-design.md`](./stLighter-relayer-design.md)；`validate.ts` + rrelayer 联调见 [`todo-list.md`](./todo-list.md) §P0-B |
+| **Relayer 后端** | ⏳ | P0-B redeem 联调；Station Wave A `depositWithSig`/`withdrawToHorizen` 已接线 |
 
 偏差与待办见 [`todo-list.md`](./todo-list.md)。
 
@@ -31,17 +34,17 @@
 | 代码位置 | 同仓库子目录 **`ltzen-frontend/`** |
 | 历史数据后端 | **先纯 RPC**(实时 `eth_call`);Goldsky 子图后置,历史曲线/APY 第一版用前端轮询采样或留占位 |
 | 架构 | **多链 / chain-aware**(Horizen + Base 两个 EVM 网络),链选择器驱动可用动作(uiux-spec §6.1) |
-| 首版范围 | **Horizen 全功能闭环优先**(Overview/Stake/Redeem/Transparency,标准 approve+deposit);**Base 跨链页紧随其后**(仅 ltZEN 跨链转移 + gasless),不阻塞 Horizen 闭环 |
-| Base 链动作 | **仅 ltZEN 在 Horizen⇄Base 跨链转移(OFT,可自定义接收地址)+ gasless**;**不在 Base 做 deposit/redeem**(锚定 Horizen,uiux-spec §6.1) |
-| gasless | **首版先 Horizen 的 gasless deposit/redeem**;Base 的 gasless 跨链紧随;两链统一走**抽象 relayer 接口**(选择端点 → 提交 metaTx → track tx 状态变化) |
+| 首版范围 | **Horizen 全功能闭环优先**(Overview/Stake/Redeem/Transparency,标准 approve+deposit);**Base 跨链页紧随其后**(历史:仅 ltZEN OFT)。**修订**: 跨链 stake / Redeem to Base 见 [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) |
+| Base 链动作 | **历史**: 仅 ltZEN OFT + gasless bridge;**不在 Base 做同链 deposit/redeem**。**修订**: Base 上新增 **cross_chain_stake**（ERC20 `approve` + **OFTAdapter** → InboundStation → `depositWithSig` payer=Station）；同链 deposit/redeem 仍仅 Horizen |
+| gasless | **历史**: Horizen deposit/redeem + Base bridge。**修订**: 同链 redeem = 真零 gas；同链 deposit 诚实标注 approve；跨链 L3 deposit **强制** relayer（Station 路径）— 见跨链 gasless 规范。Wave A **不**宣称 Base OFT send 完美 gasless |
 | 合约地址 | **env 占位后填**(`NEXT_PUBLIC_*`,按链分组),代码不硬编码 |
 | 测试币 | **内置水龙头按钮**(调 `MockZEN.mint()` 领 256 ZEN,仅 Horizen) |
 | 设计 | **代码优先**,Tailwind + 语义色板自带样式,不等 Figma |
 | 组件库 | **Tailwind + `theme.ts` 自研组件**(未用 shadcn;Design Uplift 亦禁止重型 UI 库) |
 
-**首版交付顺序**:M0–M4 ✅ 已完成；**M5** Base 跨链页待 Base ltZEN + OFT 接线。
+**首版交付顺序**:M0–M4 ✅；**Wave A** Cross-chain Stake ✅；**Wave B** Redeem to Base + **M5** ltZEN OFT ⏳。
 
-**首版明确不含**(留后续):`depositWithPermit`(非 gasless)、Goldsky 子图、Base 端 deposit/redeem、真实 relayer 后端。
+**首版明确不含**(留后续):`depositWithPermit`(非 gasless)、Goldsky 子图、Base 端 deposit/redeem、真实 relayer 后端（部分已落地）。
 
 ```
 阶段 0 ✅
@@ -50,10 +53,10 @@ M0 ✅ → M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅
     ↓
 Design D1 ✅ → D2 ✅ → D3 ✅ → D4 ✅
     ↓
-M5 (Bridge) ⏳  ·  **当前优先 P0-B**: BFF validate/simulate → rrelayer 联调 — [`stLighter-relayer-design.md`](./stLighter-relayer-design.md) · [`todo-list.md`](./todo-list.md)
+Wave A Cross-chain Stake ✅  ·  Wave B Redeem to Base ⏳  ·  M5 ltZEN Bridge ⏳
 ```
 
-**重启时建议**:读 [`todo-list.md`](./todo-list.md) P0 项 → 对照本文件 §M5 验收。
+**重启时建议**:读 [`todo-list.md`](./todo-list.md) P0-Station Wave B → 对照跨链 gasless 规范。
 
 ---
 

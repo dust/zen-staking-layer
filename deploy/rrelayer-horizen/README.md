@@ -29,6 +29,27 @@ cp deploy/rrelayer-horizen/docker-compose.gas-stub.yaml "$RRELAYER_PROJECT/"
 
 (Path above is relative to zen-staking-layer repo root.)
 
+```bash
+export rrelayer_name=relayer_horizen
+source ./.env
+
+curl -X POST http://localhost:8000/relayers/2651420/new \
+  -u "$RRELAYER_AUTH_USERNAME:$RRELAYER_AUTH_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "$rrelayer_name"}'
+ 
+#{"id":"01036eda-7100-49b7-8880-69ac7a9efd00",#"address":"0x696efefee4266fae9175579bc8475c7dfd8406a6"}
+
+export rrelayer_id=01036eda-7100-49b7-8880-69ac7a9efd00
+
+curl -X POST http://localhost:8000/signing/relayers/$rrelayer_id/message \
+  -u "$RRELAYER_AUTH_USERNAME:$RRELAYER_AUTH_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello, World! Please sign this message to authenticate."
+  }'
+```
+
 ### 2. Start gas sidecar
 
 **Standalone (rrelayer runs via `rrelayer start` on host):**
@@ -50,7 +71,30 @@ Merge `rrelayer.yaml.snippet.yaml`:
   - `http://localhost:8787` — if rrelayer runs on **host**
   - `http://gas-stub:8787` — if rrelayer runs in **Docker** on the same compose network
 
-Keep your existing StLighter proxy **allowlist** and `disable_native_transfer: true`.
+Keep your existing StLighter proxy **allowlist**. For Wave A/B Stations, also allow:
+
+```text
+to ∈ {
+  StLighter proxy,
+  InboundStation,
+  EgressStation
+}
+```
+
+Do **not** allowlist `ZenOftStationBridge` — only EgressStation calls the bridge.
+
+### Native value (Redeem to Base / `bridgeToBase`)
+
+Egress `bridgeToBase` is **payable** (LayerZero native fee). The BFF calls
+`relayer.transaction.send({ to: EgressStation, data, value })`.
+
+If your rrelayer project has `disable_native_transfer: true`, either:
+
+1. Disable that flag for the Horizen relayer used by ltzen-frontend, **or**
+2. Configure an allowlist exception that permits native `value` **only** when `to == EgressStation`.
+
+Without this, `bridgeToBase` gasless will fail even when the EIP-712 signature is valid.
+Fund the relayer wallet with enough Horizen native for LZ fees + gas.
 
 ### 4. Restart rrelayer & clear stuck txs
 
@@ -75,7 +119,7 @@ Quick check:
 ```bash
 curl -s http://localhost:8787/2651420 | jq '.fast'
 curl -s -u "$RRELAYER_AUTH_USERNAME:$RRELAYER_AUTH_PASSWORD" \
-  http://localhost:8000/relayers/<RELAYER_ID>
+  http://localhost:8000/relayers/$rrelayer_id
 ```
 
 ## Tuning
