@@ -36,6 +36,9 @@ sensible testnet defaults; two things you actually need to set:
 
 See [`../docs/gasless-acceptance.md`](../docs/gasless-acceptance.md) · [`../docs/stLighter-rrelayer-setup.md`](../docs/stLighter-rrelayer-setup.md) · [`../docs/stLighter-relayer-design.md`](../docs/stLighter-relayer-design.md) (BFF validation spec).
 
+> **Note:** `rrelayer@1.2.0` TS SDK sends `x-api-key`, but the server expects `x-rrelayer-api-key`.  
+> `npm postinstall` runs `scripts/patch-rrelayer-header.js` to fix this (Docker `npm ci` included).
+
 ## Scripts
 
 ```bash
