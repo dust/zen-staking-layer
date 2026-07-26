@@ -1,0 +1,6 @@
+.env
+certs/*.pem
+certs/fullchain.pem
+certs/privkey.pem
+certbot-www/*
+!certbot-www/.gitkeep

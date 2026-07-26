@@ -49,16 +49,30 @@ rrelayer start
 
 ## 2. 配置 ltzen-frontend
 
-`.env.local`（服务端变量**不要**加 `NEXT_PUBLIC_`）：
+### 生产（推荐）：统一 Docker 编排
+
+见 **[`deploy/README.md`](../deploy/README.md)**。`ltzen-frontend` 与 `rrelayer` 同 compose；BFF 经内网访问 `http://rrelayer:8000`，**不**再使用 Vercel，也**不**对外暴露 rrelayer。
+
+```bash
+cd deploy
+cp .env.example .env   # 填入 NEXT_PUBLIC_*、RRELAYER_*、mnemonic 等
+make release
+```
+
+### 本地开发 `.env.local`
+
+服务端变量（**不要**加 `NEXT_PUBLIC_`，API key 勿进浏览器）：
 
 ```bash
 # 启用 BFF（浏览器走 /api/relay，不直连 rrelayer）
 NEXT_PUBLIC_USE_RELAYER_BFF=1
 
 # rrelayer（仅服务端）
+# 本地直连: http://localhost:8000
+# compose 内: http://rrelayer:8000（由 deploy/docker-compose.yml 注入）
 RRELAYER_SERVER_URL=http://localhost:8000
 RRELAYER_RELAYER_ID=<uuid-from-rrelayer-list>
-RRELAYER_API_KEY=<api-key>          # 或 RRELAYER_AUTH_USERNAME + RRELAYER_AUTH_PASSWORD
+RRELAYER_API_KEY=<api-key>
 
 # 可选：relayer 收取的 ZEN 手续费（bps，默认 50 = 0.5%）
 RELAYER_FEE_BPS=50
@@ -78,8 +92,9 @@ Horizen 合约地址继续用现有 `NEXT_PUBLIC_HORIZEN_*`（BFF 读取 StLight
 
 - 监控 relayer 钱包原生 gas 余额（webhook `low_balance` 可选）
 - 轮换 `RRELAYER_API_KEY`
-- 生产：BFF 与 rrelayer 分网络部署；Horizen RPC 与 allowlist 复核
+- 生产：统一 `deploy/` compose；外层 nginx（`staking.lighter.im`）→ frontend BFF → 内网 rrelayer；勿公网暴露 `:8000`
 - **禁止**将 rrelayer API key 暴露给浏览器；所有 meta-tx 须经 BFF 校验层
+- basic auth 仅用于 VPS/CLI 管理；BFF 使用 scoped API key
 
 ## 5. 调试日志（联调）
 
@@ -119,32 +134,15 @@ Horizen Testnet RPC **拒绝** `max_priority_fee_per_gas = 0` 的 EIP-1559 交�
 
 ### 修复：CUSTOM gas provider（compose + 静态 JSON）
 
-**推荐**：在 rrelayer 部署侧用 nginx sidecar 提供静态 gas JSON，与 rrelayer 同 compose 网络。
+**推荐**：统一 `deploy/` compose 里由 `gas-stub` 提供静态 gas JSON（`:8787` 仅内网）。公网 TLS 由内网另一台 nginx 终结 `https://staking.lighter.im`，再反代到本栈宿主机 `:6000`（容器内 frontend 仍为 `:3000`）。
 
-本仓库参考文件：**[`deploy/rrelayer-horizen/`](../deploy/rrelayer-horizen/)**（含 `horizen-gas.json`、`docker-compose.gas-stub.yaml`、`rrelayer.yaml.snippet.yaml`、逐步 README）。
-
-**快速步骤：**
+本仓库参考文件：**[`deploy/`](../deploy/)**（`docker-compose.yml`、`nginx/gas.conf`、`rrelayer/`）。
 
 ```bash
-# 1. 复制到 rrelayer 项目目录
-RRELAYER_PROJECT=/path/to/your/rrelayer-project
-cp deploy/rrelayer-horizen/{horizen-gas.json,nginx.conf,docker-compose.gas-stub.yaml} "$RRELAYER_PROJECT/"
-
-# 2. 启动 gas sidecar
-cd "$RRELAYER_PROJECT"
-docker compose -f docker-compose.gas-stub.yaml up -d
-curl -s http://localhost:8787/2651420 | jq .
-
-# 3. 合并 rrelayer.yaml（见 deploy/rrelayer-horizen/rrelayer.yaml.snippet.yaml）
-#    gas_provider: CUSTOM
-#    gas_providers.custom.endpoint:
-#      - http://localhost:8787     ← rrelayer 跑在宿主机
-#      - http://gas-stub:8787       ← rrelayer 跑在 compose 同网络
-
-# 4. 重启 rrelayer；取消 DB 里卡住的 PENDING tx
-rrelayer start
+cd deploy && make release
+# rrelayer.yaml: gas_providers.custom.endpoint = http://gas-stub:8787
 ```
 
-**4. 清理**：若之前有卡在 PENDING 的 tx（如 `a4bec860-...`），在 rrelayer CLI/API 中 cancel，避免 nonce 阻塞后续发送。
+若有卡在 PENDING 的 tx，在 rrelayer CLI/API 中 cancel，避免 nonce 阻塞。
 
 验证：rrelayer 日志应显示 `max_priority_fee` **> 0**，且出现 `MINED` / `CONFIRMED`。

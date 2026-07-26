@@ -641,8 +641,7 @@ export default function TermsPage() {
 
         <H2>24. Contact</H2>
         <P>
-          Questions about these Terms: <Strong>[legal@…]</Strong> — <Strong>[Operator Legal Entity]</Strong>,{" "}
-          <Strong>[address, if required]</Strong>.
+          Questions about these Terms: <Strong>lighterim@proton.me</Strong>.
         </P>
 
         <H2>25. Acknowledgment</H2>

@@ -1,0 +1,127 @@
+# Unified stack behind an *external* edge nginx (not in this compose):
+#
+#   Internet → https://staking.lighter.im  (other nginx on the LAN)
+#                → http://<this-host>:${FRONTEND_PORT:-6000}  (ltzen-frontend)
+#                     → http://rrelayer:8000   (compose network only)
+#   rrelayer → http://gas-stub:8787/{chainId} (CUSTOM gas; not published)
+#   rrelayer → postgresql:5432                (not published)
+#
+# This compose does NOT bind :80 / :443.
+
+name: ltzen
+
+volumes:
+  postgres_data:
+    driver: local
+
+services:
+  postgresql:
+    image: postgres:16
+    container_name: ltzen-postgres
+    shm_size: 1g
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 13s
+      timeout: 5s
+      retries: 5
+
+  # Horizen CUSTOM gas JSON only — compose-internal; no host ports.
+  gas-stub:
+    image: nginx:1.27-alpine
+    container_name: ltzen-gas-stub
+    restart: unless-stopped
+    volumes:
+      - ./nginx/gas.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./rrelayer/horizen-gas.json:/usr/share/nginx/html/horizen-gas.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  rrelayer:
+    image: ghcr.io/joshstevens19/rrelayer
+    container_name: ltzen-rrelayer
+    restart: unless-stopped
+    volumes:
+      - ./rrelayer:/app/project
+    command: start -p /app/project
+    expose:
+      - "8000"
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}
+      HOST: "0.0.0.0"
+      BIND: "0.0.0.0"
+      RRELAYER_HOST: "0.0.0.0"
+      RRELAYER_PORT: "8000"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      gas-stub:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8000/ >/dev/null 2>&1 || exit 0",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../ltzen-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_WC_PROJECT_ID: ${NEXT_PUBLIC_WC_PROJECT_ID}
+        NEXT_PUBLIC_USE_RELAYER_BFF: ${NEXT_PUBLIC_USE_RELAYER_BFF:-1}
+        NEXT_PUBLIC_HORIZEN_RPC_URL: ${NEXT_PUBLIC_HORIZEN_RPC_URL}
+        NEXT_PUBLIC_HORIZEN_EXPLORER_URL: ${NEXT_PUBLIC_HORIZEN_EXPLORER_URL}
+        NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS: ${NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS}
+        NEXT_PUBLIC_HORIZEN_LTZEN_ADDRESS: ${NEXT_PUBLIC_HORIZEN_LTZEN_ADDRESS}
+        NEXT_PUBLIC_HORIZEN_ZEN_ADDRESS: ${NEXT_PUBLIC_HORIZEN_ZEN_ADDRESS}
+        NEXT_PUBLIC_HORIZEN_ZENSTAKER_ADDRESS: ${NEXT_PUBLIC_HORIZEN_ZENSTAKER_ADDRESS}
+        NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS: ${NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS:-}
+        NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS: ${NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS:-}
+        NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS: ${NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS:-}
+        NEXT_PUBLIC_BASE_CHAIN_ID: ${NEXT_PUBLIC_BASE_CHAIN_ID:-84532}
+        NEXT_PUBLIC_BASE_CHAIN_NAME: ${NEXT_PUBLIC_BASE_CHAIN_NAME:-Base Sepolia}
+        NEXT_PUBLIC_BASE_RPC_URL: ${NEXT_PUBLIC_BASE_RPC_URL}
+        NEXT_PUBLIC_BASE_EXPLORER_URL: ${NEXT_PUBLIC_BASE_EXPLORER_URL}
+        NEXT_PUBLIC_BASE_LTZEN_ADDRESS: ${NEXT_PUBLIC_BASE_LTZEN_ADDRESS:-}
+        NEXT_PUBLIC_BASE_ZEN_ADDRESS: ${NEXT_PUBLIC_BASE_ZEN_ADDRESS:-}
+        NEXT_PUBLIC_BASE_ZEN_OFT_ADAPTER_ADDRESS: ${NEXT_PUBLIC_BASE_ZEN_OFT_ADAPTER_ADDRESS:-}
+        NEXT_PUBLIC_HORIZEN_EID: ${NEXT_PUBLIC_HORIZEN_EID:-}
+        NEXT_PUBLIC_BASE_EID: ${NEXT_PUBLIC_BASE_EID:-}
+        NEXT_PUBLIC_RELAYER_FEE_ADDRESS: ${NEXT_PUBLIC_RELAYER_FEE_ADDRESS:-}
+        NEXT_PUBLIC_HERO_RATE_UNITS: ${NEXT_PUBLIC_HERO_RATE_UNITS:-1000}
+    image: ltzen-frontend:${IMAGE_TAG:-latest}
+    container_name: ltzen-frontend
+    restart: unless-stopped
+    # Reachable by the LAN edge nginx that terminates https://staking.lighter.im
+    # Default: loopback only (same-host reverse proxy). Set FRONTEND_BIND=0.0.0.0 for LAN.
+    ports:
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-6000}:3000"
+    env_file:
+      - ./.env
+    environment:
+      # BFF → rrelayer on the compose network (never public).
+      RRELAYER_SERVER_URL: ${RRELAYER_SERVER_URL:-http://rrelayer:8000}
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      rrelayer:
+        condition: service_started

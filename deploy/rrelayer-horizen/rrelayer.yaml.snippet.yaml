@@ -1,9 +1,8 @@
 # Merge into your rrelayer project rrelayer.yaml (Horizen network block + gas_providers).
 #
 # Prerequisites:
-#   - gas-stub running (docker compose — see README.md)
-#   - For compose: endpoint uses service name `gas-stub` on the same Docker network
-#   - For local rrelayer start (host): endpoint http://localhost:8787
+#   - Production compose: nginx edge (see docker-compose.yml) serves gas on :8787 internally
+#   - Local/dev: docker-compose.gas-stub.yaml + endpoint http://localhost:8787
 
 networks:
   - name: horizen_testnet
@@ -18,6 +17,11 @@ networks:
       fast: 4
       super_fast: 2
     gas_provider: CUSTOM
+    # Scoped BFF keys — `relayer` is the EOA address (0x...), keys are secrets from .env.
+    api_keys:
+      - relayer: "${RRELAYER_EOA_ADDRESS}"
+        keys:
+          - "${RRELAYER_API_KEY}"
     # ... your existing permissions / allowlist for StLighter proxy ...
     # Wave A/B: also allow InboundStation + EgressStation (NOT ZenOftStationBridge).
     # Redeem to Base needs native `value` on EgressStation.bridgeToBase — do not leave
@@ -25,8 +29,8 @@ networks:
 
 gas_providers:
   custom:
-    # Docker compose (rrelayer + gas-stub on same network):
-    endpoint: "http://gas-stub:8787"
-    # Host-only rrelayer start (no compose network):
+    # Production compose (nginx edge on same network):
+    endpoint: "http://nginx:8787"
+    # Host-only rrelayer start (docker-compose.gas-stub.yaml):
     # endpoint: "http://localhost:8787"
     supported_chains: [2651420]

@@ -1,9 +1,11 @@
+# Legacy / minimal compose (postgres + rrelayer only). Prefer docker-compose.yml
+# for production (nginx TLS edge, no public 8000/Postgres).
+
 volumes:
   postgres_data:
     driver: local
 
 services:
-  # 数据库服务
   postgresql:
     image: postgres:16
     container_name: rrelayer-db
@@ -11,8 +13,6 @@ services:
     restart: always
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5441:5432"
     env_file:
       - ./.env
     healthcheck:
@@ -21,27 +21,22 @@ services:
       timeout: 5s
       retries: 5
 
-  # rrelayer 服务
   rrelayer:
     image: ghcr.io/joshstevens19/rrelayer
     container_name: rrelayer-service
     restart: always
-    # 解决之前遇到的 "No such file or directory (os error 2)" 报错
-    # 如果该镜像内部需要调用 docker 指令，必须挂载宿主机的 docker socket
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECT_PATH:-.}:/app/project
-    # 运行启动指令
     command: start
+    # Loopback only — for local admin; production should use nginx :443 instead.
     ports:
-      - "3030:3030"
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     env_file:
       - ./.env
     environment:
-      # 强制覆盖 DATABASE_URL 以确保使用 docker 内部网络连接数据库
-      # 注意：主机名使用服务名 'postgresql'，端口使用容器内部端口 '5432'
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}
+      - HOST=0.0.0.0
+      - RRELAYER_PORT=8000
     depends_on:
       postgresql:
         condition: service_healthy

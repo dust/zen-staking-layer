@@ -54,6 +54,15 @@ npm run lint                        # run ESLint checks
 npm run sync-abi                    # copy StLighter.json and LtZEN.json from root abi/ to src/abi/
 ```
 
+### Self-hosted deploy (`deploy/`)
+```bash
+cd deploy
+cp .env.example .env                # fill secrets + NEXT_PUBLIC_* + RRELAYER_*
+make release                        # build frontend image + force-recreate stack
+# make force-recreate BUILD=1 | make logs | make gen-api-key
+```
+Unified compose: external edge (`staking.lighter.im`) → frontend → internal rrelayer. See `deploy/README.md`.
+
 ### Goldsky Subgraph (`subgraphs/`)
 ```bash
 cd subgraphs

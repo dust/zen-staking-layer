@@ -31,7 +31,7 @@ sensible testnet defaults; two things you actually need to set:
 | Mode | Env | Behaviour |
 |------|-----|-----------|
 | **Direct** (default) | — | `DirectContractRelayer` — user signs EIP-712, wallet sends one `*WithSig` tx |
-| **BFF + rrelayer** | `NEXT_PUBLIC_USE_RELAYER_BFF=1` + server `RRELAYER_*` | True gasless via [`/api/relay`](../docs/stLighter-rrelayer-setup.md); validation in BFF — [`stLighter-relayer-design.md`](../docs/stLighter-relayer-design.md) |
+| **BFF + rrelayer** | `NEXT_PUBLIC_USE_RELAYER_BFF=1` + server `RRELAYER_*` | True gasless via [`/api/relay`](../docs/stLighter-rrelayer-setup.md); production stack in [`../deploy/`](../deploy/) |
 | **Mock** | `NEXT_PUBLIC_MOCK_RELAYER_ONLY=1` | UI-only simulation |
 
 See [`../docs/gasless-acceptance.md`](../docs/gasless-acceptance.md) · [`../docs/stLighter-rrelayer-setup.md`](../docs/stLighter-rrelayer-setup.md) · [`../docs/stLighter-relayer-design.md`](../docs/stLighter-relayer-design.md) (BFF validation spec).
@@ -44,6 +44,8 @@ npm run build      # production build (M0 acceptance gate)
 npm run lint       # eslint
 npm run sync-abi   # copy StLighter.json / LtZEN.json from repo-root abi/ into src/abi/
 ```
+
+Production self-host (frontend + rrelayer in one compose): see [`../deploy/README.md`](../deploy/README.md) (`make release`).
 
 ## Layout (current — M0)
 

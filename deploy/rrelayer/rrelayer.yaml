@@ -1,0 +1,37 @@
+name: gasless_driver
+signing_provider:
+  raw:
+    mnemonic: ${RAW_DANGEROUS_MNEMONIC}
+networks:
+- name: horize_testnet
+  chain_id: 2651420
+  provider_urls:
+  - https://horizen-testnet.rpc.caldera.xyz/http
+  block_explorer_url: https://horizen-testnet.explorer.caldera.xyz/
+  enable_sending_blobs: true
+  gas_bump_blocks_every:
+    slow: 10
+    medium: 6
+    fast: 4
+    super_fast: 2
+  max_gas_price_multiplier: 4
+  gas_provider: CUSTOM
+  # Scoped API keys — `relayer` is the EOA (0x...), not the uuid.
+  # Generate: make gen-api-key  (then paste into deploy/.env)
+  api_keys:
+    - relayer: "${RRELAYER_EOA_ADDRESS}"
+      keys:
+        - "${RRELAYER_API_KEY}"
+  # Configure permissions / allowlist for StLighter proxy (+ Inbound/Egress stations).
+
+gas_providers:
+  custom:
+    endpoint: "http://gas-stub:8787"
+    supported_chains: [2651420]
+
+api_config:
+  port: 8000
+  host: "0.0.0.0"
+  # Admin basic auth — VPS/CLI only (create relayers). Frontend BFF uses RRELAYER_API_KEY.
+  authentication_username: ${RRELAYER_AUTH_USERNAME}
+  authentication_password: ${RRELAYER_AUTH_PASSWORD}
