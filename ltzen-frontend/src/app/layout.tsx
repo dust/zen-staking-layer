@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Header } from "@/components/layout/Header";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
+import { Footer } from "@/components/layout/Footer";
 
 // Brand DNA shared with the sibling project lighter-ui: Syne (display), DM Sans (body),
 // JetBrains Mono (figures/addresses). next/font self-hosts these with display:swap.
@@ -46,7 +47,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Providers>
           <Header />
-          <main className="flex flex-1 flex-col pb-16 md:pb-0">{children}</main>
+          <main className="flex flex-1 flex-col">{children}</main>
+          <Footer />
           <BottomTabBar />
         </Providers>
       </body>
