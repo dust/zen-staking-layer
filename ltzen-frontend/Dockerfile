@@ -2,7 +2,11 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
-RUN apk add --no-cache libc6-compat
+# c-kzg (via viem/ethereum stack) needs node-gyp → python3 + build toolchain inside the image.
+# Host Ubuntu Python is irrelevant; this stage runs in Alpine.
+RUN apk add --no-cache libc6-compat python3 make g++ \
+  && ln -sf python3 /usr/bin/python
+ENV PYTHON=/usr/bin/python3
 COPY package.json package-lock.json ./
 RUN npm ci
 
