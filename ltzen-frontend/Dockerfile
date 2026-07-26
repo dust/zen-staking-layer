@@ -8,12 +8,16 @@ RUN apk add --no-cache libc6-compat python3 make g++ \
   && ln -sf python3 /usr/bin/python
 ENV PYTHON=/usr/bin/python3
 COPY package.json package-lock.json ./
+# postinstall patches rrelayer header — must exist before `npm ci`
+COPY scripts/patch-rrelayer-header.js ./scripts/
 RUN npm ci
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Idempotent: ensure header patch is applied even if deps layer was cached
+RUN node scripts/patch-rrelayer-header.js
 
 # Client-exposed vars must be present at `next build` time.
 ARG NEXT_PUBLIC_WC_PROJECT_ID
