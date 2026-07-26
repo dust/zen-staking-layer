@@ -12,14 +12,15 @@ import {
 
 /// @notice Configures LayerZero ULN (DVN + confirmations) for an OApp (ltZEN or ZEN OFT/adapter).
 ///
-/// Copy values from a live Horizen ↔ Base OFT path — see `docs/stLighter-oft-reference.md`.
+/// Copy values from a live Horizen ↔ Base OFT path — see `docs/stLighter-oft-reference.md`
+/// (testnet table + `getConfig` commands) and `docs/stLighter-deploy-checklist.md` §1 / §C1.
 ///
 /// Required env vars:
 ///   OAPP_LOCAL         — OApp to configure (preferred); falls back to `LT_ZEN_LOCAL`
 ///   LZ_ENDPOINT        — LayerZero EndpointV2 on this chain
 ///   PEER_EID           — remote chain endpoint id
-///   LZ_SEND_LIB        — send library (e.g. SendUln302)
-///   LZ_RECEIVE_LIB     — receive library (e.g. ReceiveUln302)
+///   LZ_SEND_LIB        — send library (e.g. SendUln302) — must be THIS chain's lib
+///   LZ_RECEIVE_LIB     — receive library (e.g. ReceiveUln302) — must be THIS chain's lib
 ///   LZ_CONFIRMATIONS   — block confirmations (uint64)
 ///   DVN_ADDRESSES      — comma-separated required DVN addresses (sorted ascending)
 ///   PRIVATE_KEY        — OApp owner (timelock executor / governance)

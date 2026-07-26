@@ -2,6 +2,7 @@
 
 > **Primary scope**: fresh deploy to **Horizen Testnet** (`2651420`) + **Base Sepolia** (`84532`).  
 > Topology authority: [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0 · OFT refs: [`stLighter-oft-reference.md`](./stLighter-oft-reference.md)  
+> OFT debug memos: [`stLighter-oft-debug-cases.md`](./stLighter-oft-debug-cases.md)  
 > Station design: [`stLighter-station-design.md`](./stLighter-station-design.md) · Compose/bridge ADR: [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §1–§2  
 > Product: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) (Path B stake / Path C Redeem to Base)
 >
@@ -66,7 +67,7 @@ flowchart TB
 
 - [ ] Fund deployer on Horizen Testnet and Base Sepolia
 - [ ] Confirm LZ Endpoint V2 addresses + **eids** → `LZ_ENDPOINT_HORIZEN`, `LZ_ENDPOINT_BASE`, `HORIZEN_EID`, `BASE_EID`
-- [ ] Confirm Send/Receive ULN libs + testnet DVNs → `LZ_SEND_LIB`, `LZ_RECEIVE_LIB`, `LZ_CONFIRMATIONS`, `DVN_ADDRESSES`
+- [ ] Confirm Send/Receive ULN libs + testnet DVNs → `LZ_SEND_LIB`, `LZ_RECEIVE_LIB`, `LZ_CONFIRMATIONS`, `DVN_ADDRESSES` (see table below; do **not** cross-copy libs across chains)
 - [ ] `.env` from [`.env.template`](../.env.template): `PRIVATE_KEY`, `ADMIN_ADDRESS`, `GOVERNANCE_ADDRESS` (= deployer EOA)
 - [ ] Treat this as a **new** address book (clear stale frontend env)
 
@@ -76,6 +77,19 @@ flowchart TB
 export HORIZEN_RPC=https://horizen-testnet.rpc.caldera.xyz/http
 export BASE_RPC=https://sepolia.base.org
 ```
+
+**Testnet ULN / DVN reference** (verified against a working Base Sepolia ↔ Horizen Testnet ZEN OFT path; re-check with `getConfig` after any LZ infra change — see [`stLighter-oft-reference.md`](./stLighter-oft-reference.md))
+
+| Env | Base Sepolia (`PEER_EID=40435`) | Horizen Testnet (`PEER_EID=40245`) |
+|-----|----------------------------------|-------------------------------------|
+| `LZ_ENDPOINT` | `0x6EDCE65403992e310A62460808c4b910D972f10f` | `0x3aCAAf60502791D199a5a5F0B173D78229eBFe32` |
+| `LZ_SEND_LIB` | `0xC1868e054425D378095A003EcbA3823a5D0135C9` | `0x45841dd1ca50265Da7614fC43A361e526c0e6160` |
+| `LZ_RECEIVE_LIB` | `0x12523de19dc41c91F7d2093E0CFbB76b17012C8d` | `0xd682ECF100f6F4284138AA925348633B0611Ae21` |
+| `DVN_ADDRESSES` | `0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6` | `0xa78a78a13074ed93ad447a26ec57121f29e8fec2` |
+| `LZ_CONFIRMATIONS` | `2` | `2` |
+| eid | `40245` | `40435` |
+
+> **Common mistake**: Base `LZ_RECEIVE_LIB` is **not** `0xd682…` — that address is Horizen's receive lib. Passing the wrong lib to `setConfig` / `getConfig` on Base reverts or writes nowhere useful.
 
 ---
 
@@ -126,12 +140,15 @@ Optional: [`DeployStLighterTimelock.s.sol`](../script/DeployStLighterTimelock.s.
 ### A1 — ZenTokenOFT (Horizen ZEN)
 
 ```bash
+export HORIZEN_RPC=https://horizen-testnet.rpc.caldera.xyz/http
+export BASE_RPC=https://sepolia.base.org
 export LZ_ENDPOINT_HORIZEN=0x3aCAAf60502791D199a5a5F0B173D78229eBFe32  # testnet
 
 forge script script/DeployZenTokenOFT.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 
 # → set ZEN_TOKEN_ADDRESS
-export ZEN_TOKEN_ADDRESS=0x82a5B1008f29811f6183B21EaA0f7D90d7595Bb6
+export ZEN_TOKEN_ADDRESS=0x25559440DD51adcd2EBAbFe5A9AF70F758BcBffE
+export HORIZEN_ZEN=$ZEN_TOKEN_ADDRESS
 ```
 
 - [ ] `ZEN_TOKEN_ADDRESS` = printed ZenTokenOFT
@@ -142,7 +159,8 @@ export ZEN_TOKEN_ADDRESS=0x82a5B1008f29811f6183B21EaA0f7D90d7595Bb6
 export ADMIN_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
 forge script script/DeployZenStaker.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 # → set ZEN_STAKER_ADDRESS
-export ZEN_STAKER_ADDRESS=0x5db9f0dD5dbBFC4dFbeeBF37320600bEF29Fb65a
+export ZEN_STAKER_ADDRESS=0x99c8e0f8A60da19bc48c0d00Ef6594b9Da18e151
+cast send $ZEN_STAKER_ADDRESS 'setRewardNotifier(address,bool)' $(cast wallet address --private-key $USER2_PRIVATE_KEY) true --rpc-url $HORIZEN_RPC --private-key $PRIVATE_KEY
 ```
 
 - [ ] Staker `STAKE_TOKEN` / reward token = A1
@@ -157,10 +175,10 @@ export ZEN_STAKER_ADDRESS=0x5db9f0dD5dbBFC4dFbeeBF37320600bEF29Fb65a
 export GOVERNANCE_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
 forge script script/DeployStLighterHorizen.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 # → set STLIGHTER_PROXY_ADDRESS, LT_ZEN_HORIZEN
-export LT_ZEN_HORIZEN=0xC6Fb040d2c5a377fF3798BaB0bC8f881BE9C17f2
-export STLIGHTER_PROXY_ADDRESS=0x4a47A011E5d459D8E6dDb2f2c83a063D52F0dBe7
+export LT_ZEN_HORIZEN=0xA876E8bDA962F48BA00F77A4B06E615451992986
+export STLIGHTER_PROXY_ADDRESS=0x82A381e9A197c0ac9e2489F06332F849f2681029
 export ST_LIGHTER=$STLIGHTER_PROXY_ADDRESS
-export LT_ZEN=$LT_ZEN_ADDRESS
+export LT_ZEN=$LT_ZEN_HORIZEN
 cast call $LT_ZEN 'minter()(address)' --rpc-url $HORIZEN_RPC
 ```
 
@@ -172,7 +190,7 @@ cast call $LT_ZEN 'minter()(address)' --rpc-url $HORIZEN_RPC
 ```bash
 forge script script/DeployInboundStation.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 # → set INBOUND_STATION_ADDRESS
-export INBOUND_STATION_ADDRESS=0xcEC5Fe535052e336DE43A564De2228C9Be3D88A4
+export INBOUND_STATION_ADDRESS=0x31AD52D4dE8164C0AF225d87237910435fb4FA6A
 export IN_STATION=$INBOUND_STATION_ADDRESS
 ```
 
@@ -196,7 +214,7 @@ cast call $IN_STATION 'composeCaller()(address)' --rpc-url $HORIZEN_RPC
 ```bash
 forge script script/DeployMockZEN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 # → set BASE_ZEN_TOKEN_ADDRESS
-export BASE_ZEN_TOKEN_ADDRESS=0xeb3b64E9Ec88D7A48Dcb1ae56aec11c3E8214063
+export BASE_ZEN_TOKEN_ADDRESS=0x7543002E8fde59cdb84CAe38e5194668ac38eF7A
 export BASE_ZEN=$BASE_ZEN_TOKEN_ADDRESS
 ```
 
@@ -206,7 +224,7 @@ export BASE_ZEN=$BASE_ZEN_TOKEN_ADDRESS
 export LZ_ENDPOINT_BASE=0x6EDCE65403992e310A62460808c4b910D972f10f
 forge script script/DeployZenTokenOFTAdapter.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 # → set BASE_ZEN_ADAPTER
-export BASE_ZEN_ADAPTER=0xF91e475D62E6181C630bf70bCd8564c29b03486B
+export BASE_ZEN_ADAPTER=0x09201d61A10F0629d7afE2c2883cAf328c34c1C3
 ```
 
 - [ ] Adapter `token()` = MockZEN
@@ -216,7 +234,7 @@ export BASE_ZEN_ADAPTER=0xF91e475D62E6181C630bf70bCd8564c29b03486B
 ```bash
 forge script script/DeployStLighterBase.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 # → set LT_ZEN_BASE
-export LT_ZEN_BASE=0x0d4bE6a999279c8e5Bf7d63FDb0aB626b9275a76
+export LT_ZEN_BASE=0xDDA46A46F6E162Cde0Dbc36c18fE832Bca59EF8F
 ```
 
 - [ ] `minter() == address(0)`
@@ -226,6 +244,8 @@ export LT_ZEN_BASE=0x0d4bE6a999279c8e5Bf7d63FDb0aB626b9275a76
 ## 5. Phase C — LayerZero wiring (two OFT pairs)
 
 ### C1 — ZEN path (Adapter ↔ ZenTokenOFT)
+
+> **Both sides required.** `setPeer` + ULN must run on **Base and Horizen**. A one-sided wire (e.g. only Base peer set, Horizen `peers(BASE_EID)==0`) leaves LayerZero Scan in `WAITING FOR ULN CONFIG` / blocked — tokens lock on Base and never credit on Horizen.
 
 **On Base** (peer = Horizen ZenTokenOFT):
 
@@ -237,7 +257,7 @@ export PEER_ZEN_OFT=$ZEN_TOKEN_ADDRESS
 forge script script/WireZenOft.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 ```
 
-**On Horizen** (peer = Base adapter):
+**On Horizen** (peer = Base adapter) — do not skip:
 
 ```bash
 export BASE_EID=40245
@@ -247,21 +267,56 @@ export PEER_ZEN_OFT=$BASE_ZEN_ADAPTER
 forge script script/WireZenOft.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 ```
 
-**DVN** (each chain; set `OAPP_LOCAL` to local ZEN OApp, `PEER_EID` = remote, `LZ_ENDPOINT` = local endpoint):
+**Verify peers (both must be non-zero)**
 
 ```bash
-forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $RPC --broadcast --private-key $PRIVATE_KEY
+cast call $BASE_ZEN_ADAPTER "peers(uint32)(bytes32)" $HORIZEN_EID --rpc-url $BASE_RPC
+# expect: bytes32 left-padded $ZEN_TOKEN_ADDRESS (not 0x0)
+
+cast call $ZEN_TOKEN_ADDRESS "peers(uint32)(bytes32)" $BASE_EID --rpc-url $HORIZEN_RPC
+# expect: bytes32 left-padded $BASE_ZEN_ADAPTER (not 0x0)
 ```
+
+**DVN / ULN** — each chain; `OAPP_LOCAL` = local ZEN OApp, `PEER_EID` = remote eid. Script: [`ConfigureStLighterOFTDVN.s.sol`](../script/ConfigureStLighterOFTDVN.s.sol). Prefer explicit `setConfig` even if endpoint defaults exist (Scan / DVNs often wait on OApp-level ULN).
+
+**Base** (`OAPP_LOCAL` = adapter, peer eid = Horizen):
+
+```bash
+export OAPP_LOCAL=$BASE_ZEN_ADAPTER
+export PEER_EID=$HORIZEN_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_BASE
+export LZ_SEND_LIB=0xC1868e054425D378095A003EcbA3823a5D0135C9
+export LZ_RECEIVE_LIB=0x12523de19dc41c91F7d2093E0CFbB76b17012C8d
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+**Horizen** (`OAPP_LOCAL` = ZenTokenOFT, peer eid = Base):
+
+```bash
+export OAPP_LOCAL=$ZEN_TOKEN_ADDRESS
+export PEER_EID=$BASE_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_HORIZEN
+export LZ_SEND_LIB=0x45841dd1ca50265Da7614fC43A361e526c0e6160
+export LZ_RECEIVE_LIB=0xd682ECF100f6F4284138AA925348633B0611Ae21
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xa78a78a13074ed93ad447a26ec57121f29e8fec2
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
+
+How to refresh these values from a known-good OApp: [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) § Testnet ULN.
 
 **Smoke C1**
 
+- [ ] Peers non-zero both ways (commands above)
 - [ ] Base: `MockZEN.mint()` → `approve(adapter)` → `adapter.send` to **user EOA** on Horizen (empty `composeMsg`)
+- [ ] [LayerZero Scan (testnet)](https://testnet.layerzeroscan.com/) shows Delivered (not `WAITING FOR ULN CONFIG`)
 - [ ] User holds Horizen `ZenTokenOFT` balance
 
-``` bash
+```bash
 cast send $BASE_ZEN 'mint()' --rpc-url $BASE_RPC --private-key=$USER1_PRIVATE_KEY
 cast send $BASE_ZEN 'approve(address,uint256)' $BASE_ZEN_ADAPTER $(cast --to-wei 10000000000 ether) --rpc-url $BASE_RPC --private-key $USER1_PRIVATE_KEY
-
 ```
 
 ### C2 — ltZEN path
@@ -284,7 +339,29 @@ export PEER_LT_ZEN=$LT_ZEN_HORIZEN
 forge script script/WireStLighterOFT.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 ```
 
-**DVN** for both ltZEN OApps (`OAPP_LOCAL` or `LT_ZEN_LOCAL`).
+**DVN / ULN** for both ltZEN OApps — reuse the **same** per-chain `LZ_*` / `DVN_ADDRESSES` / `LZ_CONFIRMATIONS` as C1; only change `OAPP_LOCAL` (or `LT_ZEN_LOCAL`) to the local ltZEN and keep `PEER_EID` = remote.
+
+```bash
+# Base ltZEN
+export OAPP_LOCAL=$LT_ZEN_BASE
+export PEER_EID=$HORIZEN_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_BASE
+export LZ_SEND_LIB=0xC1868e054425D378095A003EcbA3823a5D0135C9
+export LZ_RECEIVE_LIB=0x12523de19dc41c91F7d2093E0CFbB76b17012C8d
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xe1a12515f9ab2764b887bf60b923ca494ebbb2d6
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
+
+# Horizen ltZEN
+export OAPP_LOCAL=$LT_ZEN_HORIZEN
+export PEER_EID=$BASE_EID
+export LZ_ENDPOINT=$LZ_ENDPOINT_HORIZEN
+export LZ_SEND_LIB=0x45841dd1ca50265Da7614fC43A361e526c0e6160
+export LZ_RECEIVE_LIB=0xd682ECF100f6F4284138AA925348633B0611Ae21
+export LZ_CONFIRMATIONS=2
+export DVN_ADDRESSES=0xa78a78a13074ed93ad447a26ec57121f29e8fec2
+forge script script/ConfigureStLighterOFTDVN.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+```
 
 **Smoke C2**
 
@@ -354,11 +431,11 @@ export GOVERNANCE_ADDRESS=$(cast wallet address --private-key=$PRIVATE_KEY)
 forge script script/DeployEgressStation.s.sol --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 
 # → set:
-export EGRESS_STATION_ADDRESS=0x7108eC19Ef64E2184b3C6c6450FBb5e89F9e848c
+export EGRESS_STATION_ADDRESS=0xE852A3034062983DE015b331af0ea4c3c9bd7e5D
 # Original Bridge (minAmountLD bug) — replaced:
 # export ZEN_OFT_STATION_BRIDGE_ADDRESS=0xf9189d341642a9D047a08245078bf0B64e30215A
 # Redeployed Bridge (`minAmountLD=0` dust fix) via RedeployZenOftStationBridge:
-export ZEN_OFT_STATION_BRIDGE_ADDRESS=0x3D9627d7565e652D8E1A6b2E096bDA2A678BCf8d
+export ZEN_OFT_STATION_BRIDGE_ADDRESS=0xBAD0d77e9AdDa8Be5662F2bf2346ce4bb9bF9b39
 ```
 
 - [x] G1 deployed (Horizen testnet) — addresses above; frontend `.env.local` wired
@@ -446,6 +523,16 @@ Redeploy note: Egress constructor takes `stLighter` (`STLIGHTER_PROXY_ADDRESS`).
 
 **Smoke vs same-chain redeem**: keep `/redeem` (Horizen ZEN to wallet) separate from Redeem-to-Base wizard; do not merge CTAs without endpoint copy.
 
+
+**reward**
+``` bash
+cast send $BASE_ZEN 'mint()' --rpc-url $BASE_RPC --private-key=$USER2_PRIVATE_KEY
+# bridge to horizen
+export HORIZEN_ZEN=$ZEN_TOKEN_ADDRESS
+cast send $HORIZEN_ZEN 'transfer(address,uint256)' $ZEN_STAKER_ADDRESS $(cast --to-wei 10 ether) --rpc-url $HORIZEN_RPC --private-key $USER2_PRIVATE_KEY
+cast send $ZEN_STAKER_ADDRESS 'notifyRewardAmount(uint256)' $(cast --to-wei 10 ether) --rpc-url $HORIZEN_RPC --private-key $USER2_PRIVATE_KEY
+```
+
 ---
 
 ## 11. Phase I — Frontend / BFF (Wave B)
@@ -513,7 +600,9 @@ Add to `ltzen-frontend/env.local.example` when Wave B UI lands — **done**.
 
 - Wave B on-chain smoke (Phase H) still operator-run after rrelayer allowlist + native value for Egress
 - No Horizen ZEN faucet — bridge-first for same-chain smoke (Base MockZEN mint ≤256)
-- DVN/confirmations must be verified on **testnet** endpoints (mainnet ZenTokenOFT refs are guidance only)
+- DVN/confirmations must be verified on **testnet** endpoints (mainnet ZenTokenOFT refs are guidance only); Preflight table is a snapshot — re-`getConfig` if LZ libs move
+- Incomplete Phase C1 (missing Horizen `setPeer` or either-chain ULN) → Scan `WAITING FOR ULN CONFIG` / blocked; fix wiring then **re-send** (stuck messages do not auto-retry)
+- After ULN/peer is fixed: Scan may show `Committer SUCCEEDED` + `Executor WAITING` if earlier failed sends left an **inbound nonce gap** — diagnose/fix with `Endpoint.skip` → [`stLighter-oft-debug-cases.md`](./stLighter-oft-debug-cases.md)
 - `composeCaller` assumed = Horizen LZ Endpoint; if MessagingComposer differs, set via InboundStation owner after deploy
 - Post-send LZ failure / partial refund on egress path: deferred past MVP ([ADR §2](./stLighter-station-compose-adr.md))
 
