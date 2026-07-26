@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * FaucetButton (uiux §4 "Get test ZEN"). Mints a fixed grant of test ZEN on Horizen so a new
- * user can try staking. Hidden when ZEN isn't configured; disabled while a mint is in flight.
+ * FaucetButton — mints up to 256 test ZEN on Base (MockZEN). Horizen ZenTokenOFT has no faucet.
  */
 
 import { useFaucet, FAUCET_AMOUNT_ZEN } from "@/hooks/useFaucet";

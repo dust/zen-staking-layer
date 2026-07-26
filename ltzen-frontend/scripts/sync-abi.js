@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Sync StLighter / LtZEN ABIs from the repo root `abi/` into `src/abi/`.
+ * Sync StLighter / LtZEN / InboundStation / EgressStation / ZenOftStationBridge ABIs
+ * from the repo root `abi/` into `src/abi/`.
  * Run after the contracts repo regenerates ABIs (see ../abi/README.md).
  *   npm run sync-abi
  */
@@ -10,7 +11,13 @@ const path = require("path");
 const root = path.resolve(__dirname, "..", "..", "abi");
 const dest = path.resolve(__dirname, "..", "src", "abi");
 
-const files = ["StLighter.json", "LtZEN.json"];
+const files = [
+  "StLighter.json",
+  "LtZEN.json",
+  "InboundStation.json",
+  "EgressStation.json",
+  "ZenOftStationBridge.json",
+];
 
 fs.mkdirSync(dest, { recursive: true });
 for (const f of files) {

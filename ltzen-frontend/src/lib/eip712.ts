@@ -45,6 +45,45 @@ export const REDEEM_WITH_SIG_TYPES = {
   ],
 } as const;
 
+export const CREDIT_FROM_COMPOSE_TYPES = {
+  CreditFromCompose: [
+    { name: "assets", type: "uint256" },
+    { name: "owner", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export const WITHDRAW_TO_HORIZEN_TYPES = {
+  WithdrawToHorizen: [
+    { name: "assets", type: "uint256" },
+    { name: "to", type: "address" },
+    { name: "owner", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export const CREDIT_FROM_REDEEM_TYPES = {
+  CreditFromRedeem: [
+    { name: "assets", type: "uint256" },
+    { name: "owner", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export const BRIDGE_TO_BASE_TYPES = {
+  BridgeToBase: [
+    { name: "assets", type: "uint256" },
+    { name: "dest", type: "address" },
+    { name: "maxFeeZen", type: "uint256" },
+    { name: "owner", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
 type StLighterDomain = readonly [
   string,
   string,
@@ -205,4 +244,206 @@ export async function signZenPermit(
   });
   const { v, r, s } = hexToSignature(signature);
   return { deadline: Number(params.deadline), v: Number(v), r, s };
+}
+
+/** Read InboundStation EIP-712 domain + owner nonce (always Horizen verifyingContract). */
+export async function readInboundStationSignContext(
+  config: Config,
+  chainId: number,
+  inboundStation: Address,
+  owner: Address,
+): Promise<{
+  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+  nonce: bigint;
+}> {
+  const [raw, nonce] = await Promise.all([
+    readContract(config, {
+      chainId,
+      address: inboundStation,
+      abi: abis.inboundStation,
+      functionName: "eip712Domain",
+    }) as Promise<StLighterDomain>,
+    readContract(config, {
+      chainId,
+      address: inboundStation,
+      abi: abis.inboundStation,
+      functionName: "nonces",
+      args: [owner],
+    }) as Promise<bigint>,
+  ]);
+  const [, name, version, chainIdOnChain, verifyingContract] = raw;
+  return {
+    domain: { name, version, chainId: Number(chainIdOnChain), verifyingContract },
+    nonce,
+  };
+}
+
+export interface CreditFromComposeParams {
+  assets: bigint;
+  owner: Address;
+  deadline: bigint;
+}
+
+/** Sign InboundStation CreditFromCompose (Horizen EIP-712 domain.chainId).
+ * Wallet must be on Horizen when MetaMask signs — callers should `switchChain` first. */
+export async function signCreditFromCompose(
+  config: Config,
+  chainId: number,
+  inboundStation: Address,
+  params: CreditFromComposeParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readInboundStationSignContext(
+    config,
+    chainId,
+    inboundStation,
+    params.owner,
+  );
+  const signature = await signTypedData(config, {
+    domain,
+    types: CREDIT_FROM_COMPOSE_TYPES,
+    primaryType: "CreditFromCompose",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
+}
+
+export interface WithdrawToHorizenParams {
+  assets: bigint;
+  to: Address;
+  owner: Address;
+  deadline: bigint;
+}
+
+/** Sign InboundStation WithdrawToHorizen (Horizen domain; switch wallet to Horizen first). */
+export async function signWithdrawToHorizen(
+  config: Config,
+  chainId: number,
+  inboundStation: Address,
+  params: WithdrawToHorizenParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readInboundStationSignContext(
+    config,
+    chainId,
+    inboundStation,
+    params.owner,
+  );
+  const signature = await signTypedData(config, {
+    domain,
+    types: WITHDRAW_TO_HORIZEN_TYPES,
+    primaryType: "WithdrawToHorizen",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
+}
+
+/** Read EgressStation EIP-712 domain + owner nonce. */
+export async function readEgressStationSignContext(
+  config: Config,
+  chainId: number,
+  egressStation: Address,
+  owner: Address,
+): Promise<{
+  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+  nonce: bigint;
+}> {
+  const [raw, nonce] = await Promise.all([
+    readContract(config, {
+      chainId,
+      address: egressStation,
+      abi: abis.egressStation,
+      functionName: "eip712Domain",
+    }) as Promise<StLighterDomain>,
+    readContract(config, {
+      chainId,
+      address: egressStation,
+      abi: abis.egressStation,
+      functionName: "nonces",
+      args: [owner],
+    }) as Promise<bigint>,
+  ]);
+  const [, name, version, chainIdOnChain, verifyingContract] = raw;
+  return {
+    domain: { name, version, chainId: Number(chainIdOnChain), verifyingContract },
+    nonce,
+  };
+}
+
+export interface CreditFromRedeemParams {
+  assets: bigint;
+  owner: Address;
+  deadline: bigint;
+}
+
+/** Sign EgressStation CreditFromRedeem (switch wallet to Horizen first). */
+export async function signCreditFromRedeem(
+  config: Config,
+  chainId: number,
+  egressStation: Address,
+  params: CreditFromRedeemParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readEgressStationSignContext(
+    config,
+    chainId,
+    egressStation,
+    params.owner,
+  );
+  const signature = await signTypedData(config, {
+    domain,
+    types: CREDIT_FROM_REDEEM_TYPES,
+    primaryType: "CreditFromRedeem",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
+}
+
+export interface BridgeToBaseParams {
+  assets: bigint;
+  dest: Address;
+  maxFeeZen: bigint;
+  owner: Address;
+  deadline: bigint;
+}
+
+/** Sign EgressStation BridgeToBase (switch wallet to Horizen first). */
+export async function signBridgeToBase(
+  config: Config,
+  chainId: number,
+  egressStation: Address,
+  params: BridgeToBaseParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readEgressStationSignContext(
+    config,
+    chainId,
+    egressStation,
+    params.owner,
+  );
+  const signature = await signTypedData(config, {
+    domain,
+    types: BRIDGE_TO_BASE_TYPES,
+    primaryType: "BridgeToBase",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
+}
+
+/** Sign EgressStation WithdrawToHorizen (recoverable_hold escape; Horizen domain). */
+export async function signEgressWithdrawToHorizen(
+  config: Config,
+  chainId: number,
+  egressStation: Address,
+  params: WithdrawToHorizenParams,
+): Promise<{ signature: Hex; nonce: bigint }> {
+  const { domain, nonce } = await readEgressStationSignContext(
+    config,
+    chainId,
+    egressStation,
+    params.owner,
+  );
+  const signature = await signTypedData(config, {
+    domain,
+    types: WITHDRAW_TO_HORIZEN_TYPES,
+    primaryType: "WithdrawToHorizen",
+    message: { ...params, nonce },
+  });
+  return { signature, nonce };
 }

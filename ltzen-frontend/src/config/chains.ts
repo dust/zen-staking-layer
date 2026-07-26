@@ -3,7 +3,8 @@ import { defineChain } from "viem";
 /**
  * Two custom EVM chains for the ltZEN dApp (frontend-plan §1):
  *   - Horizen Testnet (hub): deposit / redeem / exchange-rate / transparency settle here.
- *   - Base (spoke): ltZEN OFT circulation + gasless only; no deposit/redeem, no rate source.
+ *   - Base (spoke): ltZEN OFT circulation; cross-chain ZEN stake via ERC20 + ZenTokenOFTAdapter;
+ *     no same-chain deposit/redeem, no rate source.
  *
  * RPC / explorer URLs are env-injected (never hardcoded). Horizen has sane testnet
  * defaults from the deploy docs; Base is fully env-driven (chainId/RPC/explorer 待填).

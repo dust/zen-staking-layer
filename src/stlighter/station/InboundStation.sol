@@ -49,7 +49,8 @@ contract InboundStation is
   address public stLighter;
   /// @notice LayerZero Endpoint / MessagingComposer that invokes `lzCompose`.
   address public composeCaller;
-  /// @notice Trusted destination OFT (`_from` in `lzCompose`), e.g. Horizen ZenTokenOFT.
+  /// @notice Trusted destination OFT (`_from` in `lzCompose`) — Horizen native ZenTokenOFT
+  /// (Base counterpart is ZenTokenOFTAdapter locking ERC20 ZEN, not a native OFT).
   address public zenOft;
 
   event ComposeCallerSet(address indexed composeCaller);

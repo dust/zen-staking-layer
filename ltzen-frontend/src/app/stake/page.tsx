@@ -1,19 +1,17 @@
 "use client";
 
 /**
- * Stake page (uiux §4). Horizen-only write closure:
- *   - On Base (or wrong network): render ChainGuide ("switch to Horizen") instead of the form.
- *   - On Horizen: faucet + StakeForm. A paused() check surfaces the deposit-paused banner
- *     (redeem/view unaffected, PRD §7).
+ * Stake page (uiux §4). Horizen-only same-chain deposit.
+ * Test ZEN faucet lives on Base (MockZEN) — see /stake-crosschain — not on Horizen OFT.
  */
 
+import Link from "next/link";
 import { useChainId, useReadContract } from "wagmi";
 import { isActionAvailable } from "@/lib/chainGating";
 import { HUB_CHAIN_ID } from "@/config/chains";
 import { abis, horizenAddress } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { ChainGuide } from "@/components/common/ChainGuide";
-import { FaucetButton } from "@/components/stake/FaucetButton";
 import { StakeForm } from "@/components/stake/StakeForm";
 
 export default function StakePage() {
@@ -36,7 +34,15 @@ export default function StakePage() {
         <ChainGuide action="deposit" />
       ) : (
         <div className="space-y-5">
-          <FaucetButton />
+          <p className="max-w-xl text-sm text-zinc-400">
+            {copy.stake.noFaucetOnHorizen}{" "}
+            <Link
+              href="/stake-crosschain"
+              className="text-zinc-200 underline-offset-2 hover:text-white hover:underline"
+            >
+              {copy.stake.stakeFromBaseCta}
+            </Link>
+          </p>
           {isPaused && (
             <div className="max-w-xl rounded-lg border border-amber-400/20 bg-amber-400/[0.05] px-4 py-3 text-sm text-amber-100">
               {copy.stake.pausedBanner}

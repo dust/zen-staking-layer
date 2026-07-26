@@ -14,8 +14,9 @@ import {IStationBridge} from "./IStationBridge.sol";
 import {EgressStation} from "./EgressStation.sol";
 
 /// @title ZenOftStationBridge
-/// @notice Production `IStationBridge`: sends ZEN via ZenTokenOFT (or any IOFT) to Base.
-/// @dev `refundAddress` for LZ native fee excess is always `egress`. On successful `oft.send`,
+/// @notice Production `IStationBridge`: sends Horizen native ZenTokenOFT to Base.
+/// @dev Destination unlocks ERC20 ZEN via the existing Base `ZenTokenOFTAdapter`.
+/// `refundAddress` for LZ native fee excess is always `egress`. On successful `oft.send`,
 /// source accounting is finalized via `EgressStation.onBridgeComplete` in the same tx (tokens
 /// are burned/locked by the OFT). Pre-send failures revert the whole Egress `bridgeToBase` tx.
 contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
@@ -82,11 +83,13 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
       zen.forceApprove(address(oft), amount);
     }
 
+    // minAmountLD must be ≤ post-dust amountReceivedLD. Setting equal to amountLD reverts with
+    // SlippageExceeded when sharedDecimals < localDecimals (dust truncation).
     SendParam memory sendParam = SendParam({
       dstEid: dstEid,
       to: bytes32(uint256(uint160(destOnBase))),
       amountLD: amount,
-      minAmountLD: amount,
+      minAmountLD: 0,
       extraOptions: extraOptions,
       composeMsg: bytes(""),
       oftCmd: bytes("")
@@ -123,7 +126,7 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
       dstEid: dstEid,
       to: bytes32(uint256(uint160(destOnBase))),
       amountLD: amount,
-      minAmountLD: amount,
+      minAmountLD: 0,
       extraOptions: extraOptions,
       composeMsg: bytes(""),
       oftCmd: bytes("")

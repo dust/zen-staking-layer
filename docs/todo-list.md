@@ -1,7 +1,7 @@
 # stLighter / ltZEN — 待办与优先级
 
 > **用途**:可执行待办、合理偏差、优先级排序。状态快照见各专项计划,本文不重复里程碑明细。
-> **最后更新**:2026-07-22
+> **最后更新**:2026-07-25
 >
 > | 文档 | 内容 |
 > |------|------|
@@ -12,12 +12,23 @@
 > | [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md) | 跨链 + gasless 产品权威 |
 > | [`stLighter-station-design.md`](./stLighter-station-design.md) | Inbound/Egress Station 需求 |
 > | [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) | S5 compose / bridge ADR（payload、auth） |
+> | [`stLighter-deploy-checklist.md`](./stLighter-deploy-checklist.md) | **Base Sepolia ↔ Horizen Testnet**: Wave A Phases A–F; **Wave B Redeem to Base / Egress** Phases G–I |
 
 ---
 
-## 当前工作进度快照（2026-07-22）
+## 当前工作进度快照（2026-07-23）
 
-### 跨链 Station — P0 / S1–S2 ✅ 合约落地
+### 前端 Wave A — Cross-chain Stake ✅
+
+**In scope (shipped in `ltzen-frontend`)**: InboundStation ABI/env, EIP-712 `CreditFromCompose` / `WithdrawToHorizen`, BFF/relayer `depositWithSig` (`payer=InboundStation`) + `withdrawToHorizen`, `/stake-crosschain` wizard (**Base ERC20 approve + ZenTokenOFTAdapter.send** → credit → stake) + `chainGating` `crossChainStake`, transparency addresses.
+
+**ZEN / LZ topology**: Base ZEN = plain ERC20 + existing `ZenTokenOFTAdapter`; Horizen ZEN = native `ZenTokenOFT`. See [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0.
+
+**Out of scope — Wave B**: Redeem to Base / Egress / B1 address confirmation; full M5 ltZEN OFT bridge page (`/bridge` is a placeholder linking to cross-stake).
+
+Note: older product copy may still mention obsolete `StakeToStLighter`; UI/BFF follow **current contracts** (`depositWithSig` + `payForDeposit`).
+
+### 跨链 Station — P0 / S1–S5b ✅ 合约落地
 
 产品与实现已锁定并编码（详见 station-design / impl-plan）：
 
@@ -37,7 +48,7 @@
 - `docs/stLighter-station-compose-adr.md`
 - `src/stlighter/StLighter.sol`（`payer`）
 - `test/stlighter/station/*`（**30** passed）+ Gasless（9 passed）
-- 前端 EIP-712 / encode / validate / ABI sync（同链 `payer = user`）
+- 前端 Wave A：EIP-712 / encode / validate / ABI sync + Cross-chain Stake 向导（`payer = Station`）
 - `AUDIT_DELTA.md` 已记 Station + `payer`；合并冲突已解
 
 **未做（下一棒）**:
@@ -49,7 +60,7 @@
 
 ### 与既有 Composer 的关系（备忘）
 
-`chain-tools` 的 `BusStop` / `RefuelComposer` 实现同一 LZ 接口 `ILayerZeroComposer`；ZEN Base→Horizen 走 **ZenTokenOFT（原生 OFT）**，不是 Stargate 池，但 **compose 握手相同**。业务上 **BusStop（credit → 另步放行）** 最接近 InboundStation；S5 接线时复用其 `composeCaller` / `_from` / `OFTComposeMsgCodec` 模式，payload 与鉴权按 Station EIP-712 定稿。详见下文对话结论或 station-design §5.1。
+`chain-tools` 的 `BusStop` / `RefuelComposer` 实现同一 LZ 接口 `ILayerZeroComposer`。**ZEN Base→Horizen** 走 **Base `ZenTokenOFTAdapter`（lock 底层 ERC20）↔ Horizen 原生 `ZenTokenOFT`**，不是 Stargate 池、也不是 Base 侧原生 OFT；**compose 握手相同**。业务上 **BusStop（credit → 另步放行）** 最接近 InboundStation。详见 [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0。
 
 ---
 
@@ -113,8 +124,11 @@
 - [x] **S2**: `EgressStation`（`creditFromRedeem`、`bridgeToBase`、Mock refund/complete、`withdrawToHorizen`）+ 12 单测
 - [x] **S5a**: `ILayerZeroComposer.lzCompose` + `StationComposePayload` v1 + compose ADR
 - [x] **S5b**: `ZenOftStationBridge`（OFT `send`，`refundAddress=egress`，同 tx `onBridgeComplete`）+ 5 单测
-- [ ] **S3**: BFF 校验 Station / 扩展 `depositWithSig`（`payer=Station`）与 redeem+credit 同 tx
-- [ ] **S4**: 前端半编排向导（跨链 stake + Redeem to Base / B1 地址确认）
+- [x] **S3 (Wave A)**: BFF/relayer `depositWithSig`（`payer=InboundStation`）+ Station `credited` 校验 + `withdrawToHorizen`
+- [x] **S3 (Wave B)**: redeem + `creditFromRedeem` 同 tx BFF 编排（Egress）— sequential BFF jobs + `/redeem-to-base`
+- [x] **S4 (Wave A)**: 前端半编排向导 — Cross-chain Stake（`/stake-crosschain`）+ Base gating
+- [x] **S4 (Wave B)**: Redeem to Base / B1 地址确认 UI — checklist Phase I
+- [x] **Deploy**: [`DeployEgressStation.s.sol`](../script/DeployEgressStation.s.sol)（placeholder → Bridge → `setBridge`）
 - [ ] **S6**: `rescue` / unassigned 策略参数化
 
 ---
@@ -124,8 +138,7 @@
 - [ ] **M5 Bridge 页**: `app/bridge/page.tsx`、`useBridge`、`BridgeForm`（`quoteSend` → `send`、自定义接收地址）
 - [ ] **Bridge 导航**: 完成 M5 前,从 `nav.ts` / `BottomTabBar` 移除 `/bridge`,或加占位页避免 404
 - [ ] **`depositWithPermit`**: 非 gasless 一笔存入
-- [ ] **双链测试网**: Base ltZEN + `WireStLighterOFT` / DVN;Hub⇄Spoke smoke（见 [`stLighter-deploy-checklist.md`](./stLighter-deploy-checklist.md)）
-
+- [ ] **双链测试网重部署**: Base Sepolia + Horizen Testnet — Wave A (A–F) + Wave B Egress/Redeem-to-Base (G–I)。权威步骤：[`stLighter-deploy-checklist.md`](./stLighter-deploy-checklist.md)
 ### P2 — 数据与打磨
 
 - [ ] **Goldsky 子图**: 替换 `useRateHistory` 会话采样;`HarvestHistory` 真实数据
@@ -143,11 +156,11 @@
 ## 建议接续顺序
 
 ```
-P0-Station S3 BFF 编排（redeem+credit / payer=Station）  ← 下一棒
-  → S4 半编排向导
+P0-Station S3/S4 Wave B（Redeem to Base / Egress BFF + UI）
+  → 双链测试网重部署（[`stLighter-deploy-checklist.md`](./stLighter-deploy-checklist.md)）
   → P0-B 负向 + deposit E2E（含 payer=user）
-  → P1 Bridge / 双链测试网
+  → P1 Bridge / M5
   → P2 Goldsky / 安全评审
 ```
 
-重启开发时:读 [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md) → [`stLighter-station-design.md`](./stLighter-station-design.md) → 本文件进度快照。
+重启开发时:读 [`stLighter-deploy-checklist.md`](./stLighter-deploy-checklist.md)（测试网）→ [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md) → [`stLighter-station-design.md`](./stLighter-station-design.md) → 本文件进度快照。

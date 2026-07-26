@@ -1,56 +1,57 @@
 "use client";
 
 /**
- * useFaucet — mint test ZEN on Horizen (M2; uiux §4 "Get test ZEN").
+ * useFaucet — mint test ZEN on **Base** (MockZEN ERC20 faucet).
  *
- * MockZEN.mint(to, amount) is unrestricted on the testnet so users can try staking. We mint a
- * fixed 256 ZEN. Horizen-only: the faucet entrypoint is gated by chainGating (faucet ∈
- * HORIZEN_ONLY); on Base the Stake page guides a chain switch instead of calling this.
- *
- * On success we invalidate the connected account's ZEN balance so the Stake form's "Balance"
- * and the deposit max reflect the new tokens immediately.
+ * Horizen ZEN is native ZenTokenOFT and cannot be arbitrarily minted. Test inventory starts
+ * on Base (max 256 ZEN per mint), then users Stake from Base or bridge to Horizen.
  */
 
 import { useCallback } from "react";
-import { useAccount } from "wagmi";
-import { writeContract } from "wagmi/actions";
+import { useAccount, useConfig, useSwitchChain } from "wagmi";
+import { getAccount, writeContract } from "wagmi/actions";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseEther, type Hex } from "viem";
-import { HUB_CHAIN_ID } from "@/config/chains";
-import { abis, horizenAddress } from "@/config/contracts";
+import { SPOKE_CHAIN_ID } from "@/config/chains";
+import { abis, baseAddress } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { useTxLifecycle } from "./useTxLifecycle";
 
-/** Fixed faucet grant (frontend-plan M2: 领 256 ZEN). */
+/** Fixed faucet grant (MockZEN.MAX_MINT_PER_CALL = 256e18). */
 export const FAUCET_AMOUNT_ZEN = 256n;
 
 export function useFaucet() {
   const { address } = useAccount();
+  const config = useConfig();
+  const { switchChainAsync } = useSwitchChain();
   const queryClient = useQueryClient();
   const lifecycle = useTxLifecycle("faucet");
 
-  const zenAddress = horizenAddress("zen");
+  const zenAddress = baseAddress("zen");
   const isConfigured = Boolean(zenAddress);
 
   const mint = useCallback(async () => {
     if (!address || !zenAddress) return;
+    const active = getAccount(config).chainId;
+    if (active !== SPOKE_CHAIN_ID) {
+      await switchChainAsync({ chainId: SPOKE_CHAIN_ID });
+    }
     await lifecycle.runStep({
-      chainId: HUB_CHAIN_ID,
+      chainId: SPOKE_CHAIN_ID,
       signingMessage: copy.cta.gettingTestZen,
       pendingMessage: copy.tx.pending,
       successMessage: copy.faucet.success,
       send: (cfg): Promise<Hex> =>
         writeContract(cfg, {
-          chainId: HUB_CHAIN_ID,
+          chainId: SPOKE_CHAIN_ID,
           address: zenAddress,
           abi: abis.zen,
           functionName: "mint",
           args: [address, parseEther(FAUCET_AMOUNT_ZEN.toString())],
         }),
     });
-    // Refresh ZEN balance reads (Stake form, max button).
     await queryClient.invalidateQueries();
-  }, [address, zenAddress, lifecycle, queryClient]);
+  }, [address, zenAddress, config, switchChainAsync, lifecycle, queryClient]);
 
   return {
     mint,

@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { parseEther } from "viem";
 import { useRedeem } from "@/hooks/useRedeem";
 import { useExchangeRate } from "@/hooks/useExchangeRate";
@@ -237,6 +238,16 @@ export function RedeemForm() {
       </button>
 
       <p className="mt-2 text-center text-xs text-zinc-500">{copy.redeem.harvestNote}</p>
+
+      <p className="mt-3 text-center text-xs text-zinc-500">
+        {copy.redeemToBase.linkFromRedeem}{" "}
+        <Link
+          href="/redeem-to-base"
+          className="text-zinc-200 underline-offset-2 hover:text-white hover:underline"
+        >
+          {copy.redeem.redeemToBaseCta}
+        </Link>
+      </p>
 
       {useGasless && r.gaslessPhase === "confirmed" && r.gaslessTxHash && (
         <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2.5 text-xs text-emerald-100">

@@ -4,7 +4,7 @@
 > **定位**: **仅服务 stLighter** 跨链场景（专用化）；不做通用开放 `Call[]` 执行器。  
 > **上级规范**: [`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)（产品原则、B1、gasless、状态机）。冲突时产品原则以上级为准；**合约接口与交接细节以本文为准**。  
 > **状态**: 需求已锁定（2026-07-21 访谈 Q11–Q31）；实现计划见 [`stLighter-station-impl-plan.md`](./stLighter-station-impl-plan.md)。**P0 代码已落地**（`InboundStation` + 单测，见 `src/stlighter/station/`）。  
-> **最后更新**: 2026-07-21（P0 实现）
+> **最后更新**: 2026-07-25（P0 实现；ZEN Base=ERC20+Adapter / Horizen=原生 OFT）
 
 ---
 
@@ -14,7 +14,7 @@
 
 | 目标 | 说明 |
 |------|------|
-| 跨链 stake | Base ZEN →（LZ 收 token + `lzCompose` 入账）→ `InboundStation` 会计 → 用户签 + relayer → `StLighter.deposit` → Horizen ltZEN |
+| 跨链 stake | Base ERC20 ZEN →（**OFTAdapter** lock + LZ + Horizen 原生 OFT + `lzCompose` 入账）→ `InboundStation` 会计 → 用户签 + relayer → `StLighter.depositWithSig(payer=Station)` → Horizen ltZEN |
 | Redeem to Base | `redeemWithSig(receiver=EgressStation)` → 用户签 `creditFromRedeem` → 另 tx `bridgeToBase` → Base 用户指定地址（B1） |
 | Gasless L3 | Station 上主权动作由 **relayer 代发**；用户 L3 无 ETH 不得卡死 |
 | 用户主权 | 未 stake / 未成功出桥的贷记余额可签名提取或重试 |
@@ -46,12 +46,13 @@
 ```mermaid
 flowchart LR
   subgraph inbound [CrossChain_Stake]
-    BaseZEN[Base_ZEN]
-    LZ[LZ_token_plus_lzCompose]
+    BaseZEN[Base_ERC20_ZEN]
+    Adapter[ZenTokenOFTAdapter]
+    LZ[LZ_lock_then_mint]
     InS[InboundStation]
-    SL[StLighter_deposit]
+    SL[StLighter_depositWithSig]
     ltZEN[ltZEN_to_receiver]
-    BaseZEN --> LZ --> InS
+    BaseZEN -->|approve_plus_send| Adapter --> LZ --> InS
     InS -->|depositWithSig_payer_Station| SL --> ltZEN
   end
 
@@ -65,6 +66,8 @@ flowchart LR
     EgS -->|credit_then_later_bridge| bridge --> BaseDest
   end
 ```
+
+> **ZEN 拓扑**: Base = 普通 ERC20 + `ZenTokenOFTAdapter`；Horizen = 原生 `ZenTokenOFT`。见 [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0。
 
 ---
 

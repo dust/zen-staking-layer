@@ -96,11 +96,67 @@ export const copy = {
     submitting: "Submitting to relayer…",
     relayerWaiting: "Waiting for the relayer to land on-chain…",
     pausedBanner: "Deposits are temporarily paused. Redeeming and viewing are unaffected.",
+    stakeFromBaseCta: "Stake from Base instead →",
+    noFaucetOnHorizen:
+      "Horizen ZEN is a native OFT — there's no faucet here. Mint test ZEN on Base, then stake via From Base (or bridge ZEN to Horizen first).",
+  },
+
+  // Cross-chain stake (Base ERC20 ZEN → OFTAdapter → InboundStation → StLighter). Path B; Wave A.
+  crossStake: {
+    title: "Stake from Base",
+    subtitle:
+      "Approve and bridge ZEN from Base via the OFT adapter, then stake into stLighter on Horizen. You pay Base gas for approve/send and the LayerZero fee; Horizen stake is signed and relayed.",
+    notConfigured:
+      "Cross-chain stake isn't configured yet. Set InboundStation, Base ZEN (ERC20), Base ZenTokenOFTAdapter, and LayerZero EIDs in env.",
+    progressLabel: "Progress",
+    stepAmount: "Amount",
+    stepSignCredit: "Authorize credit",
+    stepBridge: "Approve & bridge",
+    stepWait: "Wait for credit",
+    stepStake: "Stake on Horizen",
+    stepDone: "Done",
+    amountLabel: "Amount (Base ZEN)",
+    balance: "Base ZEN balance",
+    creditedLabel: "Credited on Horizen Station",
+    creditNote:
+      "You'll briefly switch to Horizen to sign the Station credit authorization (MetaMask requires the wallet chain to match the EIP-712 domain). Then switch back to Base to approve and bridge.",
+    bridgeNote:
+      "Base ZEN is a normal ERC20. If needed you approve the ZenTokenOFTAdapter, then send through the adapter (locks ZEN on Base). LayerZero deliver + compose can take a few minutes — you pay Base gas and the LZ native fee. This is not gasless.",
+    approveNote: "First bridge needs a one-time approval of Base ZEN to the OFT adapter.",
+    waitNote:
+      "Polling Horizen for Station credit. Keep this tab open, or come back later — credited balance resumes at stake.",
+    stakeNote:
+      "Stake uses your Station credit as the ZEN payer. You sign DepositWithSig; a relayer submits on Horizen — you are not paying Horizen gas for this stake.",
+    withdrawNote: "Don't want to stake? Withdraw credited ZEN to your Horizen wallet.",
+    withdrawCta: "Withdraw credited ZEN",
+    signingWithdraw: "Sign to withdraw credited ZEN…",
+    withdrawConfirmed: "Credited ZEN withdrawn to Horizen.",
+    signingCredit: "Switch to Horizen if needed, then sign credit authorization…",
+    creditSigned: "Credit authorization signed.",
+    approvingAdapter: "Approve ZEN for the OFT adapter…",
+    bridging: "Sending ZEN via OFT adapter…",
+    bridgeSent: "Bridge sent. Waiting for Horizen credit…",
+    signingStake: "Sign to authorize the stake…",
+    relayingStake: "Relayer submitting stake on Horizen…",
+    stakeConfirmed: "Cross-chain stake confirmed — ltZEN minted on Horizen.",
+    continueSignCredit: "Sign credit authorization",
+    continueApprove: "Approve ZEN for adapter",
+    continueBridge: "Bridge ZEN from Base",
+    continueWait: "Still waiting for credit…",
+    continueStake: "Stake credited ZEN",
+    startOver: "Start over",
+    switchToBase: "Switch to Base to start",
+    guideOnHorizen:
+      "Cross-chain stake starts on Base with your ZEN. Switch to Base to begin, or stake same-chain on Horizen from the Stake page.",
+    guideOnBaseDeposit:
+      "Same-chain staking happens on Horizen. Or stake from Base with the cross-chain flow — approve the adapter, bridge ZEN, then relay a Horizen deposit.",
   },
 
   faucet: {
-    note: "Mint test ZEN to try staking on Horizen.",
-    success: "Test ZEN minted.",
+    note: "Mint up to 256 test ZEN on Base (MockZEN). Then use Stake from Base.",
+    success: "Test ZEN minted on Base.",
+    guideOnHorizen:
+      "The test ZEN faucet is on Base only. Horizen ZEN is a native OFT and cannot be minted from the faucet. Switch to Base to mint.",
   },
 
   // Redeem page (uiux §5.1). All NET-NEW English (docs were Chinese).
@@ -129,6 +185,59 @@ export const copy = {
     relayerWaiting: "Waiting for the relayer to land on-chain…",
     confirmed: "Redeem confirmed.",
     noShares: "You don't hold any ltZEN to redeem.",
+    redeemToBaseCta: "Redeem to Base instead →",
+  },
+
+  // Redeem to Base (Horizen ltZEN → EgressStation → Base ZEN @ B1). Path C; Wave B.
+  redeemToBase: {
+    title: "Redeem to Base",
+    subtitle:
+      "Burn ltZEN on Horizen, credit the Egress Station, then bridge ZEN to a Base address you confirm. L3 steps are signed and relayed; you pay only if using Direct submit.",
+    notConfigured:
+      "Redeem to Base isn't configured yet. Set EgressStation, ZenOftStationBridge, StLighter, Base ZEN, and Base EID in env.",
+    progressLabel: "Progress",
+    stepAmount: "Amount",
+    stepDest: "Confirm Base dest",
+    stepRedeem: "Redeem to Egress",
+    stepCredit: "Credit Station",
+    stepBridge: "Bridge to Base",
+    stepWait: "Wait for Base",
+    stepDone: "Done",
+    amountLabel: "Amount (ltZEN)",
+    holdings: "You hold",
+    youReceiveEst: "Est. ZEN (before fee)",
+    destLabel: "Base destination (B1)",
+    destNote:
+      "ZEN unlocks on Base to this address only. Changing it requires a new signature. Double-check before continuing.",
+    destConfirmCta: "Confirm destination",
+    destChangeWarn: "You changed the Base destination — confirm again before bridging.",
+    creditedLabel: "Credited on Egress Station",
+    recoverableNote:
+      "Funds are held in the protocol Egress Station. Retry the bridge, or withdraw ZEN to your Horizen wallet.",
+    withdrawCta: "Withdraw to Horizen instead",
+    signingWithdraw: "Sign to withdraw credited ZEN…",
+    withdrawConfirmed: "Credited ZEN withdrawn to Horizen.",
+    signingRedeem: "Sign RedeemWithSig (receiver = Egress)…",
+    relayingRedeem: "Relayer submitting redeem on Horizen…",
+    redeemConfirmed: "Redeem confirmed — ZEN at Egress float.",
+    signingCredit: "Sign CreditFromRedeem…",
+    relayingCredit: "Relayer submitting credit…",
+    creditConfirmed: "Egress credit assigned.",
+    signingBridge: "Sign BridgeToBase…",
+    relayingBridge: "Relayer bridging ZEN to Base (pays LZ native fee)…",
+    bridgeSent: "Bridge sent from Horizen. Waiting for Base ZEN…",
+    waitNote: "Polling Base for ZEN at your B1 address. LayerZero delivery can take a few minutes.",
+    done: "Redeem to Base complete — ZEN arrived on Base.",
+    continueRedeem: "Redeem to Egress",
+    continueCredit: "Credit Egress Station",
+    continueBridge: "Bridge to Base",
+    continueWait: "Still waiting for Base…",
+    markReceived: "I've received ZEN on Base",
+    startOver: "Start over",
+    switchToHorizen: "Switch to Horizen to continue",
+    guideOnBase:
+      "Redeem to Base starts on Horizen with your ltZEN. Switch to Horizen, or bridge ltZEN back from Base first.",
+    linkFromRedeem: "Want ZEN on Base instead?",
   },
 
   // Transparency page (uiux §7). All NET-NEW English (docs were Chinese). Tone: present data
@@ -171,9 +280,15 @@ export const copy = {
       stLighterImpl: "stLighter (implementation)",
       ltZEN: "ltZEN",
       zenStaker: "ZenStaker",
-      zen: "ZEN",
+      zen: "ZEN (Horizen OFT)",
+      inboundStation: "InboundStation",
+      egressStation: "EgressStation",
+      zenOftStationBridge: "ZenOftStationBridge",
       baseLtZEN: "ltZEN (Base)",
+      baseZen: "ZEN (Base ERC20)",
+      baseZenOftAdapter: "ZenTokenOFTAdapter (Base)",
     },
+    egressRefundNote: "Outbound LZ native fee refunds to EgressStation (never the relayer EOA).",
     paused: { yes: "Yes", no: "No" },
   },
 

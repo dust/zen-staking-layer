@@ -224,6 +224,15 @@ export function StakeForm() {
           </button>
         </div>
       )}
+
+      <p className="mt-4 text-center text-xs text-zinc-500">
+        <a
+          href="/stake-crosschain"
+          className="text-zinc-300 underline-offset-2 hover:text-white hover:underline"
+        >
+          {copy.stake.stakeFromBaseCta}
+        </a>
+      </p>
     </Card>
   );
 }

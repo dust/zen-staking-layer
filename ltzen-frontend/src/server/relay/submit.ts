@@ -20,7 +20,14 @@ function hubPublicClient() {
 }
 
 async function feeBasisWei(req: RelayRequest): Promise<bigint> {
-  if (req.kind === "depositWithSigAndPermit") {
+  if (
+    req.kind === "depositWithSigAndPermit" ||
+    req.kind === "depositWithSig" ||
+    req.kind === "withdrawToHorizen" ||
+    req.kind === "creditFromRedeem" ||
+    req.kind === "bridgeToBase" ||
+    req.kind === "egressWithdrawToHorizen"
+  ) {
     return BigInt(req.amount);
   }
   const client = hubPublicClient();
@@ -46,7 +53,12 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   relayLog("assertRequest ok");
 
   const basis = await feeBasisWei(req);
-  const feeZen = computeFeeZen(BigInt(req.maxFeeZen), basis, relayerFeeBps());
+  const feeZen =
+    req.kind === "creditFromRedeem" ||
+    req.kind === "withdrawToHorizen" ||
+    req.kind === "egressWithdrawToHorizen"
+      ? 0n
+      : computeFeeZen(BigInt(req.maxFeeZen || "0"), basis, relayerFeeBps());
   relayLog("fee computed", {
     basis: basis.toString(),
     feeZen: feeZen.toString(),
@@ -57,11 +69,12 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   await validateRelayRequest(req, feeZen, basis);
   relayLog("validateRelayRequest ok");
 
-  const { to, data } = encodeMetaTx(req, feeZen);
+  const { to, data, value } = encodeMetaTx(req, feeZen);
   relayLog("encoded meta-tx", {
     to,
     dataLen: data.length,
     selector: data.slice(0, 10),
+    value: value.toString(),
   });
 
   const id = crypto.randomUUID();
@@ -71,8 +84,8 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   void (async () => {
     try {
       patchJob(id, { status: "relaying" });
-      relayLog("broadcast start", { id, to });
-      const { rrelayerTxId, hash } = await broadcastContractCall(to, data);
+      relayLog("broadcast start", { id, to, value: value.toString() });
+      const { rrelayerTxId, hash } = await broadcastContractCall(to, data, value);
       relayLog("broadcast sent", { id, rrelayerTxId, hash });
       patchJob(id, { txHash: hash, rrelayerTxId });
       relayLog("waitForRrelayerTx start", { id, rrelayerTxId, hash });

@@ -2,7 +2,7 @@
 
 Frontend for **stLighter / ltZEN** liquid staking. Multi-chain, chain-aware:
 **Horizen Testnet** (hub — deposit / redeem / exchange-rate / transparency) and
-**Base** (spoke — ltZEN OFT circulation + gasless only). See
+**Base** (spoke — ltZEN OFT; cross-chain ZEN stake via ERC20 + `ZenTokenOFTAdapter`). See
 [`../docs/stLighter-frontend-plan.md`](../docs/stLighter-frontend-plan.md) for the full plan.
 
 Stack: Next.js 16 (App Router) · wagmi v3 / viem · RainbowKit · TanStack Query · Tailwind v4.

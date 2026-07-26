@@ -40,7 +40,7 @@
 | **meaningless gasless** | 对外宣称「ZEN deposit 完全免授权、免一切链上操作」，或在仍需 `approve` 时隐瞒该步。**禁止。** |
 | **半编排** | 前端/BFF 串起固定步骤向导；每步可有用户确认；状态可持久化与恢复；不要求后端长期、原子地跟踪全部跨链消息至终态（那是「真·编排」，非本规范 MVP）。 |
 | **共享入站车站 (InboundStation)** | Horizen 上共享合约：LZ 入金会计（`lzCompose` 仅 credit）；所有者签名后由 relayer 调 `stakeToStLighter` → `StLighter.deposit`；或 withdraw。**专用**于 stLighter 跨链 stake。详见 [`stLighter-station-design.md`](./stLighter-station-design.md)。 |
-| **跨链 stake** | Base ZEN →（LZ + compose → InboundStation）→ relayer `stakeToStLighter` → Horizen ltZEN。 |
+| **跨链 stake** | Base ERC20 ZEN → `approve` + **OFTAdapter.send** + compose → InboundStation 会计 → relayer `depositWithSig(payer=Station)` → Horizen ltZEN。 |
 | **同链 stake/redeem** | 用户钱包已在 Horizen 持有 ZEN / ltZEN；gasless redeem 终点为 **Horizen 用户钱包中的 ZEN**。 |
 | **Redeem to Base** | gasless：`redeemWithSig(receiver=EgressStation)` → `creditFromRedeem` → 另 tx `bridgeToBase` → **Base 用户指定地址（B1）**。 |
 | **出站车站 (EgressStation)** | 承接 redeem ZEN、会计、**仅自身调桥**、退款可恢复；不是 Base 侧 Receiver。详见 Station 设计文档。 |
@@ -107,14 +107,17 @@ flowchart TB
 
 ### 2.2 Path B — 跨链 stake（Base → Horizen ltZEN）
 
-1. 用户在 Base 发起桥出；到账经 LZ **收 token + `lzCompose`**，compose **仅**向 **InboundStation** `credit(owner, assets)`（**不**在 compose 内 stake）。
-2. 用户签名 `StakeToStLighter`；**L3 上由 relayer** 调 InboundStation → Station 调 `StLighter.deposit`（不走 `depositWithSig` 抽 user 钱包）。
-3. ltZEN mint 至签名中的 `ltZenReceiver`（语义同现有 `StLighter.deposit`）；跨链 stake **终点固定 Horizen ltZEN**。
-4. 未 stake 贷记可签 `withdrawToHorizen` 撤回。
+**Token 事实**: Base 上 ZEN 是普通 ERC20；跨链入口为已有 **`ZenTokenOFTAdapter`**。Horizen 上 ZEN 是原生 **`ZenTokenOFT`**。详见 [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0。
+
+1. 用户在 Base：**必要时 `approve(adapter)`** → `adapter.send(to=InboundStation, composeMsg=CreditFromCompose)`（用户付 Base gas + LZ native fee；**不得**宣传为完美 gasless）。
+2. LZ：Base **lock** ZEN → Horizen OFT 向 InboundStation **credit**；`lzCompose` **仅** `credit(owner, assets)`（**不**在 compose 内 stake）。
+3. 用户签名 `DepositWithSig(..., payer=InboundStation)`；**L3 上由 relayer** 调 `StLighter.depositWithSig` → Station `payForDeposit`（用户无需 L3 ETH / 无需对 StLighter 做 ZEN approve）。
+4. ltZEN mint 至签名中的 `receiver`；跨链 stake **终点固定 Horizen ltZEN**。
+5. 未 stake 贷记可签 `withdrawToHorizen` 撤回。
 
 细节与 EIP-712 → [`stLighter-station-design.md`](./stLighter-station-design.md)。
 
-**绕过 ZEN 无 permit**: 跨链 ZEN 由 InboundStation 持有并在 Station 路径进入 StLighter；用户无需在 L3 对 StLighter 做 ZEN `approve`，也无需 L3 ETH。
+**绕过 L3 上 ZEN 无 permit**: 跨链 ZEN 由 InboundStation 持有并在 Station 路径进入 StLighter；用户无需在 L3 对 StLighter 做 ZEN `approve`，也无需 L3 ETH。Base 腿的 ERC20 `approve` 仍可能需要。
 
 ### 2.3 两条 redeem 产品入口（修订）
 

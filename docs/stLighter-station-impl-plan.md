@@ -3,7 +3,7 @@
 > **用途**: 将 [`stLighter-station-design.md`](./stLighter-station-design.md) 落成可编码的合约结构、存储、接口、分阶段交付与测试。  
 > **不改** `Staker.sol` 写路径；Station 为 **新增** 合约，不进入 StLighter 存储布局。  
 > **上级**: [`stLighter-station-design.md`](./stLighter-station-design.md)、[`stLighter-crosschain-gasless-spec.md`](./stLighter-crosschain-gasless-spec.md)  
-> **最后更新**: 2026-07-21
+> **最后更新**: 2026-07-25
 
 ---
 
@@ -17,6 +17,8 @@
 | 4 | 桥细节经 **适配器接口** 隔离；MVP 可用 Mock，真 LZ 走 S5 ADR |
 | 5 | `lzCompose` **只 credit**（+ owner EIP-712）；非法入金 revert |
 | 6 | 错误命名：`InboundStation__*` / `EgressStation__*` / `StationAccounting__*` |
+
+**ZEN / LZ**: Base = ERC20 + 已有 `ZenTokenOFTAdapter`；Horizen = 原生 `ZenTokenOFT`（`InboundStation.zenOft`）。见 [`stLighter-station-compose-adr.md`](./stLighter-station-compose-adr.md) §0。
 
 ---
 
