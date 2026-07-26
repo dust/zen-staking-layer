@@ -15,7 +15,7 @@
 | 目标 | 说明 |
 |------|------|
 | 跨链 stake | Base ERC20 ZEN →（**OFTAdapter** lock + LZ + Horizen 原生 OFT + `lzCompose` 入账）→ `InboundStation` 会计 → 用户签 + relayer → `StLighter.depositWithSig(payer=Station)` → Horizen ltZEN |
-| Redeem to Base | `redeemWithSig(receiver=EgressStation)` → 用户签 `creditFromRedeem` → 另 tx `bridgeToBase` → Base 用户指定地址（B1） |
+| Redeem to Base | `Egress.redeemAndCredit` → 另 tx `bridgeToBase` → Base 用户指定地址（B1） |
 | Gasless L3 | Station 上主权动作由 **relayer 代发**；用户 L3 无 ETH 不得卡死 |
 | 用户主权 | 未 stake / 未成功出桥的贷记余额可签名提取或重试 |
 | 安全优先 | 共享共池 + 有限模板；放弃任意 Multicall / 目标白名单通用执行器 |
@@ -95,9 +95,8 @@ Gasless = 用户不为 L3 stake tx 付 gas。
 
 **锁定路径（同 tx）**:
 
-1. Relayer 调 `StLighter.redeemWithSig(..., receiver = EgressStation, user = owner)`（现有 EIP-712 + ltZEN permit 若需要）。
-2. 同 tx 内 Relayer 调 `EgressStation.creditFromRedeem(..., sig)`（用户预签 EIP-712）。
-3. 无有效 owner 签名则 **不得** 增加该用户 `credited`；多出 ZEN 进不可分配余额（见 §7）。
+1. Relayer 调 `EgressStation.redeemAndCredit`（内调 `StLighter.redeemWithSig(..., receiver = this)`；fee → 签名 `relayer`）。
+2. 同 tx 入账净额到 `owner`（无独立 CreditFromRedeem；无 public credit 抢记面）。
 
 **出桥（另 tx，Q22=B）**:
 
@@ -120,7 +119,8 @@ Gasless = 用户不为 L3 stake tx 付 gas。
 
 | 动作 | 谁触发 | 说明 |
 |------|--------|------|
-| `creditFromRedeem` | relayer + owner EIP-712 | 与同 tx redeem 配合；防抢记 |
+| `redeemAndCredit` | relayer + owner `RedeemWithSig` | 同 tx redeem+入账；无 public credit |
+| `bridgeToBase` | relayer + owner EIP-712（含 `relayer`） | 扣 credited；fee → 签名 `relayer` |
 | `bridgeToBase` | relayer + owner EIP-712 | 出桥；Station 为桥调用方 |
 | `retryBridgeToBase` | 同 `BridgeToBase` 类型再签 | recoverable 后重试 / 改 dest |
 | `withdrawToHorizen` | relayer + owner EIP-712 | 放弃出桥，提到 Horizen |
@@ -204,7 +204,7 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 | 层级 | 行为 |
 |------|------|
 | MVP | 非法 compose / 无法校验的入金：**revert 或不入用户可花余额**（实现含「C」：拒收） |
-| 严格会计 | redeem 打入 Egress 但 `creditFromRedeem` 缺失/过期：ZEN 进 **unassigned**（不可被任意 credit 抢走） |
+| 严格会计 | 生产路径只走 `redeemAndCredit`；孤儿 float（直接 redeem 进 Egress）仅治理 `sweepFloatToUnassigned` |
 | 救援 | 超时后 **治理/多签 `rescue`**（Q24=A）；不得自动送给 relayer |
 
 ---
@@ -213,7 +213,7 @@ WithdrawToHorizen(uint256 assets, address to, address owner, uint256 nonce, uint
 
 1. **共池禁止裸任意 call**；仅模板动作。  
 2. **debit 贷记后再转出**；禁止超额。  
-3. **creditFromRedeem 无 owner 签不可入账**（防抢记）。  
+3. **无 public credit** — 入账仅经 `redeemAndCredit`（或 bridge refund）。  
 4. **出桥仅 Egress 调用**；refund 回 Egress。  
 5. **relayer 不得改写** 签名中的 `dest` / `ltZenReceiver` / `assets`。  
 6. **`lzCompose` 不 stake**。  
@@ -261,7 +261,7 @@ Compose payload / LZ 接线 → [`stLighter-station-compose-adr.md`](./stLighter
 | Q17 | 接受推荐 MVP 动作集 |
 | Q18 | **C** 明确仅服务 stLighter 跨链 stake/redeem |
 | Q19 | 入站：**`depositWithSig` + `payer=Station`**（修订：原「Station 调 deposit」作废） |
-| Q20 | 出站：同 tx `redeemWithSig` + `creditFromRedeem` |
+| Q20 | 出站：`Egress.redeemAndCredit` 同 tx；bridge 另 tx |
 | Q21 | credit 防抢：**用户 EIP-712 预授权** |
 | Q22 | credit 与 bridge：**固定两阶段（另 tx）** |
 | Q23 | 入账绑定：**LZ + compose + owner EIP-712/Nonces**（修订：优先于仅 guid） |

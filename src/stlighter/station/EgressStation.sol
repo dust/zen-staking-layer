@@ -12,24 +12,21 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 import {IStationBridge} from "./IStationBridge.sol";
+import {IStLighterRedeem} from "./IStLighterRedeem.sol";
 import {StationAccounting} from "./StationAccounting.sol";
 
 /// @title EgressStation
 /// @notice Shared egress station for Redeem-to-Base (stLighter-specific, non-upgradeable).
-/// @dev Relayer: same-tx `redeemWithSig(receiver=this)` then `creditFromRedeem`; later
-/// `bridgeToBase`. Only this contract calls `IStationBridge`; refunds re-credit the owner.
+/// @dev Relayer: `redeemAndCredit` (atomic redeemWithSig + credit); later `bridgeToBase`.
+/// Only this contract calls `IStationBridge`; refunds re-credit the owner.
 contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonces, StationAccounting {
   using SafeERC20 for IERC20;
 
   /// @notice Aligns with StLighter gasless fee cap.
   uint256 public constant MAX_GAS_FEE_ZEN = 10e18;
 
-  bytes32 public constant CREDIT_FROM_REDEEM_TYPEHASH = keccak256(
-    "CreditFromRedeem(uint256 assets,address owner,uint256 nonce,uint256 deadline)"
-  );
-
   bytes32 public constant BRIDGE_TO_BASE_TYPEHASH = keccak256(
-    "BridgeToBase(uint256 assets,address dest,uint256 maxFeeZen,address owner,uint256 nonce,uint256 deadline)"
+    "BridgeToBase(uint256 assets,address dest,uint256 maxFeeZen,address relayer,address owner,uint256 nonce,uint256 deadline)"
   );
 
   bytes32 public constant WITHDRAW_TO_HORIZEN_TYPEHASH = keccak256(
@@ -48,6 +45,9 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
     bool active;
   }
 
+  /// @notice Liquid-staking vault used by `redeemAndCredit`.
+  IStLighterRedeem public immutable stLighter;
+
   IStationBridge public bridge;
 
   /// @notice In-flight bridge principal (debited, not yet complete/refunded). Tokens may sit on the
@@ -57,7 +57,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   mapping(bytes32 bridgeId => BridgePending) public pending;
 
   event BridgeSet(address indexed bridge);
-  event RedeemCredited(address indexed owner, uint256 assets, uint256 nonce);
+  event RedeemCredited(address indexed owner, uint256 assets, uint256 feeZen);
   event BridgeInitiated(
     bytes32 indexed bridgeId,
     address indexed owner,
@@ -73,46 +73,47 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   error EgressStation__ZeroAmount();
   error EgressStation__ExpiredDeadline();
   error EgressStation__InvalidSignature();
-  error EgressStation__InsufficientFloat();
   error EgressStation__GasFeeExceedsMax();
   error EgressStation__UnauthorizedBridge();
   error EgressStation__UnknownBridgeId();
   error EgressStation__BridgeNotActive();
 
-  constructor(IERC20 zen_, address bridge_, address owner_) Ownable(owner_) EIP712("EgressStation", "1") {
-    if (bridge_ == address(0)) revert EgressStation__ZeroAddress();
+  constructor(IERC20 zen_, address stLighter_, address bridge_, address owner_)
+    Ownable(owner_)
+    EIP712("EgressStation", "1")
+  {
+    if (stLighter_ == address(0) || bridge_ == address(0)) revert EgressStation__ZeroAddress();
     _setZen(zen_);
+    stLighter = IStLighterRedeem(stLighter_);
     bridge = IStationBridge(bridge_);
   }
 
   // -------------------------------------------------------------------------
-  // Credit after redeem (float + EIP-712; anti-snatch)
+  // Atomic redeem + credit
   // -------------------------------------------------------------------------
 
-  /// @notice Assign uncredited ZEN already held by this station to `owner`.
-  /// @dev Relayer should call in the same tx after `StLighter.redeemWithSig(receiver=this)`.
-  function creditFromRedeem(
-    uint256 assets,
-    address owner,
+  /// @notice Redeem ltZEN into this station and credit `user` in the same tx.
+  /// @dev Calls `StLighter.redeemWithSig` with `receiver=this`. Fee goes to signed `relayer`.
+  function redeemAndCredit(
+    uint256 shares,
+    uint256 maxFeeZen,
+    uint256 feeZen,
+    address relayer,
+    address user,
     uint256 deadline,
     bytes calldata signature
   ) external nonReentrant whenNotPaused {
-    if (assets == 0) revert EgressStation__ZeroAmount();
-    if (owner == address(0)) revert EgressStation__ZeroAddress();
-    _revertIfPastDeadline(deadline);
+    if (shares == 0) revert EgressStation__ZeroAmount();
+    if (relayer == address(0) || user == address(0)) revert EgressStation__ZeroAddress();
 
-    uint256 nonce = _useNonce(owner);
-    _revertIfSignatureInvalid(
-      owner,
-      _hashTypedDataV4(
-        keccak256(abi.encode(CREDIT_FROM_REDEEM_TYPEHASH, assets, owner, nonce, deadline))
-      ),
-      signature
+    uint256 assets = stLighter.redeemWithSig(
+      shares, address(this), maxFeeZen, feeZen, relayer, user, deadline, signature
     );
+    uint256 net = assets - feeZen;
+    if (net == 0) revert EgressStation__ZeroAmount();
 
-    if (assets > float()) revert EgressStation__InsufficientFloat();
-    _credit(owner, assets, REASON_REDEEM);
-    emit RedeemCredited(owner, assets, nonce);
+    _credit(user, net, REASON_REDEEM);
+    emit RedeemCredited(user, net, feeZen);
   }
 
   // -------------------------------------------------------------------------
@@ -120,18 +121,22 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   // -------------------------------------------------------------------------
 
   /// @notice Debit credited ZEN and initiate outbound bridge. Retry = new signature + new nonce.
+  /// @dev Fee is paid to signed `relayer` (may differ from `msg.sender`).
   function bridgeToBase(
     uint256 assets,
     address dest,
     uint256 maxFeeZen,
     uint256 feeZen,
+    address relayer,
     address owner,
     uint256 deadline,
     bytes calldata signature,
     bytes calldata extraOptions
   ) external payable nonReentrant whenNotPaused {
     if (assets == 0) revert EgressStation__ZeroAmount();
-    if (dest == address(0) || owner == address(0)) revert EgressStation__ZeroAddress();
+    if (dest == address(0) || relayer == address(0) || owner == address(0)) {
+      revert EgressStation__ZeroAddress();
+    }
     _revertIfPastDeadline(deadline);
     _enforceGaslessFeeLimits(feeZen, maxFeeZen);
     if (feeZen >= assets) revert EgressStation__GasFeeExceedsMax();
@@ -141,7 +146,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
       owner,
       _hashTypedDataV4(
         keccak256(
-          abi.encode(BRIDGE_TO_BASE_TYPEHASH, assets, dest, maxFeeZen, owner, nonce, deadline)
+          abi.encode(BRIDGE_TO_BASE_TYPEHASH, assets, dest, maxFeeZen, relayer, owner, nonce, deadline)
         )
       ),
       signature
@@ -151,7 +156,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
 
     uint256 bridgeAmount = assets - feeZen;
     if (feeZen != 0) {
-      _zen.safeTransfer(msg.sender, feeZen);
+      _zen.safeTransfer(relayer, feeZen);
     }
 
     bytes32 bridgeId = keccak256(

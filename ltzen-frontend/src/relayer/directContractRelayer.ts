@@ -91,6 +91,7 @@ export class DirectContractRelayer implements Relayer {
               BigInt(req.maxFeeZen),
               feeZen,
               payer,
+              req.relayer,
               req.user,
               BigInt(req.deadline),
               req.signature,
@@ -122,6 +123,7 @@ export class DirectContractRelayer implements Relayer {
               BigInt(req.maxFeeZen),
               feeZen,
               payer,
+              req.relayer,
               req.user,
               BigInt(req.deadline),
               req.signature,
@@ -146,6 +148,31 @@ export class DirectContractRelayer implements Relayer {
               req.receiver,
               BigInt(req.maxFeeZen),
               feeZen,
+              req.relayer,
+              req.user,
+              BigInt(req.deadline),
+              req.signature,
+            ],
+          }),
+      );
+    }
+
+    if (req.kind === "redeemAndCredit") {
+      return new DirectRelayHandle(
+        this.config,
+        req.chainId,
+        id,
+        async () =>
+          writeContract(this.config, {
+            chainId: req.chainId,
+            address: req.verifyingContract,
+            abi: abis.egressStation,
+            functionName: "redeemAndCredit",
+            args: [
+              BigInt(req.amount),
+              BigInt(req.maxFeeZen),
+              feeZen,
+              req.relayer,
               req.user,
               BigInt(req.deadline),
               req.signature,
@@ -176,22 +203,6 @@ export class DirectContractRelayer implements Relayer {
       );
     }
 
-    if (req.kind === "creditFromRedeem") {
-      return new DirectRelayHandle(
-        this.config,
-        req.chainId,
-        id,
-        async () =>
-          writeContract(this.config, {
-            chainId: req.chainId,
-            address: req.verifyingContract,
-            abi: abis.egressStation,
-            functionName: "creditFromRedeem",
-            args: [BigInt(req.amount), req.user, BigInt(req.deadline), req.signature],
-          }),
-      );
-    }
-
     if (req.kind === "bridgeToBase") {
       const value = BigInt(req.nativeValue ?? "0");
       if (value <= 0n) throw new Error("bridgeToBase requires nativeValue > 0");
@@ -211,6 +222,7 @@ export class DirectContractRelayer implements Relayer {
               req.receiver,
               BigInt(req.maxFeeZen),
               feeZen,
+              req.relayer,
               req.user,
               BigInt(req.deadline),
               req.signature,

@@ -2,7 +2,7 @@ import { createPublicClient, http } from "viem";
 import StLighterAbi from "@/abi/StLighter.json";
 import { horizen } from "@/config/chains";
 import type { RelayRequest } from "@/relayer/types";
-import { rrelayerConfigured, relayerFeeBps } from "./config";
+import { rrelayerConfigured, relayerFeeBps, stLighterAddress } from "./config";
 import { computeFeeZen } from "./fee";
 import { encodeMetaTx } from "./encode";
 import { createJob, patchJob } from "./jobs";
@@ -24,15 +24,18 @@ async function feeBasisWei(req: RelayRequest): Promise<bigint> {
     req.kind === "depositWithSigAndPermit" ||
     req.kind === "depositWithSig" ||
     req.kind === "withdrawToHorizen" ||
-    req.kind === "creditFromRedeem" ||
     req.kind === "bridgeToBase" ||
     req.kind === "egressWithdrawToHorizen"
   ) {
     return BigInt(req.amount);
   }
+  // redeemWithSig / redeemAndCredit: amount is shares
   const client = hubPublicClient();
+  const stLighter =
+    req.kind === "redeemAndCredit" ? stLighterAddress() : req.verifyingContract;
+  if (!stLighter) throw new Error("StLighter address not configured");
   return client.readContract({
-    address: req.verifyingContract,
+    address: stLighter,
     abi: StLighterAbi,
     functionName: "previewRedeem",
     args: [BigInt(req.amount)],
@@ -54,9 +57,7 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
 
   const basis = await feeBasisWei(req);
   const feeZen =
-    req.kind === "creditFromRedeem" ||
-    req.kind === "withdrawToHorizen" ||
-    req.kind === "egressWithdrawToHorizen"
+    req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen"
       ? 0n
       : computeFeeZen(BigInt(req.maxFeeZen || "0"), basis, relayerFeeBps());
   relayLog("fee computed", {

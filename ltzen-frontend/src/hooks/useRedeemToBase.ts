@@ -2,10 +2,8 @@
 
 /**
  * Redeem to Base (Wave B):
- * Horizen ltZEN → redeemWithSig(receiver=Egress) → creditFromRedeem → bridgeToBase → Base ZEN @ B1.
+ * Horizen ltZEN → Egress.redeemAndCredit → bridgeToBase → Base ZEN @ B1.
  * L3 legs go through createRelayer() (BFF+rrelayer when configured).
- *
- * Credit is signed *after* redeem confirms so net assets match the relayer feeZen.
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -27,11 +25,11 @@ import {
   horizenAddress,
   redeemToBaseConfigured,
 } from "@/config/contracts";
+import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { copy } from "@/lib/copy";
 import { classifyTxError, logTxError } from "@/lib/errors";
 import {
   signBridgeToBase,
-  signCreditFromRedeem,
   signEgressWithdrawToHorizen,
   signRedeemWithSig,
 } from "@/lib/eip712";
@@ -48,7 +46,6 @@ export type RedeemToBaseStep =
   | "amount"
   | "confirm-dest"
   | "redeem"
-  | "credit"
   | "bridge"
   | "wait-base"
   | "done";
@@ -111,7 +108,6 @@ export function useRedeemToBase() {
   const [phase, setPhase] = useState<RedeemToBasePhase>("idle");
   const [netAssets, setNetAssets] = useState<bigint | undefined>();
   const [redeemTxHash, setRedeemTxHash] = useState<Hex | undefined>();
-  const [creditTxHash, setCreditTxHash] = useState<Hex | undefined>();
   const [bridgeTxHash, setBridgeTxHash] = useState<Hex | undefined>();
   const [baseBalanceBefore, setBaseBalanceBefore] = useState<bigint | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -179,7 +175,6 @@ export function useRedeemToBase() {
       if (bridgeTxHash) return "wait-base";
       return "bridge";
     }
-    if (redeemTxHash && credited === 0n) return "credit";
     if (destConfirmed && sharesWei) return "redeem";
     if (sharesWei) return "confirm-dest";
     return "amount";
@@ -214,18 +209,20 @@ export function useRedeemToBase() {
     [],
   );
 
-  const relayRedeem = useCallback(async () => {
+  const relayRedeemAndCredit = useCallback(async () => {
     if (!account || !stLighter || !egress || !sharesWei || maxFeeZen === undefined) return;
     setError(undefined);
     setPhase("signing");
     push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.signingRedeem });
     try {
       await ensureHorizen();
+      const feeRelayer = resolveGaslessFeeRelayer(account);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const { signature } = await signRedeemWithSig(config, HUB_CHAIN_ID, stLighter, {
         shares: sharesWei,
         receiver: egress,
         maxFeeZen,
+        relayer: feeRelayer,
         user: account,
         deadline,
       });
@@ -233,13 +230,14 @@ export function useRedeemToBase() {
       push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.relayingRedeem });
       const relayer = createRelayer(config);
       const handle = await relayer.submit({
-        kind: "redeemWithSig",
+        kind: "redeemAndCredit",
         chainId: HUB_CHAIN_ID,
-        verifyingContract: stLighter,
+        verifyingContract: egress,
         user: account,
         receiver: egress,
         amount: sharesWei.toString(),
         maxFeeZen: maxFeeZen.toString(),
+        relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
       });
@@ -266,7 +264,7 @@ export function useRedeemToBase() {
       });
       setPhase("idle");
     } catch (err) {
-      logTxError("redeemToBase.redeem", err);
+      logTxError("redeemToBase.redeemAndCredit", err);
       setPhase("failed");
       const c = classifyTxError(err);
       setError(c.message);
@@ -285,61 +283,6 @@ export function useRedeemToBase() {
     queryClient,
   ]);
 
-  const relayCredit = useCallback(async () => {
-    if (!account || !egress) return;
-    setError(undefined);
-    setPhase("signing");
-    push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.signingCredit });
-    try {
-      await ensureHorizen();
-      const float = (await readContract(config, {
-        chainId: HUB_CHAIN_ID,
-        address: egress,
-        abi: abis.egressStation,
-        functionName: "float",
-      })) as bigint;
-      const assets = netAssets && netAssets > 0n && netAssets <= float ? netAssets : float;
-      if (assets <= 0n) throw new Error("No redeem float to credit");
-      setNetAssets(assets);
-      const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
-      const { signature } = await signCreditFromRedeem(config, HUB_CHAIN_ID, egress, {
-        assets,
-        owner: account,
-        deadline,
-      });
-      setPhase("relaying");
-      push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.relayingCredit });
-      const relayer = createRelayer(config);
-      const handle = await relayer.submit({
-        kind: "creditFromRedeem",
-        chainId: HUB_CHAIN_ID,
-        verifyingContract: egress,
-        user: account,
-        receiver: account,
-        amount: assets.toString(),
-        maxFeeZen: "0",
-        deadline: Number(deadline),
-        signature,
-      });
-      const result = await waitRelay(handle);
-      setCreditTxHash(result.txHash);
-      await queryClient.invalidateQueries();
-      push({
-        id: TOAST_ID,
-        tone: "success",
-        message: copy.redeemToBase.creditConfirmed,
-        explorerUrl: result.txHash ? explorerTxUrl(HUB_CHAIN_ID, result.txHash) : undefined,
-      });
-      setPhase("idle");
-    } catch (err) {
-      logTxError("redeemToBase.credit", err);
-      setPhase("failed");
-      const c = classifyTxError(err);
-      setError(c.message);
-      push({ id: TOAST_ID, tone: "error", message: c.message });
-    }
-  }, [account, egress, netAssets, config, ensureHorizen, push, queryClient]);
-
   const relayBridge = useCallback(async () => {
     if (!account || !egress || !bridge || !effectiveDest) return;
     const assets = credited > 0n ? credited : netAssets;
@@ -349,12 +292,14 @@ export function useRedeemToBase() {
     push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.signingBridge });
     try {
       await ensureHorizen();
+      const feeRelayer = resolveGaslessFeeRelayer(account);
       const maxFee = (assets * MAX_FEE_BPS) / 10_000n;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const { signature } = await signBridgeToBase(config, HUB_CHAIN_ID, egress, {
         assets,
         dest: effectiveDest,
         maxFeeZen: maxFee,
+        relayer: feeRelayer,
         owner: account,
         deadline,
       });
@@ -368,7 +313,6 @@ export function useRedeemToBase() {
         args: [bridgeAmount, effectiveDest, extraOptions],
       })) as bigint;
 
-      // Snapshot Base balance before bridge for wait detection.
       if (baseZen) {
         const before = (await readContract(config, {
           chainId: SPOKE_CHAIN_ID,
@@ -391,6 +335,7 @@ export function useRedeemToBase() {
         receiver: effectiveDest,
         amount: assets.toString(),
         maxFeeZen: maxFee.toString(),
+        relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
         nativeValue: nativeFee.toString(),
@@ -450,6 +395,7 @@ export function useRedeemToBase() {
         receiver: account,
         amount: credited.toString(),
         maxFeeZen: "0",
+        relayer: resolveGaslessFeeRelayer(account),
         deadline: Number(deadline),
         signature,
       });
@@ -464,7 +410,6 @@ export function useRedeemToBase() {
       setPhase("idle");
       setNetAssets(undefined);
       setRedeemTxHash(undefined);
-      setCreditTxHash(undefined);
       setBridgeTxHash(undefined);
       setDestConfirmed(false);
     } catch (err) {
@@ -483,7 +428,6 @@ export function useRedeemToBase() {
     setPhase("idle");
     setNetAssets(undefined);
     setRedeemTxHash(undefined);
-    setCreditTxHash(undefined);
     setBridgeTxHash(undefined);
     setBaseBalanceBefore(undefined);
     setError(undefined);
@@ -515,11 +459,9 @@ export function useRedeemToBase() {
     credited,
     netAssets,
     redeemTxHash,
-    creditTxHash,
     bridgeTxHash,
     baseZenBalance,
-    relayRedeem,
-    relayCredit,
+    relayRedeemAndCredit,
     relayBridge,
     withdrawCredit,
     startOver,

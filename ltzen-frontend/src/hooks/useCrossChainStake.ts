@@ -43,6 +43,7 @@ import {
   buildOftSendComposeOptions,
   encodeStationComposePayloadV1,
 } from "@/lib/stationCompose";
+import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 
@@ -372,11 +373,13 @@ export function useCrossChainStake() {
       await ensureHorizen();
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const maxFeeZen = (assets * MAX_FEE_BPS) / 10_000n;
+      const feeRelayer = resolveGaslessFeeRelayer(account);
       const { signature } = await signDepositWithSig(config, HUB_CHAIN_ID, stLighter, {
         assets,
         receiver: account,
         maxFeeZen,
         payer: inboundStation,
+        relayer: feeRelayer,
         user: account,
         deadline,
       });
@@ -391,6 +394,7 @@ export function useCrossChainStake() {
         receiver: account,
         amount: assets.toString(),
         maxFeeZen: maxFeeZen.toString(),
+        relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
         payer: inboundStation,
@@ -465,6 +469,7 @@ export function useCrossChainStake() {
         receiver: account,
         amount: credited.toString(),
         maxFeeZen: "0",
+        relayer: resolveGaslessFeeRelayer(account),
         deadline: Number(deadline),
         signature,
       });

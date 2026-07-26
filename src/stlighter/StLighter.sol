@@ -63,13 +63,15 @@ contract StLighter is
 
   /// @notice EIP-712 type hash for gasless deposit.
   /// @dev `payer` is the ZEN source: the user (same-chain) or an `IStationDepositPayer` station.
+  /// `relayer` is the fee recipient (may differ from `msg.sender` when a station submits).
   bytes32 public constant DEPOSIT_WITH_SIG_TYPEHASH = keccak256(
-    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address user,uint256 nonce,uint256 deadline)"
+    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address relayer,address user,uint256 nonce,uint256 deadline)"
   );
 
   /// @notice EIP-712 type hash for gasless redeem.
+  /// @dev `relayer` is the fee recipient; `feeZen` is chosen by the submitter up to `maxFeeZen`.
   bytes32 public constant REDEEM_WITH_SIG_TYPEHASH = keccak256(
-    "RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)"
+    "RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address relayer,address user,uint256 nonce,uint256 deadline)"
   );
 
   // -------------------------------------------------------------------------
@@ -228,20 +230,23 @@ contract StLighter is
   }
 
   /// @notice Gasless deposit. `payer` may be the user (pull via allowance) or a station that
-  /// implements `IStationDepositPayer.payForDeposit`.
+  /// implements `IStationDepositPayer.payForDeposit`. Fee is paid to signed `_relayer`.
   function depositWithSig(
     uint256 _assets,
     address _receiver,
     uint256 _maxFeeZen,
     uint256 _feeZen,
     address _payer,
+    address _relayer,
     address _user,
     uint256 _deadline,
     bytes calldata _signature
   ) external nonReentrant whenNotPaused returns (uint256 shares) {
     _revertIfPastDeadline(_deadline);
     _enforceGaslessFeeLimits(_feeZen, _maxFeeZen);
-    if (_payer == address(0) || _user == address(0)) revert StLighter__ZeroAddress();
+    if (_payer == address(0) || _relayer == address(0) || _user == address(0)) {
+      revert StLighter__ZeroAddress();
+    }
     _revertIfSignatureInvalid(
       _user,
       _hashTypedDataV4(
@@ -252,6 +257,7 @@ contract StLighter is
             _receiver,
             _maxFeeZen,
             _payer,
+            _relayer,
             _user,
             _useNonce(_user),
             _deadline
@@ -260,17 +266,18 @@ contract StLighter is
       ),
       _signature
     );
-    return _deposit(_user, _payer, _assets, _receiver, _feeZen, msg.sender);
+    return _deposit(_user, _payer, _assets, _receiver, _feeZen, _relayer);
   }
 
   /// @notice Gasless deposit with EIP-712 authorization plus ZEN permit — no on-chain `approve`
-  /// (PRD §6.4). `payer` must equal `_user` (wallet-held ZEN only).
+  /// (PRD §6.4). `payer` must equal `_user` (wallet-held ZEN only). Fee paid to signed `_relayer`.
   function depositWithSigAndPermit(
     uint256 _assets,
     address _receiver,
     uint256 _maxFeeZen,
     uint256 _feeZen,
     address _payer,
+    address _relayer,
     address _user,
     uint256 _deadline,
     bytes calldata _signature,
@@ -281,7 +288,9 @@ contract StLighter is
   ) external nonReentrant whenNotPaused returns (uint256 shares) {
     _revertIfPastDeadline(_deadline);
     _enforceGaslessFeeLimits(_feeZen, _maxFeeZen);
-    if (_payer == address(0) || _user == address(0)) revert StLighter__ZeroAddress();
+    if (_payer == address(0) || _relayer == address(0) || _user == address(0)) {
+      revert StLighter__ZeroAddress();
+    }
     if (_payer != _user) revert StLighter__PayerMustBeUser();
     _revertIfSignatureInvalid(
       _user,
@@ -293,6 +302,7 @@ contract StLighter is
             _receiver,
             _maxFeeZen,
             _payer,
+            _relayer,
             _user,
             _useNonce(_user),
             _deadline
@@ -304,7 +314,7 @@ contract StLighter is
     try IERC20Permit(address(_zen))
       .permit(_user, address(this), _assets, _permitDeadline, _v, _r, _s) {}
       catch {}
-    return _deposit(_user, _payer, _assets, _receiver, _feeZen, msg.sender);
+    return _deposit(_user, _payer, _assets, _receiver, _feeZen, _relayer);
   }
 
   function _deposit(
@@ -350,17 +360,20 @@ contract StLighter is
     return _redeem(msg.sender, _shares, _receiver, 0, address(0));
   }
 
+  /// @notice Gasless redeem. Fee is paid to signed `_relayer` (may differ from `msg.sender`).
   function redeemWithSig(
     uint256 _shares,
     address _receiver,
     uint256 _maxFeeZen,
     uint256 _feeZen,
+    address _relayer,
     address _user,
     uint256 _deadline,
     bytes calldata _signature
   ) external nonReentrant returns (uint256 assets) {
     _revertIfPastDeadline(_deadline);
     _enforceGaslessFeeLimits(_feeZen, _maxFeeZen);
+    if (_relayer == address(0) || _user == address(0)) revert StLighter__ZeroAddress();
     _revertIfSignatureInvalid(
       _user,
       _hashTypedDataV4(
@@ -370,6 +383,7 @@ contract StLighter is
             _shares,
             _receiver,
             _maxFeeZen,
+            _relayer,
             _user,
             _useNonce(_user),
             _deadline
@@ -378,7 +392,7 @@ contract StLighter is
       ),
       _signature
     );
-    return _redeem(_user, _shares, _receiver, _feeZen, msg.sender);
+    return _redeem(_user, _shares, _receiver, _feeZen, _relayer);
   }
 
   function _redeem(

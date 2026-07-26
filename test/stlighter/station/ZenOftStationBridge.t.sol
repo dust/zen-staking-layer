@@ -8,12 +8,14 @@ import {EgressStation} from "../../../src/stlighter/station/EgressStation.sol";
 import {ZenOftStationBridge} from "../../../src/stlighter/station/ZenOftStationBridge.sol";
 import {MockStationBridge} from "./mocks/MockStationBridge.sol";
 import {MockNativeOft} from "./mocks/MockNativeOft.sol";
+import {MockStLighterRedeem} from "./mocks/MockStLighterRedeem.sol";
 
 contract ZenOftStationBridgeTest is Test {
   uint32 constant DST_EID = 30_184;
 
   MockNativeOft oft;
   MockStationBridge placeholderBridge;
+  MockStLighterRedeem mockStLighter;
   EgressStation station;
   ZenOftStationBridge bridge;
 
@@ -23,11 +25,8 @@ contract ZenOftStationBridgeTest is Test {
   uint256 ownerKey = 0xA11CE;
   address owner;
 
-  bytes32 constant CREDIT_TYPEHASH = keccak256(
-    "CreditFromRedeem(uint256 assets,address owner,uint256 nonce,uint256 deadline)"
-  );
   bytes32 constant BRIDGE_TYPEHASH = keccak256(
-    "BridgeToBase(uint256 assets,address dest,uint256 maxFeeZen,address owner,uint256 nonce,uint256 deadline)"
+    "BridgeToBase(uint256 assets,address dest,uint256 maxFeeZen,address relayer,address owner,uint256 nonce,uint256 deadline)"
   );
 
   function setUp() public {
@@ -35,9 +34,12 @@ contract ZenOftStationBridgeTest is Test {
     owner = vm.addr(ownerKey);
 
     oft = new MockNativeOft(DST_EID);
+    mockStLighter = new MockStLighterRedeem(IERC20(address(oft)));
     // Circular deploy: Egress needs a bridge address first.
     placeholderBridge = new MockStationBridge(IERC20(address(oft)));
-    station = new EgressStation(IERC20(address(oft)), address(placeholderBridge), governance);
+    station = new EgressStation(
+      IERC20(address(oft)), address(mockStLighter), address(placeholderBridge), governance
+    );
     placeholderBridge.setEgress(address(station));
 
     bridge = new ZenOftStationBridge(address(oft), address(station), DST_EID, governance);
@@ -53,12 +55,10 @@ contract ZenOftStationBridgeTest is Test {
   }
 
   function _credit(uint256 assets) internal {
-    oft.mint(address(station), assets);
+    oft.mint(address(mockStLighter), assets);
     uint256 deadline = block.timestamp + 1 hours;
-    bytes32 structHash = keccak256(
-      abi.encode(CREDIT_TYPEHASH, assets, owner, station.nonces(owner), deadline)
-    );
-    station.creditFromRedeem(assets, owner, deadline, _sign(structHash));
+    vm.prank(relayer);
+    station.redeemAndCredit(assets, 0, 0, relayer, owner, deadline, "");
   }
 
   function test_BridgeToBaseSendsOftAndCompletes() public {
@@ -69,7 +69,7 @@ contract ZenOftStationBridgeTest is Test {
     uint256 deadline = block.timestamp + 1 hours;
     uint256 nonce = station.nonces(owner);
     bytes32 structHash = keccak256(
-      abi.encode(BRIDGE_TYPEHASH, assets, dest, uint256(0), owner, nonce, deadline)
+      abi.encode(BRIDGE_TYPEHASH, assets, dest, uint256(0), relayer, owner, nonce, deadline)
     );
     bytes memory sig = _sign(structHash);
 
@@ -80,7 +80,7 @@ contract ZenOftStationBridgeTest is Test {
 
     vm.prank(relayer);
     station.bridgeToBase{value: fee + 0.05 ether}(
-      assets, dest, 0, 0, owner, deadline, sig, ""
+      assets, dest, 0, 0, relayer, owner, deadline, sig, ""
     );
 
     // OFT burned from adapter; pending cleared via onBridgeComplete in-tx.
@@ -104,7 +104,7 @@ contract ZenOftStationBridgeTest is Test {
     uint256 deadline = block.timestamp + 1 hours;
     bytes32 structHash = keccak256(
       abi.encode(
-        BRIDGE_TYPEHASH, assets, dest, uint256(0), owner, station.nonces(owner), deadline
+        BRIDGE_TYPEHASH, assets, dest, uint256(0), relayer, owner, station.nonces(owner), deadline
       )
     );
     bytes memory sig = _sign(structHash);
@@ -114,7 +114,7 @@ contract ZenOftStationBridgeTest is Test {
 
     vm.prank(relayer);
     vm.expectRevert(ZenOftStationBridge.ZenOftStationBridge__InsufficientNativeFee.selector);
-    station.bridgeToBase{value: fee - 1}(assets, dest, 0, 0, owner, deadline, sig, "");
+    station.bridgeToBase{value: fee - 1}(assets, dest, 0, 0, relayer, owner, deadline, sig, "");
 
     // Full tx reverted — credit untouched.
     assertEq(station.credited(owner), assets);
@@ -130,7 +130,7 @@ contract ZenOftStationBridgeTest is Test {
     uint256 deadline = block.timestamp + 1 hours;
     bytes32 structHash = keccak256(
       abi.encode(
-        BRIDGE_TYPEHASH, assets, dest, uint256(0), owner, station.nonces(owner), deadline
+        BRIDGE_TYPEHASH, assets, dest, uint256(0), relayer, owner, station.nonces(owner), deadline
       )
     );
     bytes memory sig = _sign(structHash);
@@ -139,7 +139,7 @@ contract ZenOftStationBridgeTest is Test {
 
     vm.prank(relayer);
     vm.expectRevert(MockNativeOft.MockNativeOft__ForcedRevert.selector);
-    station.bridgeToBase{value: fee}(assets, dest, 0, 0, owner, deadline, sig, "");
+    station.bridgeToBase{value: fee}(assets, dest, 0, 0, relayer, owner, deadline, sig, "");
 
     assertEq(station.credited(owner), assets);
     assertEq(station.pendingTotal(), 0);

@@ -519,10 +519,10 @@ contract Gasless is StLighterTest {
   address relayer = makeAddr("relayer");
 
   bytes32 constant DEPOSIT_TYPEHASH = keccak256(
-    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address user,uint256 nonce,uint256 deadline)"
+    "DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,address relayer,address user,uint256 nonce,uint256 deadline)"
   );
   bytes32 constant REDEEM_TYPEHASH = keccak256(
-    "RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)"
+    "RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address relayer,address user,uint256 nonce,uint256 deadline)"
   );
 
   function setUp() public override {
@@ -549,18 +549,60 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, maxFee, user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
-    protocol.depositWithSig(assets, user, maxFee, fee, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, maxFee, fee, user, relayer, user, deadline, sig);
 
     // relayer reimbursed in ZEN; only net assets staked
     assertEq(zen.balanceOf(relayer), fee);
     assertEq(protocol.totalAssets(), assets - fee);
     assertGt(ltZen.balanceOf(user), 0);
+  }
+
+  function test_GaslessDepositFeeGoesToSignedRelayerNotMsgSender() public {
+    uint256 assets = 1000e18;
+    uint256 maxFee = 5e18;
+    uint256 fee = 3e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    address feeRecipient = makeAddr("feeRecipient");
+    address submitter = makeAddr("submitter");
+
+    zen.mint(user, assets);
+    vm.prank(user);
+    zen.approve(address(protocol), assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        feeRecipient,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+
+    vm.prank(submitter);
+    protocol.depositWithSig(assets, user, maxFee, fee, user, feeRecipient, user, deadline, sig);
+
+    assertEq(zen.balanceOf(feeRecipient), fee);
+    assertEq(zen.balanceOf(submitter), 0);
   }
 
   function test_GaslessRedeemPaysRelayerFromProceeds() public {
@@ -572,12 +614,15 @@ contract Gasless is StLighterTest {
     uint256 deadline = block.timestamp + 1 hours;
 
     bytes32 structHash = keccak256(
-      abi.encode(REDEEM_TYPEHASH, shares, user, maxFee, user, protocol.nonces(user), deadline)
+      abi.encode(
+        REDEEM_TYPEHASH, shares, user, maxFee, relayer, user, protocol.nonces(user), deadline
+      )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
-    uint256 assets = protocol.redeemWithSig(shares, user, maxFee, fee, user, deadline, sig);
+    uint256 assets =
+      protocol.redeemWithSig(shares, user, maxFee, fee, relayer, user, deadline, sig);
 
     assertEq(zen.balanceOf(relayer), fee);
     assertEq(zen.balanceOf(user), assets - fee); // user got proceeds minus gas fee
@@ -593,14 +638,22 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, maxFee, user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__GasFeeExceedsMax
-    protocol.depositWithSig(assets, user, maxFee, maxFee + 1, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, maxFee, maxFee + 1, user, relayer, user, deadline, sig);
   }
 
   function test_RevertWhenFeeExceedsContractCap() public {
@@ -614,14 +667,22 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, maxFee, user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__GasFeeExceedsMax
-    protocol.depositWithSig(assets, user, maxFee, fee, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, maxFee, fee, user, relayer, user, deadline, sig);
   }
 
   function test_DepositWithSigAndPermitWithoutPriorApproval() public {
@@ -634,7 +695,15 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, maxFee, user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
@@ -642,7 +711,19 @@ contract Gasless is StLighterTest {
 
     vm.prank(relayer);
     protocol.depositWithSigAndPermit(
-      assets, user, maxFee, fee, user, user, deadline, sig, permitDeadline, pv, pr, ps
+      assets,
+      user,
+      maxFee,
+      fee,
+      user,
+      relayer,
+      user,
+      deadline,
+      sig,
+      permitDeadline,
+      pv,
+      pr,
+      ps
     );
 
     assertEq(zen.balanceOf(relayer), fee);
@@ -666,6 +747,7 @@ contract Gasless is StLighterTest {
         address(wallet),
         uint256(0),
         address(wallet),
+        relayer,
         address(wallet),
         protocol.nonces(address(wallet)),
         deadline
@@ -675,7 +757,7 @@ contract Gasless is StLighterTest {
 
     vm.prank(relayer);
     protocol.depositWithSig(
-      assets, address(wallet), 0, 0, address(wallet), address(wallet), deadline, sig
+      assets, address(wallet), 0, 0, address(wallet), relayer, address(wallet), deadline, sig
     );
 
     assertGt(ltZen.balanceOf(address(wallet)), 0);
@@ -690,14 +772,22 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, uint256(0), user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__ExpiredDeadline
-    protocol.depositWithSig(assets, user, 0, 0, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, 0, 0, user, relayer, user, deadline, sig);
   }
 
   function test_RevertOnReplay() public {
@@ -709,18 +799,26 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, uint256(0), user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
 
     vm.prank(relayer);
-    protocol.depositWithSig(assets, user, 0, 0, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, 0, 0, user, relayer, user, deadline, sig);
 
     // same signature again -> nonce already used -> invalid
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__InvalidSignature
-    protocol.depositWithSig(assets, user, 0, 0, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, 0, 0, user, relayer, user, deadline, sig);
   }
 
   function test_InvalidateNonceBlocksPendingSig() public {
@@ -732,7 +830,15 @@ contract Gasless is StLighterTest {
 
     bytes32 structHash = keccak256(
       abi.encode(
-        DEPOSIT_TYPEHASH, assets, user, uint256(0), user, user, protocol.nonces(user), deadline
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
       )
     );
     bytes memory sig = _sign(structHash);
@@ -743,7 +849,7 @@ contract Gasless is StLighterTest {
 
     vm.prank(relayer);
     vm.expectRevert(); // StLighter__InvalidSignature (nonce mismatch)
-    protocol.depositWithSig(assets, user, 0, 0, user, user, deadline, sig);
+    protocol.depositWithSig(assets, user, 0, 0, user, relayer, user, deadline, sig);
   }
 
   function _depositFor(address _u, uint256 _assets) internal returns (uint256 shares) {

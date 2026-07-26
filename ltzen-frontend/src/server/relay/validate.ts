@@ -5,7 +5,6 @@ import EgressStationAbi from "@/abi/EgressStation.json";
 import { horizen, HUB_CHAIN_ID } from "@/config/chains";
 import {
   BRIDGE_TO_BASE_TYPES,
-  CREDIT_FROM_REDEEM_TYPES,
   DEPOSIT_WITH_SIG_TYPES,
   REDEEM_WITH_SIG_TYPES,
   WITHDRAW_TO_HORIZEN_TYPES,
@@ -36,8 +35,8 @@ const SUPPORTED_KINDS = new Set<RelayRequest["kind"]>([
   "depositWithSigAndPermit",
   "depositWithSig",
   "redeemWithSig",
+  "redeemAndCredit",
   "withdrawToHorizen",
-  "creditFromRedeem",
   "bridgeToBase",
   "egressWithdrawToHorizen",
 ]);
@@ -106,14 +105,11 @@ export function assertRequest(req: RelayRequest): void {
   assertAddress("user", req.user);
   assertAddress("receiver", req.receiver);
   assertAddress("verifyingContract", req.verifyingContract);
+  assertAddress("relayer", req.relayer);
 
   parsePositiveBigInt("amount", req.amount);
 
-  if (
-    req.kind === "withdrawToHorizen" ||
-    req.kind === "creditFromRedeem" ||
-    req.kind === "egressWithdrawToHorizen"
-  ) {
+  if (req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen") {
     assertZeroMaxFee(req);
   } else {
     parsePositiveBigInt("maxFeeZen", req.maxFeeZen);
@@ -168,7 +164,7 @@ export function assertRequest(req: RelayRequest): void {
   }
 
   if (
-    req.kind === "creditFromRedeem" ||
+    req.kind === "redeemAndCredit" ||
     req.kind === "bridgeToBase" ||
     req.kind === "egressWithdrawToHorizen"
   ) {
@@ -272,31 +268,6 @@ async function verifySignature(
     return;
   }
 
-  if (req.kind === "creditFromRedeem") {
-    const domain = await readEip712Domain(client, req.verifyingContract, EgressStationAbi);
-    const chainNonce = (await client.readContract({
-      address: req.verifyingContract,
-      abi: EgressStationAbi,
-      functionName: "nonces",
-      args: [req.user],
-    })) as bigint;
-    const valid = await verifyTypedData({
-      address: req.user,
-      domain,
-      types: CREDIT_FROM_REDEEM_TYPES,
-      primaryType: "CreditFromRedeem",
-      message: {
-        assets: assetsOrShares,
-        owner: req.user,
-        nonce: chainNonce,
-        deadline,
-      },
-      signature: req.signature,
-    });
-    if (!valid) throw new Error("invalid CreditFromRedeem signature");
-    return;
-  }
-
   if (req.kind === "bridgeToBase") {
     const domain = await readEip712Domain(client, req.verifyingContract, EgressStationAbi);
     const chainNonce = (await client.readContract({
@@ -314,6 +285,7 @@ async function verifySignature(
         assets: assetsOrShares,
         dest: req.receiver,
         maxFeeZen,
+        relayer: req.relayer,
         owner: req.user,
         nonce: chainNonce,
         deadline,
@@ -321,6 +293,38 @@ async function verifySignature(
       signature: req.signature,
     });
     if (!valid) throw new Error("invalid BridgeToBase signature");
+    return;
+  }
+
+  if (req.kind === "redeemAndCredit" || req.kind === "redeemWithSig") {
+    const stLighter = stLighterAddress();
+    if (!stLighter) throw new Error("StLighter address not configured");
+    const domain = await readEip712Domain(client, stLighter, StLighterAbi);
+    const chainNonce = (await client.readContract({
+      address: stLighter,
+      abi: StLighterAbi,
+      functionName: "nonces",
+      args: [req.user],
+    })) as bigint;
+    const receiver =
+      req.kind === "redeemAndCredit" ? req.verifyingContract /* Egress */ : req.receiver;
+    const valid = await verifyTypedData({
+      address: req.user,
+      domain,
+      types: REDEEM_WITH_SIG_TYPES,
+      primaryType: "RedeemWithSig",
+      message: {
+        shares: assetsOrShares,
+        receiver,
+        maxFeeZen,
+        relayer: req.relayer,
+        user: req.user,
+        nonce: chainNonce,
+        deadline,
+      },
+      signature: req.signature,
+    });
+    if (!valid) throw new Error("invalid RedeemWithSig signature");
     return;
   }
 
@@ -340,6 +344,7 @@ async function verifySignature(
       receiver: req.receiver,
       maxFeeZen,
       payer,
+      relayer: req.relayer,
       user: req.user,
       nonce: chainNonce,
       deadline,
@@ -356,23 +361,7 @@ async function verifySignature(
     return;
   }
 
-  const message = {
-    shares: assetsOrShares,
-    receiver: req.receiver,
-    maxFeeZen,
-    user: req.user,
-    nonce: chainNonce,
-    deadline,
-  };
-  const valid = await verifyTypedData({
-    address: req.user,
-    domain,
-    types: REDEEM_WITH_SIG_TYPES,
-    primaryType: "RedeemWithSig",
-    message,
-    signature: req.signature,
-  });
-  if (!valid) throw new Error("invalid RedeemWithSig signature");
+  throw new Error(`unsupported relay kind for signature: ${req.kind}`);
 }
 
 async function assertChainState(
@@ -405,17 +394,6 @@ async function assertChainState(
       args: [req.user],
     })) as bigint;
     if (credited < BigInt(req.amount)) throw new Error("insufficient egress credit");
-    return;
-  }
-
-  if (req.kind === "creditFromRedeem") {
-    if (feeZen !== 0n) throw new Error("creditFromRedeem feeZen must be 0");
-    const float = (await client.readContract({
-      address: req.verifyingContract,
-      abi: EgressStationAbi,
-      functionName: "float",
-    })) as bigint;
-    if (float < BigInt(req.amount)) throw new Error("insufficient egress float");
     return;
   }
 
@@ -460,6 +438,7 @@ async function assertChainState(
     return;
   }
 
+  // redeemWithSig / redeemAndCredit — check ltZEN balance
   const ltZen = ltZenAddress();
   if (!ltZen) throw new Error("ltZEN address not configured");
   const balance = (await client.readContract({
@@ -515,6 +494,9 @@ export async function validateRelayRequest(
   await assertChainState(req, client, feeZen, basis);
   relayLog("validate: getRelayerAddress");
   const relayerAddress = await getRelayerAddress();
+  if (req.relayer.toLowerCase() !== relayerAddress.toLowerCase()) {
+    throw new Error("relayer address mismatch (must equal rrelayer EOA)");
+  }
   relayLog("validate: simulateContract", { relayerAddress, function: req.kind });
   await simulateMetaTx(req, feeZen, relayerAddress);
   relayLog("validate: simulate ok");

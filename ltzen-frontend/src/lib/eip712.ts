@@ -18,6 +18,7 @@ export const DEPOSIT_WITH_SIG_TYPES = {
     { name: "receiver", type: "address" },
     { name: "maxFeeZen", type: "uint256" },
     { name: "payer", type: "address" },
+    { name: "relayer", type: "address" },
     { name: "user", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
@@ -39,6 +40,7 @@ export const REDEEM_WITH_SIG_TYPES = {
     { name: "shares", type: "uint256" },
     { name: "receiver", type: "address" },
     { name: "maxFeeZen", type: "uint256" },
+    { name: "relayer", type: "address" },
     { name: "user", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
@@ -64,20 +66,12 @@ export const WITHDRAW_TO_HORIZEN_TYPES = {
   ],
 } as const;
 
-export const CREDIT_FROM_REDEEM_TYPES = {
-  CreditFromRedeem: [
-    { name: "assets", type: "uint256" },
-    { name: "owner", type: "address" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-  ],
-} as const;
-
 export const BRIDGE_TO_BASE_TYPES = {
   BridgeToBase: [
     { name: "assets", type: "uint256" },
     { name: "dest", type: "address" },
     { name: "maxFeeZen", type: "uint256" },
+    { name: "relayer", type: "address" },
     { name: "owner", type: "address" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
@@ -164,6 +158,8 @@ export interface DepositWithSigParams {
   maxFeeZen: bigint;
   /** ZEN source: user wallet (same-chain) or InboundStation (cross-chain credit). */
   payer: Address;
+  /** Gasless fee recipient (bound in EIP-712; may differ from tx submitter). */
+  relayer: Address;
   user: Address;
   deadline: bigint;
 }
@@ -203,6 +199,8 @@ export interface RedeemWithSigParams {
   shares: bigint;
   receiver: Address;
   maxFeeZen: bigint;
+  /** Gasless fee recipient (bound in EIP-712). */
+  relayer: Address;
   user: Address;
   deadline: bigint;
 }
@@ -368,38 +366,12 @@ export async function readEgressStationSignContext(
   };
 }
 
-export interface CreditFromRedeemParams {
-  assets: bigint;
-  owner: Address;
-  deadline: bigint;
-}
-
-/** Sign EgressStation CreditFromRedeem (switch wallet to Horizen first). */
-export async function signCreditFromRedeem(
-  config: Config,
-  chainId: number,
-  egressStation: Address,
-  params: CreditFromRedeemParams,
-): Promise<{ signature: Hex; nonce: bigint }> {
-  const { domain, nonce } = await readEgressStationSignContext(
-    config,
-    chainId,
-    egressStation,
-    params.owner,
-  );
-  const signature = await signTypedData(config, {
-    domain,
-    types: CREDIT_FROM_REDEEM_TYPES,
-    primaryType: "CreditFromRedeem",
-    message: { ...params, nonce },
-  });
-  return { signature, nonce };
-}
-
 export interface BridgeToBaseParams {
   assets: bigint;
   dest: Address;
   maxFeeZen: bigint;
+  /** Gasless fee recipient (bound in EIP-712). */
+  relayer: Address;
   owner: Address;
   deadline: bigint;
 }

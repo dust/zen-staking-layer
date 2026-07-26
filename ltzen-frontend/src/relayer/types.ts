@@ -9,8 +9,8 @@ export type RelayKind =
   | "depositWithSigAndPermit"
   | "depositWithSig"
   | "redeemWithSig"
+  | "redeemAndCredit"
   | "withdrawToHorizen"
-  | "creditFromRedeem"
   | "bridgeToBase"
   | "egressWithdrawToHorizen"
   | "bridge";
@@ -30,7 +30,7 @@ export interface RelayRequest {
    * Contract to call:
    * - StLighter proxy for deposit/redeem
    * - InboundStation for withdrawToHorizen
-   * - EgressStation for creditFromRedeem / bridgeToBase / egressWithdrawToHorizen
+   * - EgressStation for redeemAndCredit / bridgeToBase / egressWithdrawToHorizen
    */
   verifyingContract: Address;
   user: Address;
@@ -38,13 +38,18 @@ export interface RelayRequest {
    * Kind-dependent:
    * - deposit/redeem: ltZEN/ZEN receiver
    * - withdraw*: destination on Horizen
-   * - creditFromRedeem: unused (set = user)
+   * - redeemAndCredit: unused (set = Egress / user)
    * - bridgeToBase: Base B1 `dest`
    */
   receiver: Address;
-  /** assets (deposit/withdraw/credit/bridge) or shares (redeem), decimal string. */
+  /** assets (deposit/withdraw/bridge) or shares (redeem / redeemAndCredit), decimal string. */
   amount: string;
   maxFeeZen: string;
+  /**
+   * Gasless fee recipient bound in EIP-712. Must match the address the user signed.
+   * BFF validates this equals the rrelayer EOA.
+   */
+  relayer: Address;
   deadline: number;
   /** EIP-712 signature for the kind's primary type. */
   signature: Hex;

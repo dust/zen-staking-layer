@@ -204,13 +204,16 @@ individual uncovered-line numbers. Raise the threshold once `forge coverage` sup
 - Planned proxy upgrade path for StLighter must preserve storage layout across
   implementation versions; ltZEN `minter` migrates via `setMinter` on upgrade.
 
-### Station + `depositWithSig` payer (additive breaking change)
+### Station + gasless `relayer` + `redeemAndCredit` (additive breaking change)
 
 | Item | Notes |
 |------|-------|
-| `src/stlighter/station/*` | New inbound/egress stations + `ZenOftStationBridge` (non-upgradeable). Compose/redeem credit via EIP-712 + Nonces; stake via `depositWithSig(payer=Station)`; egress via OFT `send` with `refundAddress=Egress`. |
+| `src/stlighter/station/*` | Inbound/egress stations + `ZenOftStationBridge` (non-upgradeable). Stake via `depositWithSig(payer=Station)`; egress via OFT `send` with `refundAddress=Egress`. |
 | `IStationDepositPayer` | Callback interface; Station implements `payForDeposit`. |
-| `StLighter.depositWithSig` / `depositWithSigAndPermit` | **Breaking typehash**: adds `payer`. When `payer != user`, pulls ZEN via `IStationDepositPayer(payer).payForDeposit`. `depositWithSigAndPermit` requires `payer == user`. |
+| `StLighter.depositWithSig` / `depositWithSigAndPermit` / `redeemWithSig` | **Breaking typehash**: binds `relayer` (fee recipient). `feeZen` remains unsigned (`≤ maxFeeZen`). Fee paid to signed `relayer`, not `msg.sender`. Deposit also binds `payer`. |
+| `EgressStation.redeemAndCredit` | Atomic `StLighter.redeemWithSig(receiver=this)` + internal credit. Public `creditFromRedeem` removed. |
+| `EgressStation.bridgeToBase` | **Breaking typehash**: binds `relayer`; fee paid to signed `relayer`. |
+| `IStLighterRedeem` | Minimal interface used by Egress for `redeemWithSig`. |
 
 This does **not** touch audited `Staker` write paths. StLighter remains net-new / in-scope for stLighter audit.
 

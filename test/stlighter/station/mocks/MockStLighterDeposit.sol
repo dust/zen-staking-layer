@@ -27,12 +27,15 @@ contract MockStLighterDeposit is ERC20 {
     uint256, /* maxFeeZen */
     uint256 feeZen,
     address payer,
+    address relayer,
     address user,
     uint256, /* deadline */
     bytes calldata /* signature */
   ) external returns (uint256 shares) {
     if (assets == 0) revert MockStLighterDeposit__ZeroAmount();
-    if (receiver == address(0) || user == address(0) || payer == address(0)) {
+    if (
+      receiver == address(0) || user == address(0) || payer == address(0) || relayer == address(0)
+    ) {
       revert MockStLighterDeposit__ZeroAddress();
     }
     if (feeZen >= assets) revert MockStLighterDeposit__ZeroAmount();
@@ -44,7 +47,7 @@ contract MockStLighterDeposit is ERC20 {
     }
 
     if (feeZen != 0) {
-      zen.safeTransfer(msg.sender, feeZen);
+      zen.safeTransfer(relayer, feeZen);
     }
 
     shares = assets - feeZen;

@@ -42,7 +42,7 @@
 | **共享入站车站 (InboundStation)** | Horizen 上共享合约：LZ 入金会计（`lzCompose` 仅 credit）；所有者签名后由 relayer 调 `stakeToStLighter` → `StLighter.deposit`；或 withdraw。**专用**于 stLighter 跨链 stake。详见 [`stLighter-station-design.md`](./stLighter-station-design.md)。 |
 | **跨链 stake** | Base ERC20 ZEN → `approve` + **OFTAdapter.send** + compose → InboundStation 会计 → relayer `depositWithSig(payer=Station)` → Horizen ltZEN。 |
 | **同链 stake/redeem** | 用户钱包已在 Horizen 持有 ZEN / ltZEN；gasless redeem 终点为 **Horizen 用户钱包中的 ZEN**。 |
-| **Redeem to Base** | gasless：`redeemWithSig(receiver=EgressStation)` → `creditFromRedeem` → 另 tx `bridgeToBase` → **Base 用户指定地址（B1）**。 |
+| **Redeem to Base** | gasless：`EgressStation.redeemAndCredit`（同 tx：`redeemWithSig(receiver=Egress)` + 入账）→ 另 tx `bridgeToBase` → **Base 用户指定地址（B1）**。 |
 | **出站车站 (EgressStation)** | 承接 redeem ZEN、会计、**仅自身调桥**、退款可恢复；不是 Base 侧 Receiver。详见 Station 设计文档。 |
 
 ---
@@ -130,8 +130,8 @@ flowchart TB
 
 ### 2.4 Path C — Redeem to Base（目标形态）
 
-1. Relayer 同 tx：`redeemWithSig(..., receiver=EgressStation)` + `EgressStation.creditFromRedeem`（用户预签，防抢记）。
-2. **另 tx**：用户签 `BridgeToBase` → relayer 调 EgressStation → **仅 Station 调桥** → Base `dest`（B1）。
+1. Relayer 一笔 tx：`EgressStation.redeemAndCredit`（内调 `redeemWithSig(receiver=this)` 后入账；用户只签 `RedeemWithSig`，含 `relayer` + `maxFeeZen`）。
+2. **另 tx**：用户签 `BridgeToBase`（含 `relayer` + `maxFeeZen`）→ relayer 调 EgressStation → **仅 Station 调桥** → Base `dest`（B1）。
 3. 失败/退款留在 Egress 会计，可重试或 `withdrawToHorizen`。
 4. **完备性约束**与 B1 配套见 §2.5；合约细节见 Station 设计文档。
 
@@ -389,5 +389,5 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 4. 同链 deposit 是否引入 Permit2（与 Station 路径独立）。
 5. ~~Base 到账形态~~ → **已锁定 B1**。
 6. ~~开放 Call[] / 通用 Station~~ → **已放弃**；专用模板见 Station 设计。
-7. ~~redeem→Egress 交接~~ → **已锁定**：同 tx redeem + `creditFromRedeem`；bridge **另 tx**。
+7. ~~redeem→Egress 交接~~ → **已锁定**：`Egress.redeemAndCredit` 同 tx；bridge **另 tx**。
 8. `recoverable_hold` 下改 `dest` 次数/限额（产品可选）。

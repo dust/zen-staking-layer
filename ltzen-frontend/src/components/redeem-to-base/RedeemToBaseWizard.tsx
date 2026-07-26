@@ -33,7 +33,6 @@ const STEP_ORDER: RedeemToBaseStep[] = [
   "amount",
   "confirm-dest",
   "redeem",
-  "credit",
   "bridge",
   "wait-base",
   "done",
@@ -43,7 +42,6 @@ const STEP_LABEL: Record<string, string> = {
   amount: copy.redeemToBase.stepAmount,
   "confirm-dest": copy.redeemToBase.stepDest,
   redeem: copy.redeemToBase.stepRedeem,
-  credit: copy.redeemToBase.stepCredit,
   bridge: copy.redeemToBase.stepBridge,
   "wait-base": copy.redeemToBase.stepWait,
   done: copy.redeemToBase.stepDone,
@@ -119,12 +117,6 @@ export function RedeemToBaseWizard() {
             : x.phase === "relaying"
               ? copy.redeemToBase.relayingRedeem
               : copy.redeemToBase.continueRedeem
-          : x.step === "credit"
-            ? x.phase === "signing"
-              ? copy.redeemToBase.signingCredit
-              : x.phase === "relaying"
-                ? copy.redeemToBase.relayingCredit
-                : copy.redeemToBase.continueCredit
             : x.step === "bridge"
               ? x.phase === "signing"
                 ? copy.redeemToBase.signingBridge
@@ -143,7 +135,6 @@ export function RedeemToBaseWizard() {
     (x.step === "done" ||
       x.step === "wait-base" ||
       x.step === "redeem" ||
-      x.step === "credit" ||
       x.step === "bridge" ||
       ((x.step === "amount" || x.step === "confirm-dest") &&
         Boolean(sharesWei ?? x.sharesWei)));
@@ -159,9 +150,7 @@ export function RedeemToBaseWizard() {
         if (!destInput.trim() && x.account) setDestInput(x.account);
         x.confirmDest(dest);
       } else if (x.step === "redeem") {
-        await x.relayRedeem();
-      } else if (x.step === "credit") {
-        await x.relayCredit();
+        await x.relayRedeemAndCredit();
       } else if (x.step === "bridge") {
         await x.relayBridge();
       } else if (x.step === "wait-base") {
@@ -255,10 +244,6 @@ export function RedeemToBaseWizard() {
 
       {x.step === "redeem" ? (
         <p className="mt-4 text-sm text-zinc-400">{copy.redeemToBase.signingRedeem}</p>
-      ) : null}
-
-      {x.step === "credit" ? (
-        <p className="mt-4 text-sm text-zinc-400">{copy.redeemToBase.signingCredit}</p>
       ) : null}
 
       {x.step === "bridge" ? (

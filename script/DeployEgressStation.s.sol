@@ -16,9 +16,10 @@ import {StLighterGovernanceLib} from "./StLighterGovernanceLib.sol";
 ///   3. `egress.setBridge(realBridge)` then optionally `transferOwnership(governance)`
 ///
 /// Required env:
-///   ZEN_TOKEN_ADDRESS — Horizen ZenTokenOFT (`zen` + bridge `oft`)
-///   BASE_EID          — Base Sepolia LZ endpoint id (immutable on Bridge)
-///   PRIVATE_KEY       — deployer (must be able to call `setBridge` as temporary owner)
+///   ZEN_TOKEN_ADDRESS       — Horizen ZenTokenOFT (`zen` + bridge `oft`)
+///   STLIGHTER_PROXY_ADDRESS — StLighter proxy (immutable on Egress for redeemAndCredit)
+///   BASE_EID                — Base Sepolia LZ endpoint id (immutable on Bridge)
+///   PRIVATE_KEY             — deployer (must be able to call `setBridge` as temporary owner)
 ///
 /// Owner: `TIMELOCK_ADDRESS` or `GOVERNANCE_ADDRESS`. On testnet use deployer EOA so
 /// `setBridge` succeeds in the same broadcast. If owner ≠ deployer, script transfers
@@ -29,6 +30,7 @@ contract DeployEgressStation is Script {
 
   function run() external returns (EgressStation station, ZenOftStationBridge bridge) {
     address zenOft = vm.envAddress("ZEN_TOKEN_ADDRESS");
+    address stLighter = vm.envAddress("STLIGHTER_PROXY_ADDRESS");
     uint32 dstEid = uint32(vm.envUint("BASE_EID"));
     address owner_ = StLighterGovernanceLib.timelockAddress();
     uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -37,7 +39,7 @@ contract DeployEgressStation is Script {
     vm.startBroadcast(deployerKey);
 
     // Temporary owner = deployer so `setBridge` can run in this broadcast.
-    station = new EgressStation(IERC20(zenOft), BRIDGE_PLACEHOLDER, deployer);
+    station = new EgressStation(IERC20(zenOft), stLighter, BRIDGE_PLACEHOLDER, deployer);
     bridge = new ZenOftStationBridge(zenOft, address(station), dstEid, owner_);
     station.setBridge(address(bridge));
 
@@ -49,6 +51,7 @@ contract DeployEgressStation is Script {
 
     console2.log("EgressStation:         ", address(station));
     console2.log("ZenOftStationBridge:   ", address(bridge));
+    console2.log("stLighter:             ", stLighter);
     console2.log("zen / oft:             ", zenOft);
     console2.log("dstEid (Base):         ", dstEid);
     console2.log("bridge.egress:         ", bridge.egress());

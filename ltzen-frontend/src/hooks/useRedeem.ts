@@ -25,6 +25,7 @@ import { abis, horizenAddress } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { classifyTxError, RelayerTimeoutError } from "@/lib/errors";
 import { signRedeemWithSig } from "@/lib/eip712";
+import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 import { useTxLifecycle } from "./useTxLifecycle";
@@ -140,10 +141,12 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
 
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
 
+      const feeRelayer = resolveGaslessFeeRelayer(account);
       const { signature } = await signRedeemWithSig(config, HUB_CHAIN_ID, stLighter, {
         shares: sharesWei,
         receiver: account,
         maxFeeZen,
+        relayer: feeRelayer,
         user: account,
         deadline,
       });
@@ -159,6 +162,7 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
         receiver: account,
         amount: sharesWei.toString(),
         maxFeeZen: maxFeeZen.toString(),
+        relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
       });

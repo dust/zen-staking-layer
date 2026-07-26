@@ -14,7 +14,7 @@ export interface EncodedMetaTx {
 
 type StLighterFn = "depositWithSigAndPermit" | "depositWithSig" | "redeemWithSig";
 type StationFn = "withdrawToHorizen";
-type EgressFn = "creditFromRedeem" | "bridgeToBase" | "withdrawToHorizen";
+type EgressFn = "redeemAndCredit" | "bridgeToBase" | "withdrawToHorizen";
 
 /** Args passed to meta-tx entrypoints (shared by encode + simulate). */
 export function metaTxContractCall(
@@ -33,6 +33,24 @@ export function metaTxContractCall(
         req.receiver,
         BigInt(req.maxFeeZen),
         feeZen,
+        req.relayer,
+        req.user,
+        BigInt(req.deadline),
+        req.signature,
+      ],
+      value: 0n,
+    };
+  }
+
+  if (req.kind === "redeemAndCredit") {
+    return {
+      target: "egressStation",
+      functionName: "redeemAndCredit",
+      args: [
+        BigInt(req.amount),
+        BigInt(req.maxFeeZen),
+        feeZen,
+        req.relayer,
         req.user,
         BigInt(req.deadline),
         req.signature,
@@ -54,6 +72,7 @@ export function metaTxContractCall(
         BigInt(req.maxFeeZen),
         feeZen,
         payer,
+        req.relayer,
         req.user,
         BigInt(req.deadline),
         req.signature,
@@ -78,6 +97,7 @@ export function metaTxContractCall(
         BigInt(req.maxFeeZen),
         feeZen,
         payer,
+        req.relayer,
         req.user,
         BigInt(req.deadline),
         req.signature,
@@ -101,15 +121,6 @@ export function metaTxContractCall(
     };
   }
 
-  if (req.kind === "creditFromRedeem") {
-    return {
-      target: "egressStation",
-      functionName: "creditFromRedeem",
-      args: [BigInt(req.amount), req.user, BigInt(req.deadline), req.signature],
-      value: 0n,
-    };
-  }
-
   if (req.kind === "bridgeToBase") {
     const value = BigInt(req.nativeValue ?? "0");
     if (value <= 0n) throw new Error("bridgeToBase requires nativeValue > 0");
@@ -122,6 +133,7 @@ export function metaTxContractCall(
         req.receiver,
         BigInt(req.maxFeeZen),
         feeZen,
+        req.relayer,
         req.user,
         BigInt(req.deadline),
         req.signature,

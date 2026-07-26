@@ -57,7 +57,7 @@ flowchart TB
 | Path | Direction | Contracts |
 |------|-----------|-----------|
 | **Wave A — cross-chain stake** | Base ZEN → Horizen ltZEN | Adapter `send(to=InboundStation, compose)` → credit → `depositWithSig(payer=Station)` |
-| **Wave B — Redeem to Base** | Horizen ltZEN → Base ZEN @ B1 | `redeemWithSig(receiver=Egress)` + `creditFromRedeem` → `bridgeToBase` → Bridge `oft.send` → Adapter unlocks ERC20 to `dest` |
+| **Wave B — Redeem to Base** | Horizen ltZEN → Base ZEN @ B1 | `Egress.redeemAndCredit` → `bridgeToBase` → Bridge `oft.send` → Adapter unlocks ERC20 to `dest` |
 | **Same-chain redeem** | Horizen ltZEN → Horizen ZEN | `redeem` / `redeemWithSig` to user wallet (no Egress) — keep as separate UX |
 
 ---
@@ -373,6 +373,7 @@ export EG=$EGRESS_STATION_ADDRESS
 export BR=$ZEN_OFT_STATION_BRIDGE_ADDRESS
 
 cast call $EG 'zen()(address)' --rpc-url $HORIZEN_RPC
+cast call $EG 'stLighter()(address)' --rpc-url $HORIZEN_RPC
 cast call $EG 'bridge()(address)' --rpc-url $HORIZEN_RPC
 cast call $BR 'egress()(address)' --rpc-url $HORIZEN_RPC
 cast call $BR 'oft()(address)' --rpc-url $HORIZEN_RPC
@@ -381,6 +382,7 @@ cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
 ```
 
 - [ ] `Egress.zen() == ZenTokenOFT == Bridge.oft() == Bridge.zen()`
+- [ ] `Egress.stLighter() == STLIGHTER_PROXY_ADDRESS`
 - [ ] `Egress.bridge() == ZenOftStationBridge` (not placeholder)
 - [ ] `Bridge.egress() == EgressStation`
 - [ ] `Bridge.dstEid() == BASE_EID`
@@ -392,7 +394,7 @@ cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
 - Relayer pays **Horizen native** for `bridgeToBase{value}` (LZ fee); quote via `ZenOftStationBridge.quoteBridgeNativeFee(amount, dest, extraOptions)`.
 - Optional `feeZen` on `bridgeToBase` pays the relayer in ZEN from credited assets (`feeZen < assets`, cap `MAX_GAS_FEE_ZEN = 10e18`).
 - Excess LZ native fee refunds to **EgressStation** (`receive()`), never the relayer EOA ([ADR §2](./stLighter-station-compose-adr.md)).
-- No pre-fund of Egress with ZEN required — float comes from `redeemWithSig(receiver=Egress)`.
+- No pre-fund of Egress with ZEN required — float comes from `redeemAndCredit` → vault redeem.
 
 ### G4 — rrelayer allowlist (when using BFF)
 
@@ -408,9 +410,8 @@ EIP-712 domains (Horizen `chainId`, `verifyingContract` = contract below):
 
 | Type | Contract | Typehash fields |
 |------|----------|-----------------|
-| `RedeemWithSig` | StLighter | existing gasless redeem; **`receiver = EgressStation`** |
-| `CreditFromRedeem` | EgressStation | `(assets, owner, nonce, deadline)` — `assets` = **net ZEN after redeem fee** |
-| `BridgeToBase` | EgressStation | `(assets, dest, maxFeeZen, owner, nonce, deadline)` — `dest` = Base **B1** |
+| `RedeemWithSig` | StLighter | **`receiver = EgressStation`**; binds **`relayer`** + `maxFeeZen` (`feeZen` unsigned) |
+| `BridgeToBase` | EgressStation | `(assets, dest, maxFeeZen, relayer, owner, nonce, deadline)` — `dest` = Base **B1** |
 | `WithdrawToHorizen` | EgressStation | escape hatch after credit |
 
 Station nonces are **separate** from StLighter nonces. Read `EgressStation.nonces(owner)` and `StLighter.nonces(owner)` independently.
@@ -418,20 +419,23 @@ Station nonces are **separate** from StLighter nonces. Read `EgressStation.nonce
 | Step | Expect |
 |------|--------|
 | H1 | User confirms **B1** `dest` (default = connected Base wallet; change requires explicit confirm — product §2.5.1) |
-| H2 | Sign `RedeemWithSig(receiver=Egress)` + `CreditFromRedeem(assets=netZen)` |
-| H3 | Relayer **same tx**: `StLighter.redeemWithSig(...)` then `Egress.creditFromRedeem(...)` → `credited(owner) == netZen`; `float` cleared for that amount |
-| H4 | Sign `BridgeToBase(assets, dest=B1, maxFeeZen, …)` |
-| H5 | Relayer: `quoteBridgeNativeFee` → `Egress.bridgeToBase{value}(..., feeZen, extraOptions)` → Bridge `oft.send` → `onBridgeComplete` **in-tx**; `credited` / `pendingTotal` clear for that order |
+| H2 | Sign `RedeemWithSig(receiver=Egress, relayer=…)` only (no separate CreditFromRedeem) |
+| H3 | Relayer: **`Egress.redeemAndCredit(...)`** → `credited(owner) == netZen` |
+| H4 | Sign `BridgeToBase(assets, dest=B1, maxFeeZen, relayer, …)` |
+| H5 | Relayer: `quoteBridgeNativeFee` → `Egress.bridgeToBase{value}(..., feeZen, relayer, extraOptions)` → Bridge `oft.send` → `onBridgeComplete` **in-tx**; `credited` / `pendingTotal` clear for that order |
 | H6 | After LZ delivery: Base `MockZEN.balanceOf(B1)` increases by bridged amount (minus any OFT dust rules; testnet expect full LD) |
 | H7 | Escape: after H3, skip bridge → `withdrawToHorizen` → user holds Horizen ZEN |
-| H8 | Negatives: credit without matching float / wrong sig / snatch credit; non-Egress calling `bridgeZen`; `feeZen >= assets`; insufficient `msg.value` for LZ fee |
+| H8 | Negatives: wrong `relayer` / `feeZen > maxFeeZen`; non-Egress calling `bridgeZen`; insufficient `msg.value` for LZ fee |
 
-**Relayer same-tx order (H3)** — do not split redeem and credit across txs without a recovery plan; float is snatch-resistant only via EIP-712, but UX expects atomic credit:
+**Atomic redeem+credit (H3)**:
 
 ```text
-redeemWithSig(receiver=EgressStation, …)
-creditFromRedeem(assets = netZenAfterRedeemFee, owner, deadline, sig)
+EgressStation.redeemAndCredit(shares, maxFeeZen, feeZen, relayer, user, deadline, redeemSig)
+  → StLighter.redeemWithSig(receiver=Egress, …)
+  → _credit(user, assets - feeZen)
 ```
+
+Redeploy note: Egress constructor takes `stLighter` (`STLIGHTER_PROXY_ADDRESS`). Upgrade StLighter for signed `relayer` first. Frontend: `NEXT_PUBLIC_RELAYER_FEE_ADDRESS` = rrelayer EOA.
 
 **B1 / recoverable** ([crosschain-gasless-spec §2.5](./stLighter-crosschain-gasless-spec.md)):
 
@@ -453,7 +457,8 @@ creditFromRedeem(assets = netZenAfterRedeemFee, owner, deadline, sig)
 | Var | Source |
 |-----|--------|
 | `NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS` | EgressStation |
-| (optional) `NEXT_PUBLIC_HORIZEN_ZEN_OFT_BRIDGE_ADDRESS` | ZenOftStationBridge — for quotes/transparency; writes go through Egress |
+| `NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS` | ZenOftStationBridge |
+| `NEXT_PUBLIC_RELAYER_FEE_ADDRESS` | rrelayer EOA (EIP-712 `relayer` when BFF enabled) |
 
 Add to `ltzen-frontend/env.local.example` when Wave B UI lands — **done**.
 
@@ -461,7 +466,7 @@ Add to `ltzen-frontend/env.local.example` when Wave B UI lands — **done**.
 
 - [x] Wizard: amount → confirm B1 `dest` → sign redeem+credit → relay → sign bridge → relay+LZ wait → Base balance (`/redeem-to-base`)
 - [x] EIP-712: `CreditFromRedeem` / `BridgeToBase` / Egress `WithdrawToHorizen` (domain = Egress; Horizen chainId)
-- [x] BFF kinds: `redeemWithSig` (receiver=Egress) + `creditFromRedeem` (sequential) + `bridgeToBase` with native fee
+- [x] BFF kinds: `redeemAndCredit` + `bridgeToBase` with native fee; signed `relayer` on Deposit/Redeem/Bridge
 - [x] DirectContractRelayer path for testnet (user pays Horizen gas) before forcing BFF
 - [x] `recoverable_hold` UX after credit: retry bridge (new sig/nonce) or withdraw to Horizen
 - [x] chainGating: Redeem to Base available when on Horizen (Base → switch guide)

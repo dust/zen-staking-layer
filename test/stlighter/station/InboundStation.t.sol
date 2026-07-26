@@ -198,7 +198,7 @@ contract InboundStationTest is Test {
 
     vm.prank(relayer);
     uint256 shares = mockStLighter.depositWithSig(
-      assets, owner, maxFee, fee, address(station), owner, deadline, ""
+      assets, owner, maxFee, fee, address(station), relayer, owner, deadline, ""
     );
 
     assertEq(shares, assets - fee);

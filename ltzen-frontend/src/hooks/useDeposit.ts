@@ -22,6 +22,7 @@ import { abis, horizenAddress } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { classifyTxError, RelayerTimeoutError } from "@/lib/errors";
 import { signDepositWithSig, signZenPermit } from "@/lib/eip712";
+import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 import { useTxLifecycle } from "./useTxLifecycle";
@@ -164,11 +165,13 @@ export function useDeposit({ amountWei }: UseDepositArgs) {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const permitDeadline = deadline;
 
+      const feeRelayer = resolveGaslessFeeRelayer(account);
       const { signature } = await signDepositWithSig(config, HUB_CHAIN_ID, stLighter, {
         assets: amountWei,
         receiver: account,
         maxFeeZen,
         payer: account,
+        relayer: feeRelayer,
         user: account,
         deadline,
       });
@@ -194,6 +197,7 @@ export function useDeposit({ amountWei }: UseDepositArgs) {
         receiver: account,
         amount: amountWei.toString(),
         maxFeeZen: maxFeeZen.toString(),
+        relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
         permit,
