@@ -69,7 +69,6 @@ export const copy = {
     getTestZen: "Get test ZEN",
     gettingTestZen: "Requesting…",
     switchToHorizen: "Switch to Horizen",
-    fallbackToStandard: "Use a standard deposit instead",
     fallbackToStandardRedeem: "Use a standard redeem instead",
   },
 
@@ -82,19 +81,6 @@ export const copy = {
     balance: "Balance",
     previewNote: "Estimated from the current exchange rate; settles on-chain.",
     needsApprovalNote: "First stake needs a one-time approval, then the deposit.",
-    gaslessToggle: "Gasless deposit (sign instead of approve)",
-    gaslessUnavailable:
-      "Gasless isn't available in production until a relayer is configured. Use a standard deposit.",
-    gaslessMaxFee: "Max fee you authorize",
-    gaslessEstFee: "Estimated relayer fee",
-    gaslessNetStake: "Actually staked",
-    gaslessSignNote:
-      "Two signatures, no approve transaction. On testnet you confirm one final tx; in production a relayer submits for you.",
-    gaslessSuccess: "Gasless stake confirmed.",
-    signingDeposit: "Sign to authorize the deposit…",
-    signingPermit: "Sign to permit ZEN transfer…",
-    submitting: "Submitting to relayer…",
-    relayerWaiting: "Waiting for the relayer to land on-chain…",
     pausedBanner: "Deposits are temporarily paused. Redeeming and viewing are unaffected.",
     stakeFromBaseCta: "Stake from Base instead →",
     noFaucetOnHorizen:

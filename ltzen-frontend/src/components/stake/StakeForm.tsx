@@ -1,18 +1,15 @@
 "use client";
 
 /**
- * StakeForm (uiux §4.1–4.3) — the deposit closure UI on Horizen.
+ * StakeForm (uiux §4.1–4.2) — the deposit closure UI on Horizen.
  */
 
 import { useMemo, useState } from "react";
 import { parseEther } from "viem";
 import { useDeposit } from "@/hooks/useDeposit";
-import { gaslessSupported } from "@/relayer";
 import { copy } from "@/lib/copy";
 import { approx, formatShares, formatZen, formatZenAmount } from "@/lib/format";
-import { horizen } from "@/config/chains";
 import { Card } from "@/components/common/Card";
-import { InfoTooltip } from "@/components/common/InfoTooltip";
 
 function parseAmount(input: string): bigint | undefined {
   const trimmed = input.trim();
@@ -26,28 +23,13 @@ function parseAmount(input: string): bigint | undefined {
   }
 }
 
-function explorerTxUrl(hash: string): string | undefined {
-  const base = horizen.blockExplorers?.default?.url;
-  return base ? `${base.replace(/\/$/, "")}/tx/${hash}` : undefined;
-}
-
 export function StakeForm() {
   const [input, setInput] = useState("");
-  const [gasless, setGasless] = useState(false);
 
   const amountWei = useMemo(() => parseAmount(input), [input]);
   const d = useDeposit({ amountWei });
 
-  const useGasless = gasless && gaslessSupported;
-
-  const gaslessBusy =
-    useGasless &&
-    d.gaslessPhase !== "idle" &&
-    d.gaslessPhase !== "confirmed" &&
-    d.gaslessPhase !== "timeout" &&
-    d.gaslessPhase !== "failed";
-
-  const busy = d.isBusy || gaslessBusy;
+  const busy = d.isBusy;
 
   const canSubmit =
     Boolean(amountWei) &&
@@ -62,25 +44,15 @@ export function StakeForm() {
 
   const onSubmit = async () => {
     try {
-      if (useGasless) await d.depositGasless();
-      else await d.deposit();
+      await d.deposit();
       setInput("");
     } catch {
       /* classified + toasted inside hook */
     }
   };
 
-  const buttonLabel = useGasless
-    ? d.gaslessPhase === "signing-deposit"
-      ? copy.stake.signingDeposit
-      : d.gaslessPhase === "signing-permit"
-        ? copy.stake.signingPermit
-        : d.gaslessPhase === "submitting"
-          ? copy.stake.submitting
-          : d.gaslessPhase === "relaying"
-            ? copy.stake.relayerWaiting
-            : copy.cta.stake
-    : d.state.phase === "awaiting-signature" || d.state.phase === "pending"
+  const buttonLabel =
+    d.state.phase === "awaiting-signature" || d.state.phase === "pending"
       ? d.needsApproval
         ? copy.cta.approving
         : copy.cta.depositing
@@ -134,52 +106,6 @@ export function StakeForm() {
         </span>
       </div>
 
-      <div className="mt-4">
-        <label className="flex items-center gap-2 text-sm text-zinc-300">
-          <input
-            type="checkbox"
-            checked={gasless}
-            disabled={!gaslessSupported}
-            onChange={(e) => {
-              setGasless(e.target.checked);
-              d.resetGasless();
-            }}
-            className="h-4 w-4 rounded border-white/20 bg-white/5 accent-[#31e0b5]"
-          />
-          {copy.stake.gaslessToggle}
-          <InfoTooltip text={copy.stake.gaslessSignNote} />
-        </label>
-        {!gaslessSupported && (
-          <p className="mt-1.5 text-xs text-zinc-500">{copy.stake.gaslessUnavailable}</p>
-        )}
-
-        {useGasless && amountWei && (
-          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.12] bg-white/[0.02] px-3 py-2.5 text-xs">
-            <div className="flex justify-between text-zinc-400">
-              <span>{copy.stake.gaslessMaxFee}</span>
-              <span className="font-mono tabular-nums">{formatZenAmount(d.maxFeeZen, 4)}</span>
-            </div>
-            {d.gaslessFeeZen !== undefined && d.gaslessFeeZen > 0n && (
-              <div className="flex justify-between text-zinc-400">
-                <span>{copy.stake.gaslessEstFee}</span>
-                <span className="font-mono tabular-nums">{approx(formatZenAmount(d.gaslessFeeZen, 4))}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-zinc-200">
-              <span>{copy.stake.gaslessNetStake}</span>
-              <span className="font-mono tabular-nums">
-                {approx(
-                  formatZenAmount(
-                    amountWei - (d.gaslessFeeZen ?? 0n),
-                    4,
-                  ),
-                )}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
       <button
         type="button"
         onClick={() => void onSubmit()}
@@ -189,40 +115,8 @@ export function StakeForm() {
         {!d.isConnected ? copy.cta.connect : buttonLabel}
       </button>
 
-      {d.needsApproval && !useGasless && !busy && (
+      {d.needsApproval && !busy && (
         <p className="mt-2 text-center text-xs text-zinc-500">{copy.stake.needsApprovalNote}</p>
-      )}
-
-      {useGasless && d.gaslessPhase === "confirmed" && d.gaslessTxHash && (
-        <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-3 py-2.5 text-xs text-emerald-100">
-          {copy.stake.gaslessSuccess}{" "}
-          {explorerTxUrl(d.gaslessTxHash) && (
-            <a
-              href={explorerTxUrl(d.gaslessTxHash)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2"
-            >
-              {copy.cta.viewExplorer} ↗
-            </a>
-          )}
-        </div>
-      )}
-
-      {useGasless && d.gaslessPhase === "timeout" && (
-        <div className="mt-3 rounded-lg border border-red-400/20 bg-red-400/[0.05] px-3 py-2.5 text-xs text-red-200">
-          {copy.errors.relayerTimeout}
-          <button
-            type="button"
-            onClick={() => {
-              setGasless(false);
-              d.resetGasless();
-            }}
-            className="ml-2 underline underline-offset-2 hover:opacity-80"
-          >
-            {copy.cta.fallbackToStandard}
-          </button>
-        </div>
       )}
 
       <p className="mt-4 text-center text-xs text-zinc-500">

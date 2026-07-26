@@ -101,7 +101,8 @@ export function isActionAvailable(
 
 export function canGasless(action: AppAction, chainId: number | undefined): boolean {
   if (chainId === HUB_CHAIN_ID) {
-    return action === "deposit" || action === "redeem" || action === "redeemToBase";
+    // Same-chain deposit is approve+deposit only (no gasless UX).
+    return action === "redeem" || action === "redeemToBase";
   }
   if (chainId === SPOKE_CHAIN_ID) {
     return action === "bridge";

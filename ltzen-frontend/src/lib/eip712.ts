@@ -1,15 +1,13 @@
 /**
- * EIP-712 helpers for StLighter gasless flows (M2 — depositWithSigAndPermit).
+ * EIP-712 helpers for StLighter / station meta-tx flows.
  *
- * Deposit authorization uses StLighter's DEPOSIT_WITH_SIG_TYPEHASH; ZEN transfer uses the
- * token's EIP-2612 Permit domain. Domains are read from chain at signing time so they cannot
- * drift from deployed contracts.
+ * DepositWithSig (cross-chain credit stake) and RedeemWithSig use StLighter's domain.
+ * Domains are read from chain at signing time so they cannot drift from deployed contracts.
  */
 
 import { readContract, signTypedData } from "wagmi/actions";
 import type { Config } from "wagmi";
 import type { Address, Hex } from "viem";
-import { hexToSignature } from "viem";
 import { abis } from "@/config/contracts";
 
 export const DEPOSIT_WITH_SIG_TYPES = {
@@ -20,16 +18,6 @@ export const DEPOSIT_WITH_SIG_TYPES = {
     { name: "payer", type: "address" },
     { name: "relayer", type: "address" },
     { name: "user", type: "address" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-  ],
-} as const;
-
-export const ZEN_PERMIT_TYPES = {
-  Permit: [
-    { name: "owner", type: "address" },
-    { name: "spender", type: "address" },
-    { name: "value", type: "uint256" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
   ],
@@ -120,38 +108,6 @@ export async function readDepositSignContext(
   };
 }
 
-/** Read ZEN (ERC20Permit) EIP-712 domain + owner nonce. */
-export async function readZenPermitContext(
-  config: Config,
-  chainId: number,
-  zen: Address,
-  owner: Address,
-): Promise<{
-  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
-  nonce: bigint;
-}> {
-  const [raw, nonce] = await Promise.all([
-    readContract(config, {
-      chainId,
-      address: zen,
-      abi: abis.zen,
-      functionName: "eip712Domain",
-    }) as Promise<StLighterDomain>,
-    readContract(config, {
-      chainId,
-      address: zen,
-      abi: abis.zen,
-      functionName: "nonces",
-      args: [owner],
-    }) as Promise<bigint>,
-  ]);
-  const [, name, version, chainIdOnChain, verifyingContract] = raw;
-  return {
-    domain: { name, version, chainId: Number(chainIdOnChain), verifyingContract },
-    nonce,
-  };
-}
-
 export interface DepositWithSigParams {
   assets: bigint;
   receiver: Address;
@@ -162,20 +118,6 @@ export interface DepositWithSigParams {
   relayer: Address;
   user: Address;
   deadline: bigint;
-}
-
-export interface ZenPermitParams {
-  owner: Address;
-  spender: Address;
-  value: bigint;
-  deadline: bigint;
-}
-
-export interface ZenPermitSignature {
-  deadline: number;
-  v: number;
-  r: Hex;
-  s: Hex;
 }
 
 /** Sign StLighter DepositWithSig (EIP-712). */
@@ -207,8 +149,7 @@ export interface RedeemWithSigParams {
 
 /**
  * Sign StLighter RedeemWithSig (EIP-712). Reuses the StLighter domain + nonce (same proxy as
- * deposit). Unlike deposit, redeem needs no ERC20 permit — the contract burns the user's ltZEN
- * shares directly (internal accounting, no token approval).
+ * deposit). The contract burns the user's ltZEN shares directly (no ERC20 approval).
  */
 export async function signRedeemWithSig(
   config: Config,
@@ -224,24 +165,6 @@ export async function signRedeemWithSig(
     message: { ...params, nonce },
   });
   return { signature, nonce };
-}
-
-/** Sign ZEN EIP-2612 Permit. */
-export async function signZenPermit(
-  config: Config,
-  chainId: number,
-  zen: Address,
-  params: ZenPermitParams,
-): Promise<ZenPermitSignature> {
-  const { domain, nonce } = await readZenPermitContext(config, chainId, zen, params.owner);
-  const signature = await signTypedData(config, {
-    domain,
-    types: ZEN_PERMIT_TYPES,
-    primaryType: "Permit",
-    message: { ...params, nonce },
-  });
-  const { v, r, s } = hexToSignature(signature);
-  return { deadline: Number(params.deadline), v: Number(v), r, s };
 }
 
 /** Read InboundStation EIP-712 domain + owner nonce (always Horizen verifyingContract). */
