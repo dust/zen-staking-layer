@@ -24,20 +24,33 @@ contract ZenStaker is Staker, StakerPermitAndStake {
   /// @notice Maps each delegatee address to its non-voting delegation surrogate contract.
   mapping(address delegatee => DelegationSurrogate surrogate) private _surrogates;
 
+<<<<<<< HEAD
   /// @param _rewardToken ZEN token address (reward token).
   /// @param _stakeToken ZEN token address (stake token — same as reward for ZEN-on-ZEN staking).
+=======
+  /// @param _token ZEN token address (used as both reward and stake token — ZEN-on-ZEN staking).
+>>>>>>> main
   /// @param _earningPowerCalculator Earning power calculator (use IdentityEarningPowerCalculator).
   /// @param _maxBumpTip Maximum tip a bumper may request (0 — bumping disabled in Phase 1).
   /// @param _admin Horizen multisig address.
   constructor(
+<<<<<<< HEAD
     IERC20 _rewardToken,
     IERC20 _stakeToken,
+=======
+    IERC20 _token,
+>>>>>>> main
     IEarningPowerCalculator _earningPowerCalculator,
     uint256 _maxBumpTip,
     address _admin
   )
+<<<<<<< HEAD
     Staker(_rewardToken, _stakeToken, _earningPowerCalculator, _maxBumpTip, _admin)
     StakerPermitAndStake(IERC20Permit(address(_stakeToken)))
+=======
+    Staker(_token, _token, _earningPowerCalculator, _maxBumpTip, _admin)
+    StakerPermitAndStake(IERC20Permit(address(_token)))
+>>>>>>> main
   {
     MAX_CLAIM_FEE = 0;
     _setClaimFeeParameters(ClaimFeeParameters({feeAmount: 0, feeCollector: address(0)}));
@@ -142,7 +155,11 @@ contract ZenStaker is Staker, StakerPermitAndStake {
   /// totals.
   /// @param _depositor The address to query.
   function getDepositorSummary(address _depositor)
+<<<<<<< HEAD
     external
+=======
+    public
+>>>>>>> main
     view
     returns (uint256 totalStaked_, uint256 totalEarningPower_)
   {
@@ -150,6 +167,16 @@ contract ZenStaker is Staker, StakerPermitAndStake {
     totalEarningPower_ = depositorTotalEarningPower[_depositor];
   }
 
+<<<<<<< HEAD
+=======
+  /// @notice Returns voting power as staking totals for a depositor
+  /// @param account The address to query.
+  function getVotes(address account) public view returns (uint256) {
+    (uint256 totalStaked,) = getDepositorSummary(account);
+    return totalStaked;
+  }
+
+>>>>>>> main
   /// @notice Returns aggregated staking totals plus total unclaimed rewards for a depositor in
   /// one call. Deposit IDs must be supplied by the caller (sourced from the Goldsky indexer via
   /// StakeDeposited events filtered on the indexed owner field).

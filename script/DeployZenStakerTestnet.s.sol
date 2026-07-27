@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+<<<<<<< HEAD
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IEarningPowerCalculator} from "../src/interfaces/IEarningPowerCalculator.sol";
 import {IdentityEarningPowerCalculator} from "../src/calculators/IdentityEarningPowerCalculator.sol";
@@ -11,6 +12,15 @@ import {ERC20VotesMock} from "../test/mocks/MockERC20Votes.sol";
 
 /// @notice Testnet deployment: deploys a public-mint ERC20 test token, then
 /// IdentityEarningPowerCalculator + ZenStakerUpgradeable (impl) + ERC1967Proxy.
+=======
+import {IEarningPowerCalculator} from "../src/interfaces/IEarningPowerCalculator.sol";
+import {IdentityEarningPowerCalculator} from "../src/calculators/IdentityEarningPowerCalculator.sol";
+import {ZenStaker} from "../src/ZenStaker.sol";
+import {ERC20VotesMock} from "../test/mocks/MockERC20Votes.sol";
+
+/// @notice Testnet deployment: deploys a public-mint ERC20 test token, then
+/// IdentityEarningPowerCalculator + ZenStaker.
+>>>>>>> main
 /// The deployer becomes the staker admin.
 ///
 /// Required env:
@@ -21,8 +31,12 @@ contract DeployZenStakerTestnet is Script {
     returns (
       ERC20VotesMock testToken,
       IdentityEarningPowerCalculator calculator,
+<<<<<<< HEAD
       ZenStakerUpgradeable implementation,
       ZenStakerUpgradeable proxy
+=======
+      ZenStaker staker
+>>>>>>> main
     )
   {
     uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -36,6 +50,7 @@ contract DeployZenStakerTestnet is Script {
     calculator = new IdentityEarningPowerCalculator();
     console2.log("IdentityEarningPowerCalculator:", address(calculator));
 
+<<<<<<< HEAD
     implementation = new ZenStakerUpgradeable(IERC20(address(testToken)));
     console2.log("ZenStakerUpgradeable (impl):   ", address(implementation));
 
@@ -46,6 +61,15 @@ contract DeployZenStakerTestnet is Script {
     proxy =
       ZenStakerUpgradeable(address(new ERC1967Proxy(address(implementation), initData)));
     console2.log("ZenStakerUpgradeable (proxy):  ", address(proxy));
+=======
+    staker = new ZenStaker(
+      IERC20(address(testToken)),
+      IEarningPowerCalculator(address(calculator)),
+      0,
+      deployer
+    );
+    console2.log("ZenStaker:                     ", address(staker));
+>>>>>>> main
     console2.log("Admin (deployer):              ", deployer);
 
     vm.stopBroadcast();

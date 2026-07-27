@@ -31,7 +31,6 @@ contract ZenStakerTest is Test {
 
     staker = new ZenStaker(
       IERC20(address(zenToken)),
-      IERC20(address(zenToken)),
       calculator,
       0, // maxBumpTip = 0
       admin

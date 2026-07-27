@@ -30,7 +30,6 @@ contract DeployZenStaker is Script {
 
     staker = new ZenStaker(
       IERC20(zenToken),
-      IERC20(zenToken),
       IEarningPowerCalculator(address(calculator)),
       maxBumpTip,
       admin

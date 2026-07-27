@@ -6,6 +6,19 @@ Users stake ZEN to earn ZEN rewards. The smart-contract layer is a thin, additiv
 
 ---
 
+## Security & bug bounty
+
+Security issues are covered by the Horizen bug bounty program on Immunefi: **https://immunefi.com/bug-bounty/horizen**. Please report privately there, or via this repo's *Security → Report a vulnerability* — **not** through public issues or pull requests. Scope, impacts, rewards, rules of engagement (PoC execution is local-only), and the full known-issue list live on the program page and in [`SECURITY.md`](SECURITY.md).
+
+**Before reporting, please check the known behaviors.** The staking contracts are a thin, additive wrapper over the audited Tally/ScopeLift Staker base; the one Horizen-specific contract is `RewardAccumulator`, and its permissionless open-mode behavior is **documented and accepted** (see [`SECURITY.md`](SECURITY.md#known-behaviors-not-vulnerabilities)). In particular, the following are **out of scope** — they are timing effects with no loss, not vulnerabilities:
+
+- an **empty / zero-reward `sendRewardsToStaker()` flush** advancing the reward-window grid and delaying a later deposit by up to one window (self-healing, full delivery); and
+- a **sub-`REWARD_DURATION` (dust) contribution** reverting the flush via the inherited `Staker__InvalidRewardRate` guard (atomic and recoverable — anyone can top the balance above the threshold; funds are never stuck and nothing is stolen).
+
+Loss or incorrect attribution of principal/rewards, permanent denial of distribution via a *different* mechanism, over-extraction, or theft remain **in scope**.
+
+---
+
 ## Project goal
 
 ZenStaker gives Horizen holders a native staking experience:
@@ -30,7 +43,7 @@ Deposit ZEN into a new position. Each deposit gets a unique ID and designates:
 
 Two paths:
 - `approve` + `stake(amount, delegatee)` - two transactions.
-- `permitAndStake(amount, delegatee, claimer, deadline, v, r, s)` - single transaction using an EIP-2612 signature (better UX).
+- `permitAndStake(amount, delegatee, claimer, deadline, v, r, s)` - single transaction using an EIP-2612 signature. **Note:** the production ZEN token does not implement EIP-2612 `permit`. The inherited code swallows the failed permit (`try/catch`), so without a pre-existing allowance the call reverts at `transferFrom` — the single-transaction path only works with permit-capable test tokens.
 
 ### Stake more
 
@@ -127,8 +140,8 @@ src/
 script/
   DeployZenStaker.s.sol                  # Foundry deployment script
   ConfigureRewardNotifier.s.sol          # Post-deploy admin script
-scripts/
-  e2e-zen-staking.js                     # Node.js end-to-end test (ethers v6)
+test/e2e/
+  e2e-zen-staker.js                      # Node.js end-to-end test (ethers v6)
 docs/
   frontend-integration.md               # ethers.js integration guide
 audits/                                  # All upstream audit reports
@@ -159,18 +172,16 @@ forge test
 
 ### End-to-end script
 
-The e2e script deploys the full contract stack and exercises the entire staking lifecycle (stake → accrue rewards → claim → withdraw).
+The e2e scripts deploy the contract stack and exercise the entire staking lifecycle (stake → accrue rewards → claim → withdraw).
 
+#### Non-upgradeable variant (ZenStaker)
 **Against a local Anvil node (no .env needed):**
-
 ```bash
 npm install
 npm run e2e:anvil
-# or: npm run e2e -- --anvil 9545   (custom port)
 ```
 
 **Against a testnet:**
-
 ```bash
 cp .env.template .env
 # fill in: RPC_URL, DEPLOYER_PRIVATE_KEY, USER1_PRIVATE_KEY, USER2_PRIVATE_KEY
@@ -179,9 +190,28 @@ npm run e2e
 
 ### Deployment (Foundry)
 
+To deploy the **non-upgradeable** `ZenStaker` implementation using Foundry, you will use the provided scripts in the `script/` directory.
+
+#### 1. Deploy ZenStaker & IdentityEarningPowerCalculator
+Export the following environment variables (or set them in `.env`):
+* `ZEN_TOKEN_ADDRESS`: Address of the deployed ZEN ERC20 token.
+* `ADMIN_ADDRESS`: Address of the Horizen multisig (becomes staker admin).
+* `PRIVATE_KEY`: Deployer private key (hex, with or without 0x prefix).
+* `MAX_BUMP_TIP` (Optional): Maximum bump tip (defaults to 0).
+
+Execute the deploy script:
 ```bash
-# Set env vars: see .env.template
 forge script script/DeployZenStaker.s.sol --rpc-url $RPC_URL --broadcast
+```
+
+#### 2. Configure Reward Notifiers (Post-Deploy)
+To authorize a contract or account to send rewards to the staker, export these variables:
+* `STAKER_ADDRESS`: Address of the deployed `ZenStaker` contract.
+* `REWARD_NOTIFIER_ADDRESS`: Address of the reward notifier to enable.
+* `PRIVATE_KEY`: Admin private key (must be the `ADMIN_ADDRESS` specified during deploy).
+
+Execute the configuration script:
+```bash
 forge script script/ConfigureRewardNotifier.s.sol --rpc-url $RPC_URL --broadcast
 ```
 

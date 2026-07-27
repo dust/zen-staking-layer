@@ -1,12 +1,30 @@
 # ZenStaker Testnet QA Testing Guide
 
+<<<<<<< HEAD
+=======
+> ⚠️ **Superseded deployment.** The addresses below belong to the retired
+> `ZenStakerUpgradeable` QA deployment and are **not** the deployment covered
+> by the bug bounty program. The current in-scope testnet deployment is the
+> non-upgradeable **ZenStaker** at `0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31`
+> with the bridged **tZEN** token `0xb06EC4ce262D8dbDc24Fac87479A49A7DC4cFb87`
+> (see [SECURITY.md](../SECURITY.md)). On the current deployment, rewards flow
+> through the RewardAccumulator on a fixed schedule rather than via the
+> admin-as-notifier flow described here, and tZEN has no public `mint`.
+> <!-- TODO: rewrite this guide for the current deployment (tZEN via the
+> testnet bridge, reward injection through RewardAccumulator) -->
+
+>>>>>>> main
 ## Network & Contracts
 
 | | |
 |---|---|
 | **Network** | Horizen Testnet |
 | **Chain ID** | 2651420 |
+<<<<<<< HEAD
 | **RPC** | `http://horizen-testnet.rpc.caldera.xyz/http` |
+=======
+| **RPC** | `https://horizen-testnet.rpc.caldera.xyz/http` |
+>>>>>>> main
 
 | Contract | Address |
 |---|---|
@@ -45,7 +63,11 @@ Earning power in Phase 1 uses `IdentityEarningPowerCalculator`, which sets earni
 All examples use `cast` from Foundry. Set these shell variables once:
 
 ```bash
+<<<<<<< HEAD
 RPC=http://horizen-testnet.rpc.caldera.xyz/http
+=======
+RPC=https://horizen-testnet.rpc.caldera.xyz/http
+>>>>>>> main
 TOKEN=0x38DbD13429Da34bCcb5343BD91C5152DEa825557
 STAKER=0x7B4e9Fd36831CD08653cC72e5756fBb73Ab2D364
 ADMIN_KEY=<deployer private key>          # 0x-prefixed
@@ -128,7 +150,11 @@ cast send $STAKER \
 
 Parameters:
 - `_amount` — tokens to stake (500 tokens here)
+<<<<<<< HEAD
 - `_delegatee` — address that receives governance weight (use your own address for testnet)
+=======
+- `_delegatee` — address that receives the deposit's surrogate delegation (non-voting in Phase 1; use your own address for testnet)
+>>>>>>> main
 
 Returns: `depositId` (a `uint256`). **Save this value** — you need it for every subsequent call.
 
