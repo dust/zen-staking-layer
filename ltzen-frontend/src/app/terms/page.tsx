@@ -98,7 +98,7 @@ export default function TermsPage() {
         <UL>
           <li>
             the stLighter web application, dashboard, and any related interface hosted at{" "}
-            <Strong>[app URL]</Strong> (collectively, the <Strong>&ldquo;Interface&rdquo;</Strong>);
+            <Strong>https://staking.lighter.im</Strong> (collectively, the <Strong>&ldquo;Interface&rdquo;</Strong>);
             and
           </li>
           <li>
