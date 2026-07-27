@@ -36,7 +36,7 @@ contract StLighterGovernanceTest is Test {
     vm.warp(1_000_000);
     zen = new ERC20VotesMock();
     calculator = new IdentityEarningPowerCalculator();
-    zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, multisig);
+    zenStaker = new ZenStaker(IERC20(address(zen)), calculator, 0, multisig);
 
     address[] memory proposers = _singleton(multisig);
     address[] memory executors = _singleton(address(0));

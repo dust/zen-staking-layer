@@ -32,7 +32,7 @@ contract StLighterInvariants is Test {
     vm.warp(1_000_000);
     zen = new ERC20VotesMock();
     calculator = new IdentityEarningPowerCalculator();
-    zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance);
+    zenStaker = new ZenStaker(IERC20(address(zen)), calculator, 0, governance);
 
     ltZen = new LtZEN(
       "ltZEN",

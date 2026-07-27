@@ -43,7 +43,7 @@ contract StLighterDeployScriptTest is Test {
     zen = new ERC20VotesMock();
     calculator = new IdentityEarningPowerCalculator();
     // ZenStaker admin is the multisig for parity with the production governance owner.
-    zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, multisig);
+    zenStaker = new ZenStaker(IERC20(address(zen)), calculator, 0, multisig);
     hubEndpoint = new EndpointV2Mock(1, address(this));
     spokeEndpoint = new EndpointV2Mock(2, address(this));
 

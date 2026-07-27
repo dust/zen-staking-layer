@@ -89,7 +89,7 @@ contract MockZENPermitAndStake is Test {
     vm.warp(1_000_000);
     zen = new MockZEN();
     calculator = new IdentityEarningPowerCalculator();
-    staker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, admin);
+    staker = new ZenStaker(IERC20(address(zen)), calculator, 0, admin);
   }
 
   function test_PermitAndStakeWithoutPriorApproval() public {

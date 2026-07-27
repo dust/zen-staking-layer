@@ -46,7 +46,7 @@ contract StLighterTest is Test {
     calculator = new IdentityEarningPowerCalculator();
 
     // Underlying ZenStaker (admin = governance for simplicity).
-    zenStaker = new ZenStaker(IERC20(address(zen)), IERC20(address(zen)), calculator, 0, governance);
+    zenStaker = new ZenStaker(IERC20(address(zen)), calculator, 0, governance);
     vm.prank(governance);
     zenStaker.setRewardNotifier(rewardNotifier, true);
 
