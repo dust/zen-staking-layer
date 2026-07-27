@@ -76,8 +76,6 @@ type RewardNotifiedEvent @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
-<<<<<<< HEAD
-=======
 
 # Unified, chronologically-ordered activity feed for the user history view.
 # orderKey packs (blockNumber, logIndex) into one strictly-increasing cursor so
@@ -95,4 +93,3 @@ type Activity @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
->>>>>>> main

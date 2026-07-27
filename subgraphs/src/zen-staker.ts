@@ -8,10 +8,7 @@ import {
 } from "../generated/ZenStaker/ZenStaker";
 import {
   Deposit,
-<<<<<<< HEAD
-=======
   Activity as ActivityEntity,
->>>>>>> main
   StakeDepositedEvent as StakeDepositedEntity,
   StakeWithdrawnEvent as StakeWithdrawnEntity,
   RewardClaimedEvent as RewardClaimedEntity,
@@ -19,9 +16,6 @@ import {
   ClaimerAlteredEvent as ClaimerAlteredEntity,
   RewardNotifiedEvent as RewardNotifiedEntity,
 } from "../generated/schema";
-<<<<<<< HEAD
-import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts";
-=======
 import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
 
 // Records a unified Activity row for the chronological history feed, alongside
@@ -56,7 +50,6 @@ function recordActivity(
   activity.transactionHash = event.transaction.hash;
   activity.save();
 }
->>>>>>> main
 
 export function handleStakeDeposited(event: StakeDepositedEvent): void {
   let depositIdStr = event.params.depositId.toString();
@@ -89,11 +82,8 @@ export function handleStakeDeposited(event: StakeDepositedEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
-<<<<<<< HEAD
-=======
 
   recordActivity("stake", event.params.owner, event.params.depositId, event.params.amount, event);
->>>>>>> main
 }
 
 export function handleStakeWithdrawn(event: StakeWithdrawnEvent): void {
@@ -127,11 +117,8 @@ export function handleStakeWithdrawn(event: StakeWithdrawnEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
-<<<<<<< HEAD
-=======
 
   recordActivity("withdraw", event.params.owner, event.params.depositId, event.params.amount, event);
->>>>>>> main
 }
 
 export function handleRewardClaimed(event: RewardClaimedEvent): void {
@@ -146,11 +133,8 @@ export function handleRewardClaimed(event: RewardClaimedEvent): void {
   entity.blockTimestamp = event.block.timestamp;
   entity.transactionHash = event.transaction.hash;
   entity.save();
-<<<<<<< HEAD
-=======
 
   recordActivity("claim", event.params.claimer, event.params.depositId, event.params.amount, event);
->>>>>>> main
 }
 
 export function handleDelegateeAltered(event: DelegateeAlteredEvent): void {

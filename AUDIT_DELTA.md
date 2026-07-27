@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 # Audit Delta — ZenStaker & stLighter
-=======
-# Audit Delta — ZenStaker
->>>>>>> main
 
 ## Audited base
 
@@ -26,14 +22,9 @@ No storage layout was changed.
   and `StakerPermitAndStake`. Contains `ZenDelegationSurrogate`, a minimal
   non-voting concrete implementation of `DelegationSurrogate` that holds
   staked tokens without delegating any governance voting power. Adds
-<<<<<<< HEAD
-  view-only helper functions (listed below). No overrides of any
-  state-changing functions.
-=======
   view-only helper functions (listed below). Implements the required virtual
   functions (`_fetchOrDeploySurrogate`, `surrogates`) to use the non-voting
   surrogate; no inherited state-changing function is overridden or altered.
->>>>>>> main
 
 ### Modified in Staker.sol
 
@@ -59,7 +50,6 @@ Adding `indexed` to an event parameter moves it from the log data field to a top
 - `script/DeployZenStaker.s.sol` — Foundry deployment script.
 - `script/ConfigureRewardNotifier.s.sol` — Admin post-deploy script to
   enable a reward notifier.
-<<<<<<< HEAD
 - `script/DeployZenStakerUpgradeable.s.sol` — Deploys `IdentityEarningPowerCalculator`,
   the `ZenStakerUpgradeable` implementation, and the `ERC1967Proxy` in one run.
 - `script/UpgradeZenStakerUpgradeable.s.sol` — Upgrades an existing proxy to a
@@ -67,8 +57,6 @@ Adding `indexed` to an event parameter moves it from the log data field to a top
   `ZEN_TOKEN_ADDRESS`, and `PRIVATE_KEY` (admin) from environment; asserts the
   caller is the current admin before broadcasting; emits no on-chain state
   changes beyond the ERC-1967 implementation slot update.
-=======
->>>>>>> main
 
 ### New test files
 
@@ -101,7 +89,6 @@ re-audit of the core contracts. `ZenDelegationSurrogate` contains no logic
 beyond the `DelegationSurrogate` base constructor. `IdentityEarningPowerCalculator`
 is a pure passthrough already present in the audited repository.
 
-<<<<<<< HEAD
 ---
 
 ## stLighter (liquid staking layer)
@@ -294,5 +281,3 @@ Deploy via `ERC1967Proxy` (already in `@openzeppelin/contracts` v5):
 - All interfaces — untouched
 - Write-path logic (stake, withdraw, claim, notifyRewardAmount) — untouched
 - Storage layout of existing slots — untouched
-=======
->>>>>>> main

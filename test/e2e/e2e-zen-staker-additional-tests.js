@@ -120,12 +120,10 @@ function managedWallet(wallet) {
   return nm;
 }
 
-function resetWallets(...wallets) {
-  for (const w of wallets) {
-    if (w && typeof w.reset === "function") {
-      w.reset();
-    }
-  }
+function resetWallets(..._wallets) {
+  // Intentionally a no-op — NonceManager tracks nonces in memory when each tx is
+  // awaited. Manual reset() can race (async without await) or return a stale
+  // "latest" nonce behind pending txs; see e2e-reward-accumulator-tests.js.
 }
 
 function loadArtifact(solFile, contractName) {
