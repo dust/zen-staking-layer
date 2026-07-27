@@ -68,6 +68,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   event BridgeRefunded(bytes32 indexed bridgeId, address indexed owner, uint256 amount);
   event BridgeCompleted(bytes32 indexed bridgeId, address indexed owner, uint256 amount);
   event WithdrawToHorizen(address indexed owner, address indexed to, uint256 assets);
+  event NativeSwept(address indexed to, uint256 amount);
 
   error EgressStation__ZeroAddress();
   error EgressStation__ZeroAmount();
@@ -77,6 +78,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   error EgressStation__UnauthorizedBridge();
   error EgressStation__UnknownBridgeId();
   error EgressStation__BridgeNotActive();
+  error EgressStation__NativeTransferFailed();
 
   constructor(IERC20 zen_, address stLighter_, address bridge_, address owner_)
     Ownable(owner_)
@@ -274,6 +276,15 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
     if (f != 0) {
       _addUnassigned(f);
     }
+  }
+
+  /// @notice Recover native ETH (OFT excess fee refunds). Does not touch ZEN accounting.
+  function sweepNative(address payable to) external onlyOwner nonReentrant {
+    if (to == address(0)) revert EgressStation__ZeroAddress();
+    uint256 bal = address(this).balance;
+    (bool ok,) = to.call{value: bal}("");
+    if (!ok) revert EgressStation__NativeTransferFailed();
+    emit NativeSwept(to, bal);
   }
 
   function pause() external onlyOwner {

@@ -481,6 +481,19 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "to",
+        "type": "address"
+      }
+    ],
+    "name": "sweepNative",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "totalCredited",
     "outputs": [
@@ -734,6 +747,25 @@
       {
         "indexed": true,
         "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "NativeSwept",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "previousOwner",
         "type": "address"
       },
@@ -914,6 +946,11 @@
   {
     "inputs": [],
     "name": "EgressStation__InvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "EgressStation__NativeTransferFailed",
     "type": "error"
   },
   {

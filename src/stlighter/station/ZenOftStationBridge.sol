@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
@@ -26,6 +27,8 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
   IERC20 public immutable zen;
   address public immutable override egress;
   uint32 public immutable dstEid;
+  /// @notice `10 ** (token.decimals - oft.sharedDecimals)` — dust floor for minAmountLD.
+  uint256 public immutable decimalConversionRate;
 
   mapping(bytes32 bridgeId => bytes32 guid) public guidOf;
 
@@ -46,6 +49,7 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
   error ZenOftStationBridge__InsufficientBalance();
   error ZenOftStationBridge__InsufficientNativeFee();
   error ZenOftStationBridge__TokenMismatch();
+  error ZenOftStationBridge__InvalidDecimals();
 
   constructor(address oft_, address egress_, uint32 dstEid_, address owner_) Ownable(owner_) {
     if (oft_ == address(0) || egress_ == address(0) || owner_ == address(0)) {
@@ -59,6 +63,11 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
     zen = IERC20(token);
     egress = egress_;
     dstEid = dstEid_;
+
+    uint8 localDecimals = IERC20Metadata(token).decimals();
+    uint8 shared = IOFT(oft_).sharedDecimals();
+    if (localDecimals < shared) revert ZenOftStationBridge__InvalidDecimals();
+    decimalConversionRate = 10 ** uint256(localDecimals - shared);
 
     // EgressStation.zen() must be this OFT token — enforced at first bridge by balance checks.
     if (address(EgressStation(payable(egress_)).zen()) != token) {
@@ -83,17 +92,7 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
       zen.forceApprove(address(oft), amount);
     }
 
-    // minAmountLD must be ≤ post-dust amountReceivedLD. Setting equal to amountLD reverts with
-    // SlippageExceeded when sharedDecimals < localDecimals (dust truncation).
-    SendParam memory sendParam = SendParam({
-      dstEid: dstEid,
-      to: bytes32(uint256(uint160(destOnBase))),
-      amountLD: amount,
-      minAmountLD: 0,
-      extraOptions: extraOptions,
-      composeMsg: bytes(""),
-      oftCmd: bytes("")
-    });
+    SendParam memory sendParam = _buildSendParam(amount, destOnBase, extraOptions);
 
     MessagingFee memory fee = oft.quoteSend(sendParam, false);
     if (msg.value < fee.nativeFee) revert ZenOftStationBridge__InsufficientNativeFee();
@@ -122,16 +121,25 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
     view
     returns (uint256 nativeFee)
   {
-    SendParam memory sendParam = SendParam({
+    return oft.quoteSend(_buildSendParam(amount, destOnBase, extraOptions), false).nativeFee;
+  }
+
+  /// @dev minAmountLD = amount minus sub-sharedDecimals dust only (rejects future OFT fee haircuts).
+  function _buildSendParam(uint256 amount, address destOnBase, bytes calldata extraOptions)
+    internal
+    view
+    returns (SendParam memory)
+  {
+    uint256 minAmountLD = amount - (amount % decimalConversionRate);
+    return SendParam({
       dstEid: dstEid,
       to: bytes32(uint256(uint160(destOnBase))),
       amountLD: amount,
-      minAmountLD: 0,
+      minAmountLD: minAmountLD,
       extraOptions: extraOptions,
       composeMsg: bytes(""),
       oftCmd: bytes("")
     });
-    return oft.quoteSend(sendParam, false).nativeFee;
   }
 
   function sweepNative(address to, uint256 amount) external onlyOwner {

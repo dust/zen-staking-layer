@@ -194,13 +194,14 @@ export INBOUND_STATION_ADDRESS=0x31AD52D4dE8164C0AF225d87237910435fb4FA6A
 export IN_STATION=$INBOUND_STATION_ADDRESS
 ```
 
-- [ ] `zen()` / `zenOft()` = A1; `stLighter()` = proxy; `composeCaller()` = `LZ_ENDPOINT_HORIZEN`
+- [ ] `zen()` / `zenOft()` = A1; `stLighter()` = proxy; `composeCaller()` = `LZ_ENDPOINT_HORIZEN`; `allowedSrcEid()` = `BASE_EID`
 
 ``` bash
 cast call $IN_STATION 'zen()(address)' --rpc-url $HORIZEN_RPC
 cast call $IN_STATION 'zenOft()(address)' --rpc-url $HORIZEN_RPC
 cast call $IN_STATION 'stLighter()(address)' --rpc-url $HORIZEN_RPC
 cast call $IN_STATION 'composeCaller()(address)' --rpc-url $HORIZEN_RPC
+cast call $IN_STATION 'allowedSrcEid()(uint32)' --rpc-url $HORIZEN_RPC
 ```
 
 **Horizen ZEN inventory:** ZenTokenOFT has no faucet. Same-chain smoke needs ZEN bridged from Base (Phase C1 → send to EOA), then Phase D.

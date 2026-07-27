@@ -229,4 +229,21 @@ contract EgressStationTest is Test {
     assertEq(station.unassigned(), 0);
     assertEq(station.float(), 0);
   }
+
+  function test_SweepNative() public {
+    address payable treasury = payable(makeAddr("ethTreasury"));
+    vm.deal(address(station), 0.75 ether);
+
+    vm.prank(governance);
+    station.sweepNative(treasury);
+
+    assertEq(address(station).balance, 0);
+    assertEq(treasury.balance, 0.75 ether);
+  }
+
+  function test_SweepNativeRevertsNonOwner() public {
+    vm.deal(address(station), 1 ether);
+    vm.expectRevert();
+    station.sweepNative(payable(relayer));
+  }
 }

@@ -22,6 +22,7 @@ export const STATION_COMPOSE_PAYLOAD_VERSION = 1;
 export function encodeStationComposePayloadV1(params: {
   owner: Address;
   assets: bigint;
+  nonce: bigint;
   deadline: bigint;
   signature: Hex;
 }): Hex {
@@ -31,12 +32,14 @@ export function encodeStationComposePayloadV1(params: {
       { type: "address" },
       { type: "uint256" },
       { type: "uint256" },
+      { type: "uint256" },
       { type: "bytes" },
     ],
     [
       STATION_COMPOSE_PAYLOAD_VERSION,
       params.owner,
       params.assets,
+      params.nonce,
       params.deadline,
       params.signature,
     ],

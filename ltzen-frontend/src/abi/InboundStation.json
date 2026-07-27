@@ -22,6 +22,11 @@
         "type": "address"
       },
       {
+        "internalType": "uint32",
+        "name": "allowedSrcEid_",
+        "type": "uint32"
+      },
+      {
         "internalType": "address",
         "name": "owner_",
         "type": "address"
@@ -78,6 +83,19 @@
   },
   {
     "inputs": [],
+    "name": "allowedSrcEid",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "composeCaller",
     "outputs": [
       {
@@ -87,34 +105,6 @@
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "assets",
-        "type": "uint256"
-      },
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "deadline",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "signature",
-        "type": "bytes"
-      }
-    ],
-    "name": "creditFromTrustedComposer",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -189,6 +179,24 @@
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "wordPos",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "mask",
+        "type": "uint256"
+      }
+    ],
+    "name": "invalidateUnorderedNonces",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "_from",
         "type": "address"
@@ -217,6 +225,30 @@
     "name": "lzCompose",
     "outputs": [],
     "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "wordPos",
+        "type": "uint256"
+      }
+    ],
+    "name": "nonceBitmap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "bitmap",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -330,6 +362,19 @@
   {
     "inputs": [
       {
+        "internalType": "uint32",
+        "name": "allowedSrcEid_",
+        "type": "uint32"
+      }
+    ],
+    "name": "setAllowedSrcEid",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "composeCaller_",
         "type": "address"
@@ -382,6 +427,19 @@
   {
     "inputs": [],
     "name": "sweepFloatToUnassigned",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address payable",
+        "name": "to",
+        "type": "address"
+      }
+    ],
+    "name": "sweepNative",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -495,6 +553,19 @@
     "anonymous": false,
     "inputs": [
       {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "allowedSrcEid",
+        "type": "uint32"
+      }
+    ],
+    "name": "AllowedSrcEidSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
         "indexed": true,
         "internalType": "address",
         "name": "composeCaller",
@@ -597,6 +668,25 @@
       {
         "indexed": true,
         "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "NativeSwept",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "previousOwner",
         "type": "address"
       },
@@ -685,6 +775,31 @@
       }
     ],
     "name": "UnassignedRescued",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "wordPos",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "mask",
+        "type": "uint256"
+      }
+    ],
+    "name": "UnorderedNonceInvalidated",
     "type": "event"
   },
   {
@@ -787,7 +902,22 @@
   },
   {
     "inputs": [],
+    "name": "InboundStation__InvalidNonce",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InboundStation__InvalidSignature",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InboundStation__InvalidSrcEid",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InboundStation__NativeTransferFailed",
     "type": "error"
   },
   {

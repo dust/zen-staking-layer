@@ -66,6 +66,19 @@
   },
   {
     "inputs": [],
+    "name": "decimalConversionRate",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "dstEid",
     "outputs": [
       {
@@ -438,6 +451,11 @@
   {
     "inputs": [],
     "name": "ZenOftStationBridge__InsufficientNativeFee",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ZenOftStationBridge__InvalidDecimals",
     "type": "error"
   },
   {

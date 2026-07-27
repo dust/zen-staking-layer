@@ -16,14 +16,18 @@ contract MockNativeOft is ERC20, IOFT {
   uint32 public immutable dstEid;
   uint256 public nativeFeeQuote = 0.01 ether;
   bool public forceRevert;
+  /// @notice When set, `amountReceivedLD = amountLD - feeHaircut` (tests minAmountLD).
+  uint256 public feeHaircut;
 
   uint256 public sendCount;
   address public lastRefundAddress;
   address public lastTo;
   uint256 public lastAmount;
+  uint256 public lastMinAmount;
 
   error MockNativeOft__ForcedRevert();
   error MockNativeOft__BadDst();
+  error MockNativeOft__SlippageExceeded();
 
   constructor(uint32 dstEid_) ERC20("Mock ZEN OFT", "mZEN") {
     dstEid = dstEid_;
@@ -39,6 +43,10 @@ contract MockNativeOft is ERC20, IOFT {
 
   function setForceRevert(bool v) external {
     forceRevert = v;
+  }
+
+  function setFeeHaircut(uint256 haircut) external {
+    feeHaircut = haircut;
   }
 
   function oftVersion() external pure returns (bytes4 interfaceId, uint64 version) {
@@ -59,12 +67,13 @@ contract MockNativeOft is ERC20, IOFT {
 
   function quoteOFT(SendParam calldata _sendParam)
     external
-    pure
+    view
     returns (OFTLimit memory, OFTFeeDetail[] memory, OFTReceipt memory)
   {
     OFTLimit memory limit = OFTLimit(0, type(uint256).max);
     OFTFeeDetail[] memory fees = new OFTFeeDetail[](0);
-    OFTReceipt memory receipt = OFTReceipt(_sendParam.amountLD, _sendParam.amountLD);
+    uint256 received = _sendParam.amountLD - feeHaircut;
+    OFTReceipt memory receipt = OFTReceipt(_sendParam.amountLD, received);
     return (limit, fees, receipt);
   }
 
@@ -80,6 +89,9 @@ contract MockNativeOft is ERC20, IOFT {
     if (forceRevert) revert MockNativeOft__ForcedRevert();
     if (_sendParam.dstEid != dstEid) revert MockNativeOft__BadDst();
 
+    uint256 received = _sendParam.amountLD - feeHaircut;
+    if (received < _sendParam.minAmountLD) revert MockNativeOft__SlippageExceeded();
+
     _burn(msg.sender, _sendParam.amountLD);
 
     // Refund excess native to refundAddress (mirrors LZ excess fee behaviour).
@@ -92,10 +104,11 @@ contract MockNativeOft is ERC20, IOFT {
     lastRefundAddress = _refundAddress;
     lastTo = address(uint160(uint256(_sendParam.to)));
     lastAmount = _sendParam.amountLD;
+    lastMinAmount = _sendParam.minAmountLD;
 
     bytes32 guid = keccak256(abi.encode(sendCount, _sendParam.to, _sendParam.amountLD));
     MessagingReceipt memory receipt = MessagingReceipt(guid, uint64(sendCount), _fee);
-    OFTReceipt memory oftReceipt = OFTReceipt(_sendParam.amountLD, _sendParam.amountLD);
+    OFTReceipt memory oftReceipt = OFTReceipt(_sendParam.amountLD, received);
     return (receipt, oftReceipt);
   }
 }

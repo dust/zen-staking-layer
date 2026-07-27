@@ -108,6 +108,7 @@ export function useCrossChainStake() {
   const [amountWei, setAmountWei] = useState<bigint | undefined>();
   const [phase, setPhase] = useState<CrossStakePhase>("idle");
   const [creditSig, setCreditSig] = useState<Hex | undefined>();
+  const [creditNonce, setCreditNonce] = useState<bigint | undefined>();
   const [creditDeadline, setCreditDeadline] = useState<bigint | undefined>();
   const [bridgeTxHash, setBridgeTxHash] = useState<Hex | undefined>();
   const [stakeTxHash, setStakeTxHash] = useState<Hex | undefined>();
@@ -162,7 +163,7 @@ export function useCrossChainStake() {
       return "sign-stake";
     }
     if (bridgeTxHash && phase !== "failed") return "wait-credit";
-    if (creditSig && creditDeadline) return "bridge";
+    if (creditSig && creditNonce !== undefined && creditDeadline) return "bridge";
     if (amountWei) return "sign-credit";
     return "amount";
   }, [
@@ -171,6 +172,7 @@ export function useCrossChainStake() {
     phase,
     bridgeTxHash,
     creditSig,
+    creditNonce,
     creditDeadline,
     amountWei,
   ]);
@@ -201,13 +203,14 @@ export function useCrossChainStake() {
         // MetaMask requires wallet active chainId == EIP-712 domain.chainId (Horizen).
         await ensureHorizen();
         const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
-        const { signature } = await signCreditFromCompose(
+        const { signature, nonce } = await signCreditFromCompose(
           config,
           HUB_CHAIN_ID,
           inboundStation,
           { assets, owner: account, deadline },
         );
         setCreditSig(signature);
+        setCreditNonce(nonce);
         setCreditDeadline(deadline);
         // Next step is Base approve/send — switch back so bridge doesn't need a second prompt later.
         await ensureBase();
@@ -231,7 +234,9 @@ export function useCrossChainStake() {
     if (!baseZen) missing.push("Base ZEN");
     if (!baseZenOftAdapter) missing.push("ZenTokenOFTAdapter");
     if (!amountWei) missing.push("amount");
-    if (!creditSig || !creditDeadline) missing.push("credit signature");
+    if (!creditSig || creditNonce === undefined || !creditDeadline) {
+      missing.push("credit signature");
+    }
     if (!dstEid) missing.push("NEXT_PUBLIC_HORIZEN_EID");
     if (missing.length > 0) {
       const message = `Cannot bridge — missing: ${missing.join(", ")}`;
@@ -285,6 +290,7 @@ export function useCrossChainStake() {
       const composeMsg = encodeStationComposePayloadV1({
         owner: account!,
         assets: amountWei!,
+        nonce: creditNonce!,
         deadline: creditDeadline!,
         signature: creditSig!,
       });
@@ -352,6 +358,7 @@ export function useCrossChainStake() {
     baseZenOftAdapter,
     config,
     creditDeadline,
+    creditNonce,
     creditSig,
     dstEid,
     ensureBase,
@@ -511,6 +518,7 @@ export function useCrossChainStake() {
     setAmountWei(undefined);
     setPhase("idle");
     setCreditSig(undefined);
+    setCreditNonce(undefined);
     setCreditDeadline(undefined);
     setBridgeTxHash(undefined);
     setStakeTxHash(undefined);

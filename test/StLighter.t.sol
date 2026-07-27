@@ -15,6 +15,9 @@ import {ERC20VotesMock} from "./mocks/MockERC20Votes.sol";
 import {EndpointV2Mock} from "@layerzerolabs/test-devtools-evm-foundry/mocks/EndpointV2Mock.sol";
 import {StLighterProxyDeploy} from "./helpers/StLighterProxyDeploy.sol";
 import {MockERC1271Wallet} from "./mocks/MockERC1271Wallet.sol";
+import {MaliciousStationPayer} from "./mocks/MaliciousStationPayer.sol";
+import {ReentrancyGuardUpgradeable} from
+  "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 /// @notice Integration tests for the stLighter protocol. Mirrors ZenStaker.t.sol: one base
 /// contract with shared setUp + helpers, then per-feature child contracts.
@@ -230,6 +233,23 @@ contract Deposit is StLighterTest {
     assertGt(shares, 0);
     assertEq(ltZen.balanceOf(depositor), shares);
     assertEq(zen.allowance(depositor, address(protocol)), 0);
+  }
+
+  function test_DepositWithPermitSucceedsWhenPermitFailsButAllowanceExists() public {
+    uint256 key = 0xA11CE;
+    address depositor = vm.addr(key);
+    uint256 assets = 1000e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(depositor, assets);
+    vm.prank(depositor);
+    zen.approve(address(protocol), assets);
+
+    // Invalid / already-consumed permit — catch branch must fall through to allowance.
+    vm.prank(depositor);
+    uint256 shares = protocol.depositWithPermit(assets, depositor, deadline, 0, bytes32(0), bytes32(0));
+
+    assertGt(shares, 0);
+    assertEq(ltZen.balanceOf(depositor), shares);
   }
 }
 
@@ -730,6 +750,135 @@ contract Gasless is StLighterTest {
     assertEq(protocol.totalAssets(), assets - fee);
     assertGt(ltZen.balanceOf(user), 0);
     assertEq(zen.allowance(user, address(protocol)), 0);
+  }
+
+  function test_DepositWithSigAndPermitSucceedsWhenPermitFailsButAllowanceExists() public {
+    uint256 assets = 1000e18;
+    uint256 maxFee = 5e18;
+    uint256 fee = 3e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(user, assets);
+    vm.prank(user);
+    zen.approve(address(protocol), assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        user,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+
+    vm.prank(relayer);
+    protocol.depositWithSigAndPermit(
+      assets, user, maxFee, fee, user, relayer, user, deadline, sig, deadline, 0, bytes32(0), bytes32(0)
+    );
+
+    assertEq(zen.balanceOf(relayer), fee);
+    assertGt(ltZen.balanceOf(user), 0);
+  }
+
+  function test_RevertDepositWithSigAndPermitWhenPayerNotUser() public {
+    uint256 assets = 1000e18;
+    uint256 maxFee = 5e18;
+    uint256 fee = 1e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    address otherPayer = makeAddr("otherPayer");
+    zen.mint(user, assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        maxFee,
+        otherPayer,
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+
+    vm.prank(relayer);
+    vm.expectRevert(StLighter.StLighter__PayerMustBeUser.selector);
+    protocol.depositWithSigAndPermit(
+      assets, user, maxFee, fee, otherPayer, relayer, user, deadline, sig, deadline, 0, bytes32(0), bytes32(0)
+    );
+  }
+
+  function test_ReentrancyBlockedViaMaliciousPayer() public {
+    MaliciousStationPayer payer = new MaliciousStationPayer(IERC20(address(zen)), protocol);
+    uint256 assets = 100e18;
+    uint256 deadline = block.timestamp + 1 hours;
+    zen.mint(address(payer), assets);
+
+    bytes32 structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        address(payer),
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+
+    payer.setAttackDeposit(true);
+    vm.prank(relayer);
+    vm.expectRevert(ReentrancyGuardUpgradeable.ReentrancyGuardReentrantCall.selector);
+    protocol.depositWithSig(assets, user, 0, 0, address(payer), relayer, user, deadline, sig);
+
+    payer.setAttackHarvest(true);
+    // Need fresh nonce after failed attempt rolled back.
+    structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        address(payer),
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    sig = _sign(structHash);
+    vm.prank(relayer);
+    vm.expectRevert(ReentrancyGuardUpgradeable.ReentrancyGuardReentrantCall.selector);
+    protocol.depositWithSig(assets, user, 0, 0, address(payer), relayer, user, deadline, sig);
+
+    payer.setAttackRedeem(true);
+    structHash = keccak256(
+      abi.encode(
+        DEPOSIT_TYPEHASH,
+        assets,
+        user,
+        uint256(0),
+        address(payer),
+        relayer,
+        user,
+        protocol.nonces(user),
+        deadline
+      )
+    );
+    sig = _sign(structHash);
+    vm.prank(relayer);
+    vm.expectRevert(ReentrancyGuardUpgradeable.ReentrancyGuardReentrantCall.selector);
+    protocol.depositWithSig(assets, user, 0, 0, address(payer), relayer, user, deadline, sig);
   }
 
   function test_GaslessDepositFromERC1271Wallet() public {

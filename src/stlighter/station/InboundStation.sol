@@ -22,6 +22,8 @@ import {StationComposePayload} from "./libraries/StationComposePayload.sol";
 /// @notice Shared inbound station for cross-chain ZEN (stLighter-specific, non-upgradeable).
 /// @dev Implements `ILayerZeroComposer`: compose only credits. Stake via
 /// `StLighter.depositWithSig(..., payer=this)` → `payForDeposit`.
+/// CreditFromCompose uses an unordered bitmap nonce (Permit2-style) so LZ compose may arrive
+/// out of order. WithdrawToHorizen keeps OZ sequential `Nonces` (separate namespace).
 contract InboundStation is
   Ownable2Step,
   Pausable,
@@ -52,14 +54,22 @@ contract InboundStation is
   /// @notice Trusted destination OFT (`_from` in `lzCompose`) — Horizen native ZenTokenOFT
   /// (Base counterpart is ZenTokenOFTAdapter locking ERC20 ZEN, not a native OFT).
   address public zenOft;
+  /// @notice Allowed OFT compose source endpoint id (e.g. Base).
+  uint32 public allowedSrcEid;
+
+  /// @notice Permit2-style unordered nonces for CreditFromCompose only.
+  mapping(address owner => mapping(uint256 wordPos => uint256 bitmap)) public nonceBitmap;
 
   event ComposeCallerSet(address indexed composeCaller);
   event ZenOftSet(address indexed zenOft);
   event StLighterSet(address indexed stLighter);
+  event AllowedSrcEidSet(uint32 allowedSrcEid);
   event ComposeCredited(
     address indexed owner, uint256 assets, uint256 nonce, bytes32 indexed guid
   );
   event WithdrawToHorizen(address indexed owner, address indexed to, uint256 assets);
+  event UnorderedNonceInvalidated(address indexed owner, uint256 wordPos, uint256 mask);
+  event NativeSwept(address indexed to, uint256 amount);
 
   error InboundStation__ZeroAddress();
   error InboundStation__ZeroAmount();
@@ -69,21 +79,27 @@ contract InboundStation is
   error InboundStation__UnauthorizedOft();
   error InboundStation__UnauthorizedStLighter();
   error InboundStation__AmountMismatch();
+  error InboundStation__InvalidSrcEid();
+  error InboundStation__InvalidNonce();
+  error InboundStation__NativeTransferFailed();
 
   constructor(
     IERC20 zen_,
     address stLighter_,
     address composeCaller_,
     address zenOft_,
+    uint32 allowedSrcEid_,
     address owner_
   ) Ownable(owner_) EIP712("InboundStation", "1") {
     if (stLighter_ == address(0) || composeCaller_ == address(0) || zenOft_ == address(0)) {
       revert InboundStation__ZeroAddress();
     }
+    if (allowedSrcEid_ == 0) revert InboundStation__InvalidSrcEid();
     _setZen(zen_);
     stLighter = stLighter_;
     composeCaller = composeCaller_;
     zenOft = zenOft_;
+    allowedSrcEid = allowedSrcEid_;
   }
 
   // -------------------------------------------------------------------------
@@ -101,27 +117,18 @@ contract InboundStation is
   ) external payable nonReentrant whenNotPaused {
     if (msg.sender != composeCaller) revert InboundStation__UnauthorizedComposer();
     if (_from != zenOft) revert InboundStation__UnauthorizedOft();
+    if (OFTComposeMsgCodec.srcEid(_message) != allowedSrcEid) {
+      revert InboundStation__InvalidSrcEid();
+    }
 
     uint256 actualAmount = OFTComposeMsgCodec.amountLD(_message);
     bytes memory payload = OFTComposeMsgCodec.composeMsg(_message);
-    (address owner, uint256 assets, uint256 deadline, bytes memory signature) =
+    (address owner, uint256 assets, uint256 nonce, uint256 deadline, bytes memory signature) =
       StationComposePayload.decodeV1(payload);
 
     if (assets != actualAmount) revert InboundStation__AmountMismatch();
 
-    _creditFromCompose(owner, assets, deadline, signature, _guid);
-  }
-
-  /// @notice Test / ops helper: same EIP-712 credit without OFT envelope.
-  /// @dev Caller must be `composeCaller`. Prefer `lzCompose` in production.
-  function creditFromTrustedComposer(
-    uint256 assets,
-    address owner,
-    uint256 deadline,
-    bytes calldata signature
-  ) external nonReentrant whenNotPaused {
-    if (msg.sender != composeCaller) revert InboundStation__UnauthorizedComposer();
-    _creditFromCompose(owner, assets, deadline, signature, bytes32(0));
+    _creditFromCompose(owner, assets, nonce, deadline, signature, _guid);
   }
 
   // -------------------------------------------------------------------------
@@ -176,8 +183,15 @@ contract InboundStation is
     return _domainSeparatorV4();
   }
 
+  /// @notice Invalidate the next sequential nonce (WithdrawToHorizen namespace only).
   function invalidateNonce() external {
     _useNonce(msg.sender);
+  }
+
+  /// @notice Invalidate unordered CreditFromCompose nonces in `wordPos` matching `mask` bits.
+  function invalidateUnorderedNonces(uint256 wordPos, uint256 mask) external {
+    nonceBitmap[msg.sender][wordPos] |= mask;
+    emit UnorderedNonceInvalidated(msg.sender, wordPos, mask);
   }
 
   function setComposeCaller(address composeCaller_) external onlyOwner {
@@ -198,6 +212,12 @@ contract InboundStation is
     emit StLighterSet(stLighter_);
   }
 
+  function setAllowedSrcEid(uint32 allowedSrcEid_) external onlyOwner {
+    if (allowedSrcEid_ == 0) revert InboundStation__InvalidSrcEid();
+    allowedSrcEid = allowedSrcEid_;
+    emit AllowedSrcEidSet(allowedSrcEid_);
+  }
+
   function rescueUnassigned(address to, uint256 amount) external onlyOwner {
     _rescueUnassigned(to, amount);
   }
@@ -208,6 +228,15 @@ contract InboundStation is
     if (bal > accounted) {
       _addUnassigned(bal - accounted);
     }
+  }
+
+  /// @notice Recover native ETH (e.g. LZ airdrops). Does not touch ZEN accounting.
+  function sweepNative(address payable to) external onlyOwner nonReentrant {
+    if (to == address(0)) revert InboundStation__ZeroAddress();
+    uint256 bal = address(this).balance;
+    (bool ok,) = to.call{value: bal}("");
+    if (!ok) revert InboundStation__NativeTransferFailed();
+    emit NativeSwept(to, bal);
   }
 
   function pause() external onlyOwner {
@@ -221,6 +250,7 @@ contract InboundStation is
   function _creditFromCompose(
     address owner,
     uint256 assets,
+    uint256 nonce,
     uint256 deadline,
     bytes memory signature,
     bytes32 guid
@@ -229,7 +259,7 @@ contract InboundStation is
     if (owner == address(0)) revert InboundStation__ZeroAddress();
     _revertIfPastDeadline(deadline);
 
-    uint256 nonce = _useNonce(owner);
+    _useUnorderedNonce(owner, nonce);
     _revertIfSignatureInvalid(
       owner,
       _hashTypedDataV4(
@@ -240,6 +270,15 @@ contract InboundStation is
 
     _credit(owner, assets, REASON_COMPOSE);
     emit ComposeCredited(owner, assets, nonce, guid);
+  }
+
+  /// @dev Permit2-style: `wordPos = nonce >> 8`, `bitPos = nonce & 0xff`.
+  function _useUnorderedNonce(address owner, uint256 nonce) internal {
+    uint256 wordPos = uint256(nonce) >> 8;
+    uint256 bitPos = uint256(uint8(nonce));
+    uint256 bit = uint256(1) << bitPos;
+    uint256 flipped = nonceBitmap[owner][wordPos] ^= bit;
+    if (flipped & bit == 0) revert InboundStation__InvalidNonce();
   }
 
   function _revertIfPastDeadline(uint256 deadline) internal view {

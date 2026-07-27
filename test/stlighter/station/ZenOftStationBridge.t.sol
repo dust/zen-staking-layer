@@ -157,4 +157,53 @@ contract ZenOftStationBridgeTest is Test {
     vm.expectRevert(ZenOftStationBridge.ZenOftStationBridge__TokenMismatch.selector);
     new ZenOftStationBridge(address(other), address(station), DST_EID, governance);
   }
+
+  function test_BridgeSetsMinAmountLDDustFloor() public {
+    uint256 assets = 100e18 + 123; // dust remainder vs sharedDecimals=6
+    address dest = makeAddr("baseDest");
+    _credit(assets);
+
+    uint256 deadline = block.timestamp + 1 hours;
+    uint256 nonce = station.nonces(owner);
+    bytes32 structHash = keccak256(
+      abi.encode(BRIDGE_TYPEHASH, assets, dest, uint256(0), relayer, owner, nonce, deadline)
+    );
+    bytes memory sig = _sign(structHash);
+
+    uint256 rate = bridge.decimalConversionRate();
+    uint256 expectedMin = assets - (assets % rate);
+    uint256 fee = bridge.quoteBridgeNativeFee(assets, dest, "");
+    vm.deal(relayer, fee);
+
+    vm.prank(relayer);
+    station.bridgeToBase{value: fee}(assets, dest, 0, 0, relayer, owner, deadline, sig, "");
+
+    assertEq(oft.lastMinAmount(), expectedMin);
+    assertEq(station.pendingTotal(), 0);
+  }
+
+  function test_BridgeRevertsWhenOftFeeHaircutBelowMin() public {
+    uint256 assets = 100e18;
+    address dest = makeAddr("baseDest");
+    _credit(assets);
+    // Haircut larger than dust floor → amountReceived < minAmountLD.
+    oft.setFeeHaircut(1e12); // one shared-decimal unit in LD
+
+    uint256 deadline = block.timestamp + 1 hours;
+    bytes32 structHash = keccak256(
+      abi.encode(
+        BRIDGE_TYPEHASH, assets, dest, uint256(0), relayer, owner, station.nonces(owner), deadline
+      )
+    );
+    bytes memory sig = _sign(structHash);
+    uint256 fee = bridge.quoteBridgeNativeFee(assets, dest, "");
+    vm.deal(relayer, fee);
+
+    vm.prank(relayer);
+    vm.expectRevert(MockNativeOft.MockNativeOft__SlippageExceeded.selector);
+    station.bridgeToBase{value: fee}(assets, dest, 0, 0, relayer, owner, deadline, sig, "");
+
+    assertEq(station.credited(owner), assets);
+    assertEq(station.pendingTotal(), 0);
+  }
 }

@@ -167,7 +167,27 @@ export async function signRedeemWithSig(
   return { signature, nonce };
 }
 
-/** Read InboundStation EIP-712 domain + owner nonce (always Horizen verifyingContract). */
+/** Read InboundStation EIP-712 domain (always Horizen verifyingContract). */
+export async function readInboundStationDomain(
+  config: Config,
+  chainId: number,
+  inboundStation: Address,
+): Promise<{
+  domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+}> {
+  const raw = (await readContract(config, {
+    chainId,
+    address: inboundStation,
+    abi: abis.inboundStation,
+    functionName: "eip712Domain",
+  })) as StLighterDomain;
+  const [, name, version, chainIdOnChain, verifyingContract] = raw;
+  return {
+    domain: { name, version, chainId: Number(chainIdOnChain), verifyingContract },
+  };
+}
+
+/** Sequential nonce for WithdrawToHorizen (not used by CreditFromCompose). */
 export async function readInboundStationSignContext(
   config: Config,
   chainId: number,
@@ -177,13 +197,8 @@ export async function readInboundStationSignContext(
   domain: { name: string; version: string; chainId: number; verifyingContract: Address };
   nonce: bigint;
 }> {
-  const [raw, nonce] = await Promise.all([
-    readContract(config, {
-      chainId,
-      address: inboundStation,
-      abi: abis.inboundStation,
-      functionName: "eip712Domain",
-    }) as Promise<StLighterDomain>,
+  const [{ domain }, nonce] = await Promise.all([
+    readInboundStationDomain(config, chainId, inboundStation),
     readContract(config, {
       chainId,
       address: inboundStation,
@@ -192,20 +207,29 @@ export async function readInboundStationSignContext(
       args: [owner],
     }) as Promise<bigint>,
   ]);
-  const [, name, version, chainIdOnChain, verifyingContract] = raw;
-  return {
-    domain: { name, version, chainId: Number(chainIdOnChain), verifyingContract },
-    nonce,
-  };
+  return { domain, nonce };
+}
+
+/** Generate a Permit2-style unordered nonce (random word + free low 8 bits preferred). */
+export function generateUnorderedNonce(): bigint {
+  const bytes = new Uint8Array(31);
+  crypto.getRandomValues(bytes);
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  // Keep bitPos = nonce & 0xff in a mid range; full 256-bit is fine.
+  return (n << 8n) | BigInt(Date.now() & 0xff);
 }
 
 export interface CreditFromComposeParams {
   assets: bigint;
   owner: Address;
   deadline: bigint;
+  /** Optional unordered bitmap nonce; generated if omitted. */
+  nonce?: bigint;
 }
 
 /** Sign InboundStation CreditFromCompose (Horizen EIP-712 domain.chainId).
+ * Uses unordered bitmap nonce — independent of WithdrawToHorizen / StLighter nonces.
  * Wallet must be on Horizen when MetaMask signs — callers should `switchChain` first. */
 export async function signCreditFromCompose(
   config: Config,
@@ -213,17 +237,18 @@ export async function signCreditFromCompose(
   inboundStation: Address,
   params: CreditFromComposeParams,
 ): Promise<{ signature: Hex; nonce: bigint }> {
-  const { domain, nonce } = await readInboundStationSignContext(
-    config,
-    chainId,
-    inboundStation,
-    params.owner,
-  );
+  const { domain } = await readInboundStationDomain(config, chainId, inboundStation);
+  const nonce = params.nonce ?? generateUnorderedNonce();
   const signature = await signTypedData(config, {
     domain,
     types: CREDIT_FROM_COMPOSE_TYPES,
     primaryType: "CreditFromCompose",
-    message: { ...params, nonce },
+    message: {
+      assets: params.assets,
+      owner: params.owner,
+      nonce,
+      deadline: params.deadline,
+    },
   });
   return { signature, nonce };
 }

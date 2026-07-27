@@ -12,6 +12,7 @@ import {StLighterGovernanceLib} from "./StLighterGovernanceLib.sol";
 ///   ZEN_TOKEN_ADDRESS       — Horizen ZenTokenOFT (also Station `zen` + `zenOft`)
 ///   STLIGHTER_PROXY_ADDRESS — StLighter ERC1967 proxy
 ///   LZ_ENDPOINT_HORIZEN     — composeCaller (Endpoint / MessagingComposer)
+///   BASE_EID                — allowed compose srcEid (Base LZ endpoint id)
 ///   PRIVATE_KEY             — deployer
 ///
 /// Owner: `TIMELOCK_ADDRESS` or `GOVERNANCE_ADDRESS` (testnet: deployer EOA).
@@ -20,12 +21,13 @@ contract DeployInboundStation is Script {
     address zenOft = vm.envAddress("ZEN_TOKEN_ADDRESS");
     address stLighter = vm.envAddress("STLIGHTER_PROXY_ADDRESS");
     address composeCaller = vm.envAddress("LZ_ENDPOINT_HORIZEN");
+    uint32 allowedSrcEid = uint32(vm.envUint("BASE_EID"));
     address owner_ = StLighterGovernanceLib.timelockAddress();
     uint256 deployerKey = vm.envUint("PRIVATE_KEY");
 
     vm.startBroadcast(deployerKey);
     station = new InboundStation(
-      IERC20(zenOft), stLighter, composeCaller, zenOft, owner_
+      IERC20(zenOft), stLighter, composeCaller, zenOft, allowedSrcEid, owner_
     );
     vm.stopBroadcast();
 
@@ -33,6 +35,7 @@ contract DeployInboundStation is Script {
     console2.log("zen / zenOft:   ", zenOft);
     console2.log("stLighter:      ", stLighter);
     console2.log("composeCaller:  ", composeCaller);
+    console2.log("allowedSrcEid:  ", allowedSrcEid);
     console2.log("owner:          ", owner_);
   }
 }
