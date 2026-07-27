@@ -1,8 +1,9 @@
 # stLighter 合约安全评审报告
 
-> **状态**:初评(内部)。评审对象 `src/stlighter/` 全量。非替代第三方审计——`AUDIT_DELTA.md` 已将本子系统标为 net-new / in-scope,仍需独立审计。
-> **评审日期**:2026-07-26
+> **状态**:初评 + 修复复审(内部)。评审对象 `src/stlighter/` 全量。非替代第三方审计——`AUDIT_DELTA.md` 已将本子系统标为 net-new / in-scope,仍需独立审计。
+> **评审日期**:2026-07-26(初评);2026-07-27(复审,见 §9)。
 > **方法**:人工逐行审计核心资金/会计路径 + 子代理并行(station 子系统深审、测试套件实测)。
+> **复审结论**:§7 五项建议已全部落实并验证通过(commit `c4bf352`),测试 121 项全过。详见 §9。
 
 ---
 
@@ -218,3 +219,34 @@ function sweepNative(address payable to) external onlyOwner nonReentrant {
 | 4 | LOW-1/2 跨链参数硬化 | 🟡 | 中 |
 | 5 | 测试盲区补齐 | — | 中 |
 | 6 | 独立审计 | — | 上主网前必做 |
+
+---
+
+## 9. 修复复审验收(2026-07-27)
+
+**复审对象**:commit `c4bf352 "security review & fix"`(改动 4 文件:`EgressStation.sol`、`InboundStation.sol`、`ZenOftStationBridge.sol`、`libraries/StationComposePayload.sol`)。
+**方法**:逐条比对 §7 建议 + 编译 + 全量测试实测 + 重入测试单独确认。
+
+### 9.1 逐条验收
+
+| 建议 | 状态 | 验证证据 |
+|------|------|----------|
+| **MEDIUM-1** 原生币 sweep | ✅ 通过 | 两个 station 均加 `sweepNative(address payable to) onlyOwner nonReentrant`:零地址检查 + `call{value:bal}` + 失败 revert(`__NativeTransferFailed`)+ `NativeSwept` 事件。不触碰 ZEN 会计。测试 `test_SweepNative` / `test_SweepNativeRevertsNonOwner` 通过。 |
+| **MEDIUM-2** compose 非顺序 nonce | ✅ 通过 | payload V1 增 `nonce` 字段;引入 Permit2 式 `nonceBitmap` + `_useUnorderedNonce`(`wordPos=nonce>>8`、`bitPos=nonce&0xff`、异或翻位、重放 revert `InvalidNonce`)。WithdrawToHorizen 保留顺序 `Nonces`,命名空间分离。新增 `invalidateUnorderedNonces(wordPos,mask)`。测试 `test_WithdrawDoesNotInvalidateComposeNonce` 证明两套 nonce 互不干扰。 |
+| **INFO-2** 删 `creditFromTrustedComposer` | ✅ 通过 | 死代码函数已整体删除,`lzCompose` 成为唯一 compose 入口。 |
+| **LOW-1** srcEid 白名单 | ✅ 通过 | `lzCompose` 加 `OFTComposeMsgCodec.srcEid(_message) != allowedSrcEid` 校验;构造函数新增 `allowedSrcEid_` 参数 + `setAllowedSrcEid`,零值拒绝(`InvalidSrcEid`)。 |
+| **LOW-2** minAmountLD 下限 | ✅ 通过 | 构造期由 `token.decimals - oft.sharedDecimals` 算 `decimalConversionRate`;`minAmountLD = amount - (amount % rate)` 只扣 sub-sharedDecimals 灰尘。抽出 `_buildSendParam` 消除 `bridgeZen`/`quote` 重复;构造期 `localDecimals < shared` 防御性 revert。 |
+| **建议5** 重入测试 | ✅ 通过 | 新增 `MaliciousStationPayer` mock + `test_ReentrancyBlockedViaMaliciousPayer`,实测触发 `ReentrancyGuardReentrantCall` 断言,真正验证 `nonReentrant`(填补原盲区)。 |
+
+### 9.2 测试实测
+
+- **121 项全过 / 0 失败**(stLighter 86 + station 35);invariant 256 runs × 12800 calls,0 revert。
+- 破坏性构造签名变更(`InboundStation` 加 `allowedSrcEid_`)已同步至全部脚本/测试调用方(否则编译失败)。
+
+### 9.3 复审中发现并修复的遗留瑕疵(非安全)
+
+**`test/mocks/MaliciousStationPayer.sol` import 路径多一层 `../`**:`../../../src/...` 应为 `../../src/...`。原状态下 `forge` 靠 remappings 兜底解析成功(测试通过、`forge build` 退出码 0),但每次打印 `file ... not found` 噪音行,且依赖 fallback 不健壮。**已于复审中修正为 `../../`**,`forge build` 输出 `Compiler run successful!` 无 error,重入测试仍通过。
+
+### 9.4 复审结论
+
+§7 全部安全建议(MEDIUM-1/2、LOW-1/2、INFO-2、重入测试)**正确闭环并经测试验证**。剩余事项仅为流程性:permit-catch / PayerMustBeUser 两项负向测试(§5 盲区 2、3)可择机补齐;上主网前仍需 §7 建议6 的独立第三方审计。**当前 stLighter 子系统安全修复验收合格。**

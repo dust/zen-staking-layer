@@ -4,8 +4,8 @@ pragma solidity 0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {IStationDepositPayer} from "../../../src/stlighter/station/IStationDepositPayer.sol";
-import {StLighter} from "../../../src/stlighter/StLighter.sol";
+import {IStationDepositPayer} from "../../src/stlighter/station/IStationDepositPayer.sol";
+import {StLighter} from "../../src/stlighter/StLighter.sol";
 
 /// @notice Pays deposit from pre-funded balance, optionally reentering StLighter.
 contract MaliciousStationPayer is IStationDepositPayer {
