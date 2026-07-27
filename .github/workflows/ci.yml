@@ -114,7 +114,7 @@ jobs:
         # Only on same-repo PRs: the action fails outside pull requests, and fork
         # PRs get a read-only GITHUB_TOKEN that cannot post comments.
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: romeovs/lcov-reporter-action@dda1c9b1fa1622b225e9acd87a248751dbcc6ada # v0.3.1
+        uses: romeovs/lcov-reporter-action@87a815f34ec27a5826abba44ce09bbc688da58fd # v0.4.0
         with:
           delete-old-comments: true
           lcov-file: ./lcov.info
