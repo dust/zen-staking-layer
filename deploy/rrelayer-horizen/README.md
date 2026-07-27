@@ -1,11 +1,16 @@
-# DEPRECATED
+# DEPRECATED (production)
 
-This directory is **no longer the supported deploy path**.
+Prefer the unified stack in the parent folder: [`../README.md`](../README.md).
 
-The self-hosted stack (frontend + rrelayer + postgres + nginx) now lives in the parent folder:
+## Local docker (this folder)
 
-- **[`../README.md`](../README.md)** — architecture + Make targets  
-- **[`../docker-compose.yml`](../docker-compose.yml)** — unified compose  
-- **[`../rrelayer/`](../rrelayer/)** — `rrelayer.yaml` + gas JSON  
+HTTP-only: postgres + dynamic gas-stub + rrelayer (no TLS / nginx).
 
-Previous model (Vercel BFF → public `https://rrelayer.lighter.im` on a separate VPS) is abandoned. Do not start the compose files in this folder for new deployments.
+```bash
+cd deploy/rrelayer-horizen
+docker compose up -d --build
+curl -sS http://127.0.0.1:8787/2651420   # gas ~0.001 Gwei
+# rrelayer API: http://127.0.0.1:8000
+```
+
+`rrelayer.yaml` CUSTOM gas → `http://gas-stub:8787`.

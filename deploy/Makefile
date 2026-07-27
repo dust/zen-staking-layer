@@ -20,8 +20,8 @@ export COMPOSE_FILE
 help:
 	@echo "ltZEN deploy targets:"
 	@echo "  make env             Create .env from .env.example if missing"
-	@echo "  make build           Build frontend image (compose build)"
-	@echo "  make pull            Pull postgres/gas-stub/rrelayer images"
+	@echo "  make build           Build frontend + gas-provider images"
+	@echo "  make pull            Pull postgres/rrelayer images"
 	@echo "  make up              Start stack (detached)"
 	@echo "  make release         build + up --force-recreate (ship a release)"
 	@echo "  make force-recreate  Recreate all services (BUILD=1 to rebuild)"
@@ -35,10 +35,10 @@ env:
 	@test -f .env && echo ".env ready"
 
 build:
-	$(COMPOSE) build frontend
+	$(COMPOSE) build frontend gas-stub
 
 pull:
-	$(COMPOSE) pull postgresql gas-stub rrelayer
+	$(COMPOSE) pull postgresql rrelayer
 
 up: env
 	$(COMPOSE) up -d
@@ -49,7 +49,7 @@ down:
 restart:
 	$(COMPOSE) restart
 
-# Typical production ship: rebuild frontend, recreate everything onto new images/config.
+# Typical production ship: rebuild frontend + gas-provider, recreate everything.
 release: env build
 	$(COMPOSE) up -d --force-recreate --remove-orphans
 	@$(COMPOSE) ps

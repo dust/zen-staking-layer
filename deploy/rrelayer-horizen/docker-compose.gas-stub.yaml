@@ -1,23 +1,31 @@
 # Local/dev only — Horizen CUSTOM gas sidecar when rrelayer runs on the host.
 #
-# Production VPS: use docker-compose.yml (nginx edge serves gas on :8787 internally).
+# Full compose: docker-compose.yml already includes gas-stub.
 #
-# Usage:
-#   docker compose -f docker-compose.gas-stub.yaml up -d
+# Usage (host rrelayer):
+#   docker compose -f docker-compose.gas-stub.yaml up -d --build
 #   rrelayer.yaml gas endpoint: http://localhost:8787
 
 services:
   gas-stub:
-    image: nginx:1.27-alpine
+    build:
+      context: ../gas-provider
+    image: ltzen-gas-provider:${IMAGE_TAG:-latest}
     container_name: rrelayer-horizen-gas-stub
     restart: unless-stopped
     ports:
       - "127.0.0.1:8787:8787"
-    volumes:
-      - ./horizen-gas.json:/usr/share/nginx/html/horizen-gas.json:ro
-      - ./nginx.gas-only.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      LISTEN_ADDR: ":8787"
+      CACHE_TTL_SECONDS: ${GAS_CACHE_TTL_SECONDS:-10}
+      FLOOR_PRIORITY_WEI: ${GAS_FLOOR_PRIORITY_WEI:-1000000}
+      CEIL_PRIORITY_WEI: ${GAS_CEIL_PRIORITY_WEI:-1000000000}
+      CEIL_MAX_FEE_WEI: ${GAS_CEIL_MAX_FEE_WEI:-5000000000}
+      RPC_2651420: ${GAS_RPC_2651420:-https://horizen-testnet.rpc.caldera.xyz/http}
+      RPC_26514: ${GAS_RPC_26514:-https://horizen.calderachain.xyz/http}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/health"]
+      test: ["CMD", "/gas-provider", "healthcheck"]
       interval: 10s
       timeout: 3s
       retries: 3
+      start_period: 5s

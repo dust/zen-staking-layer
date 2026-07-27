@@ -1,25 +1,25 @@
 {
   "slow": {
-    "suggestedMaxPriorityFeePerGas": "1",
-    "suggestedMaxFeePerGas": "10",
+    "suggestedMaxPriorityFeePerGas": "0.001",
+    "suggestedMaxFeePerGas": "0.001000277",
     "minWaitTimeEstimate": 2,
     "maxWaitTimeEstimate": 30
   },
   "medium": {
-    "suggestedMaxPriorityFeePerGas": "2",
-    "suggestedMaxFeePerGas": "20",
+    "suggestedMaxPriorityFeePerGas": "0.001",
+    "suggestedMaxFeePerGas": "0.001000302",
     "minWaitTimeEstimate": 2,
     "maxWaitTimeEstimate": 30
   },
   "fast": {
-    "suggestedMaxPriorityFeePerGas": "5",
-    "suggestedMaxFeePerGas": "50",
+    "suggestedMaxPriorityFeePerGas": "0.002",
+    "suggestedMaxFeePerGas": "0.002000378",
     "minWaitTimeEstimate": 2,
     "maxWaitTimeEstimate": 30
   },
   "superFast": {
-    "suggestedMaxPriorityFeePerGas": "10",
-    "suggestedMaxFeePerGas": "100",
+    "suggestedMaxPriorityFeePerGas": "0.004",
+    "suggestedMaxFeePerGas": "0.004000504",
     "minWaitTimeEstimate": 2,
     "maxWaitTimeEstimate": 30
   }

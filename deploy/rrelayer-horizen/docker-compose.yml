@@ -1,10 +1,8 @@
-# Production topology (VPS):
-#   Internet → :80/:443 (nginx) → rrelayer:8000 (compose network)
-#   Vercel BFF → https://rrelayer.lighter.im  (API key auth)
-#   rrelayer → http://nginx:8787/{chainId}  (CUSTOM gas; internal)
-#   rrelayer → postgresql:5432              (internal)
-#
-# Do NOT publish 8000 / 3030 / 5441 / 8787 to the public internet.
+# Local docker stack for rrelayer + dynamic CUSTOM gas.
+#   Host → http://127.0.0.1:8000  (rrelayer)
+#   rrelayer → http://gas-stub:8787/{chainId}
+#   rrelayer → postgresql:5432
+#   Host → http://127.0.0.1:8787/{chainId}  (gas smoke test)
 
 volumes:
   postgres_data:
@@ -15,10 +13,9 @@ services:
     image: postgres:16
     container_name: rrelayer-db
     shm_size: 1g
-    restart: always
+    restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # No host ports — only reachable on the compose network.
     env_file:
       - ./.env
     healthcheck:
@@ -27,51 +24,48 @@ services:
       timeout: 5s
       retries: 5
 
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: rrelayer-edge
+  gas-stub:
+    build:
+      context: ../gas-provider
+    image: ltzen-gas-provider:${IMAGE_TAG:-latest}
+    container_name: rrelayer-horizen-gas-stub
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./horizen-gas.json:/usr/share/nginx/html/horizen-gas.json:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # Host path to TLS material (see README — symlink from Let's Encrypt).
-      - ./certs/fullchain.pem:/etc/nginx/certs/fullchain.pem:ro
-      - ./certs/privkey.pem:/etc/nginx/certs/privkey.pem:ro
-      - ./certbot-www:/var/www/certbot:ro
+      - "127.0.0.1:8787:8787"
+    environment:
+      LISTEN_ADDR: ":8787"
+      CACHE_TTL_SECONDS: ${GAS_CACHE_TTL_SECONDS:-10}
+      FLOOR_PRIORITY_WEI: ${GAS_FLOOR_PRIORITY_WEI:-1000000}
+      CEIL_PRIORITY_WEI: ${GAS_CEIL_PRIORITY_WEI:-1000000000}
+      CEIL_MAX_FEE_WEI: ${GAS_CEIL_MAX_FEE_WEI:-5000000000}
+      RPC_2651420: ${GAS_RPC_2651420:-https://horizen-testnet.rpc.caldera.xyz/http}
+      RPC_26514: ${GAS_RPC_26514:-https://horizen.calderachain.xyz/http}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/health"]
-      interval: 37s
+      test: ["CMD", "/gas-provider", "healthcheck"]
+      interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 5s
 
   rrelayer:
     image: ghcr.io/joshstevens19/rrelayer
     container_name: rrelayer-service
-    restart: always
+    restart: unless-stopped
     volumes:
-      # Uncomment only if `rrelayer start` fails with os error 2 and needs the host Docker CLI.
-      # Mounting docker.sock grants near-root access to the host — avoid on public VPS when possible.
-      # - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECT_PATH:-.}:/app/project
     command: start
-    # No host ports — BFF reaches the API via nginx :443 only.
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     env_file:
       - ./.env
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}
-      # Bind all interfaces *inside* the container so nginx on the compose network can connect.
-      # This does not publish the port to the public internet (no `ports:` mapping).
-      - HOST=0.0.0.0
-      - BIND=0.0.0.0
-      - RRELAYER_HOST=0.0.0.0
-      - RRELAYER_PORT=8000
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}
+      HOST: "0.0.0.0"
+      BIND: "0.0.0.0"
+      RRELAYER_HOST: "0.0.0.0"
+      RRELAYER_PORT: "8000"
     depends_on:
       postgresql:
         condition: service_healthy
-      nginx:
+      gas-stub:
         condition: service_healthy

@@ -10,7 +10,7 @@ Browser
       → http://127.0.0.1:6000      (or LAN host:FRONTEND_PORT → ltzen-frontend)
           → http://rrelayer:8000   (compose network only — not public)
               → postgresql:5432
-              → http://gas-stub:8787  (Horizen gas JSON)
+              → http://gas-stub:8787  (dynamic Horizen EIP-1559 gas)
 ```
 
 This compose does **not** listen on `:80` / `:443`.
@@ -21,12 +21,12 @@ Legacy notes under [`rrelayer-horizen/`](./rrelayer-horizen/) are deprecated.
 
 | Path | Role |
 |------|------|
-| `docker-compose.yml` | postgresql, gas-stub, rrelayer, frontend |
+| `docker-compose.yml` | postgresql, gas-stub (gas-provider), rrelayer, frontend |
 | `Makefile` | `build` / `up` / `release` / `force-recreate` / … |
-| `.env.example` | Secrets + `NEXT_PUBLIC_*` build args |
-| `nginx/gas.conf` | Internal CUSTOM gas `:8787` only |
+| `.env.example` | Secrets + `NEXT_PUBLIC_*` build args + gas RPC knobs |
+| `gas-provider/` | Go CUSTOM gas service (RPC → EIP-1559 tiers) |
 | `nginx/staking.lighter.im.example.conf` | Snippet for the *external* edge nginx |
-| `rrelayer/` | `rrelayer.yaml` + `horizen-gas.json` |
+| `rrelayer/` | `rrelayer.yaml` (+ cold-start `horizen-gas.json` mirror) |
 
 ## Quick start
 
@@ -63,6 +63,26 @@ make release                 # normal deploy after config/code change
 make force-recreate          # recreate only (config/env change, same image)
 make force-recreate BUILD=1  # rebuild + recreate
 make logs-rrelayer
+```
+
+## CUSTOM gas provider
+
+`gas-stub` is a small Go service ([`gas-provider/`](./gas-provider/)) that rrelayer calls as `GET http://gas-stub:8787/{chainId}`.
+
+It reads Horizen RPC (`eth_getBlockByNumber` + `eth_maxPriorityFeePerGas`), applies floor/ceiling, and returns Infura-style `slow|medium|fast|superFast` fees in **Gwei**. Results are cached (~10s); on RPC failure it serves last-good, then embedded `fallback.json`.
+
+Supported chain IDs (env `RPC_*` / compose `GAS_RPC_*`):
+
+| chainId | Network |
+|---------|---------|
+| `2651420` | Horizen testnet |
+| `26514` | Horizen mainnet |
+
+Smoke from the compose network:
+
+```bash
+docker compose exec rrelayer wget -qO- http://gas-stub:8787/2651420
+# medium.suggestedMaxPriorityFeePerGas should be ~"0.001"
 ```
 
 ## API key (rrelayer)

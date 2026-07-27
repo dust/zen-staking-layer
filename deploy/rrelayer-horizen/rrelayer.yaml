@@ -16,28 +16,13 @@ networks:
     super_fast: 2
   max_gas_price_multiplier: 4
   gas_provider: CUSTOM
-  # Scoped API keys for this network's relayer EOAs (not admin basic auth).
-  # `relayer` = wallet address returned when you created the relayer (0x...).
-  # Generate a long random secret, put it in .env, reference it here, restart rrelayer.
-  # Same value goes to Vercel as RRELAYER_API_KEY (with RRELAYER_RELAYER_ID = that relayer's uuid).
-  #api_keys:
-  #  - relayer: "${RRELAYER_EOA_ADDRESS}"
-  #    keys:
-  #      - "${RRELAYER_API_KEY}"
-  # ... also configure permissions / allowlist for StLighter proxy (+ stations) ...
 gas_providers:
   custom:
-    # Compose network: nginx serves gas on :8787 (not published to host).
-    endpoint: "http://nginx:8787"
-    # Host-only rrelayer start (no compose network):
-    # endpoint: "http://localhost:8787"
+    endpoint: "http://gas-stub:8787"
     supported_chains: [2651420]
 
 api_config:
   port: 8000
-  # Listen inside the container; public access is only via nginx :443.
   host: "0.0.0.0"
-  # Admin basic auth — use for CLI / creating API keys on the VPS.
-  # Vercel BFF should use a scoped API key (RRELAYER_API_KEY), not these credentials.
   authentication_username: ${RRELAYER_AUTH_USERNAME}
   authentication_password: ${RRELAYER_AUTH_PASSWORD}

@@ -1,8 +1,8 @@
 # Merge into your rrelayer project rrelayer.yaml (Horizen network block + gas_providers).
 #
 # Prerequisites:
-#   - Production compose: nginx edge (see docker-compose.yml) serves gas on :8787 internally
-#   - Local/dev: docker-compose.gas-stub.yaml + endpoint http://localhost:8787
+#   - Full compose: gas-stub (../gas-provider) serves GET /{chainId} on :8787
+#   - Host rrelayer: docker-compose.gas-stub.yaml + endpoint http://localhost:8787
 
 networks:
   - name: horizen_testnet
@@ -29,8 +29,8 @@ networks:
 
 gas_providers:
   custom:
-    # Production compose (nginx edge on same network):
-    endpoint: "http://nginx:8787"
+    # Full compose (gas-stub on same network):
+    endpoint: "http://gas-stub:8787"
     # Host-only rrelayer start (docker-compose.gas-stub.yaml):
     # endpoint: "http://localhost:8787"
     supported_chains: [2651420]
