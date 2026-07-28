@@ -210,6 +210,7 @@ individual uncovered-line numbers. Raise the threshold once `forge coverage` sup
 | Item | Notes |
 |------|-------|
 | `src/stlighter/station/*` | Inbound/egress stations + `ZenOftStationBridge` (non-upgradeable). Stake via `depositWithSig(payer=Station)`; egress via OFT `send` with `refundAddress=Egress`. |
+| `ZenOftStationBridge.quoteBridgeNativeFee` | **View-only fix**: truncate OFT dust before `quoteSend`, matching `bridgeZen` send path (avoids `SlippageExceeded` on dusty amounts). Redeploy Bridge to pick up on-chain; BFF also truncates client-side. |
 | `IStationDepositPayer` | Callback interface; Station implements `payForDeposit`. |
 | `StLighter.depositWithSig` / `depositWithSigAndPermit` / `redeemWithSig` | **Breaking typehash**: binds `relayer` (fee recipient). `feeZen` remains unsigned (`≤ maxFeeZen`). Fee paid to signed `relayer`, not `msg.sender`. Deposit also binds `payer`. |
 | `EgressStation.redeemAndCredit` | Atomic `StLighter.redeemWithSig(receiver=this)` + internal credit. Public `creditFromRedeem` removed. |

@@ -16,6 +16,7 @@ import { copy } from "@/lib/copy";
 import { formatZen, formatZenAmount } from "@/lib/format";
 import { Card } from "@/components/common/Card";
 import { ChainGuide } from "@/components/common/ChainGuide";
+import { GaslessFeePanel } from "@/components/common/GaslessFeePanel";
 
 function parseAmount(input: string): bigint | undefined {
   const trimmed = input.trim();
@@ -251,12 +252,27 @@ export function RedeemToBaseWizard() {
       ) : null}
 
       {x.step === "redeem" ? (
-        <p className="mt-4 text-sm text-zinc-400">{copy.redeemToBase.signingRedeem}</p>
+        <div className="mt-4 space-y-2">
+          <p className="text-sm text-zinc-400">{copy.redeemToBase.signingRedeem}</p>
+          <GaslessFeePanel
+            quote={x.redeemFeeQuote.quote}
+            error={x.redeemFeeQuote.error}
+            loading={x.redeemFeeQuote.loading}
+            grossAssets={x.previewAssets}
+          />
+        </div>
       ) : null}
 
       {x.step === "bridge" ? (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-zinc-400">{copy.redeemToBase.recoverableNote}</p>
+          <GaslessFeePanel
+            quote={x.bridgeFeeQuote.quote}
+            error={x.bridgeFeeQuote.error}
+            loading={x.bridgeFeeQuote.loading}
+            grossAssets={x.credited > 0n ? x.credited : x.netAssets}
+            netLabel="Bridged (after fee, approx.)"
+          />
           <button
             type="button"
             disabled={x.busy}

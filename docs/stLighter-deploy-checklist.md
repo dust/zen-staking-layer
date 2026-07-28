@@ -470,7 +470,7 @@ cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
 ### G3 — Relayer / funding notes
 
 - Relayer pays **Horizen native** for `bridgeToBase{value}` (LZ fee); quote via `ZenOftStationBridge.quoteBridgeNativeFee(amount, dest, extraOptions)`.
-- Optional `feeZen` on `bridgeToBase` pays the relayer in ZEN from credited assets (`feeZen < assets`, cap `MAX_GAS_FEE_ZEN = 10e18`).
+- **`feeZen` on `bridgeToBase` reimburses L3 gas + LZ native in ZEN** (cost model; see [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)); still `feeZen < assets`, cap `MAX_GAS_FEE_ZEN = 10e18`.
 - Excess LZ native fee refunds to **EgressStation** (`receive()`), never the relayer EOA ([ADR §2](./stLighter-station-compose-adr.md)).
 - No pre-fund of Egress with ZEN required — float comes from `redeemAndCredit` → vault redeem.
 

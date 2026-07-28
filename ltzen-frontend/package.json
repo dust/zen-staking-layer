@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "sync-abi": "node scripts/sync-abi.js",
-    "postinstall": "node scripts/patch-rrelayer-header.js"
+    "calibrate-fee": "npx tsx scripts/calibrate-fee.ts",
+    "postinstall": "node scripts/patch-rrelayer-header.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.11",
@@ -28,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

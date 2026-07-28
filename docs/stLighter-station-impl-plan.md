@@ -296,7 +296,7 @@ interface IStationBridge {
 ```
 
 - **禁止** relayer 直接调 `IStationBridge`（无权限或 `msg.sender` 校验失败）。
-- 原生 gas（LZ fee）由 relayer 在调 `bridgeToBase` 时 `msg.value` 转发；费用模型在 ADR / `maxFeeZen` 外另计原生币（实现计划：**L3 原生费由 relayer 垫付，不从 ZEN credited 扣**，除非 ADR 另定）。
+- 原生 gas（LZ fee）由 relayer 在调 `bridgeToBase` 时 `msg.value` 转发；**ZEN 报销**经同笔 `feeZen`（成本模型含 `lzNativeWei`），见 [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)。超额 `msg.value` 仍按 ADR 退至 EgressStation。
 
 ---
 
@@ -399,7 +399,7 @@ FOUNDRY_PROFILE=station forge test --match-path test/stlighter/station/InboundSt
 | Compose payload | v1：含 owner/assets/deadline/signature；S5 ADR 可扩展 |
 | UUPS | **否**（Station 可重新部署；前端切地址） |
 | 退款映射 | `pending[bridgeId].owner`；Mock 回调；真桥 ADR |
-| 原生桥费 | relayer `msg.value` 垫付，不扣 ZEN credit（除非 ADR 改） |
+| 原生桥费 | relayer `msg.value` 垫付；LZ 成本经 `feeZen` 以 ZEN 报销（[`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)） |
 | `ltZenReceiver` | 原样传入 `depositWithSig.receiver`，合约不强制 `== owner` |
 | StLighter 地址 | constructor 写入 + `onlyOwner` setter |
 

@@ -280,5 +280,5 @@ Compose payload / LZ 接线 → [`stLighter-station-compose-adr.md`](./stLighter
 1. Compose payload 精确 ABI / 与 OFT 收 token 顺序。  
 2. `unassigned` 与 `rescue` 权限、超时参数。  
 3. Egress 退款如何映射回 `owner`（桥回调携带 id / 本地 pending 表）。  
-4. `maxFeeZen` 在 Station stake / bridge 与 StLighter redeem fee 的叠加展示。  
+4. `maxFeeZen` 在 Station stake / bridge 与 StLighter redeem fee 的叠加展示（**权威定价**见 [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)：bridge 腿含 LZ native 折合 ZEN；UI 两腿分别展示）。  
 5. Inbound / Egress：**非 UUPS**（可重新部署；前端切地址）；治理谁有权改 LZ peer / StLighter 地址。  

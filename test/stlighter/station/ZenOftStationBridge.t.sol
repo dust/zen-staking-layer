@@ -158,6 +158,14 @@ contract ZenOftStationBridgeTest is Test {
     new ZenOftStationBridge(address(other), address(station), DST_EID, governance);
   }
 
+  function test_QuoteBridgeNativeFeeTruncatesDustLikeSend() public {
+    uint256 assets = 100e18 + 123; // dusty vs sharedDecimals=6
+    address dest = makeAddr("baseDest");
+    // Must not revert SlippageExceeded — quote mirrors bridgeZen truncation.
+    uint256 fee = bridge.quoteBridgeNativeFee(assets, dest, "");
+    assertEq(fee, oft.nativeFeeQuote());
+  }
+
   function test_BridgeSetsMinAmountLDDustFloor() public {
     uint256 assets = 100e18 + 123; // dust remainder vs sharedDecimals=6
     address dest = makeAddr("baseDest");

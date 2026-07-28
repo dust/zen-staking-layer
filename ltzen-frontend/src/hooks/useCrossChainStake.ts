@@ -33,6 +33,7 @@ import {
 } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { classifyTxError, logTxError } from "@/lib/errors";
+import { FeeQuoteError, fetchFeeQuote, isQuoteExpired } from "@/lib/feeQuote";
 import {
   signCreditFromCompose,
   signDepositWithSig,
@@ -47,9 +48,9 @@ import { truncateOftAmountLD } from "@/lib/oftDust";
 import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
+import { useFeeQuote } from "./useFeeQuote";
 
 const SIG_TTL_SEC = 30 * 60;
-const MAX_FEE_BPS = 100n;
 const TOAST_ID = "cross-chain-stake";
 
 function asMessagingFee(fee: unknown): { nativeFee: bigint; lzTokenFee: bigint } {
@@ -155,6 +156,14 @@ export function useCrossChainStake() {
     },
   });
   const credited = (creditedQuery.data as bigint | undefined) ?? 0n;
+
+  const stakeAssets = credited > 0n ? credited : amountWei;
+  const stakeFeeQuote = useFeeQuote({
+    kind: "depositWithSig",
+    amount: stakeAssets && stakeAssets > 0n ? stakeAssets.toString() : undefined,
+    verifyingContract: stLighter,
+    enabled: Boolean(stakeAssets && stakeAssets > 0n && credited > 0n),
+  });
 
   const step: CrossStakeStep = useMemo(() => {
     if (!isConfigured) return "configure";
@@ -380,8 +389,16 @@ export function useCrossChainStake() {
     push({ id: TOAST_ID, tone: "pending", message: copy.crossStake.signingStake });
     try {
       await ensureHorizen();
+      const quote = await fetchFeeQuote({
+        kind: "depositWithSig",
+        amount: assets.toString(),
+        verifyingContract: stLighter,
+      });
+      if (isQuoteExpired(quote)) {
+        throw new FeeQuoteError("fee_quote_stale", copy.redeem.gaslessFeeStale);
+      }
+      const maxFeeZen = BigInt(quote.maxFeeZen);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
-      const maxFeeZen = (assets * MAX_FEE_BPS) / 10_000n;
       const feeRelayer = resolveGaslessFeeRelayer(account);
       const { signature } = await signDepositWithSig(config, HUB_CHAIN_ID, stLighter, {
         assets,
@@ -439,7 +456,10 @@ export function useCrossChainStake() {
       });
     } catch (err) {
       setPhase("failed");
-      const c = classifyTxError(err);
+      const c =
+        err instanceof FeeQuoteError
+          ? { message: err.message }
+          : classifyTxError(err);
       setError(c.message);
       push({ id: TOAST_ID, tone: "error", message: c.message });
     }
@@ -556,6 +576,7 @@ export function useCrossChainStake() {
     bridgeFromBase,
     stakeFromCredit,
     withdrawCredit,
+    stakeFeeQuote,
     reset,
     refetchCredit: () => creditedQuery.refetch(),
   };

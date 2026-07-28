@@ -156,6 +156,7 @@
 - 勾选"免 gas"后,显示**预计代付费用**与**实际到账**:`存入 1000 → 手续费 ≈ X ZEN → 实际质押 ≈ 1000−X`。
 - 用户签名前必须看到 `maxFeeZen` 上限并确认(对应签名字段)。
 - 状态机变为:`签名 → 提交给中继 → 等待中继上链 → 成功/超时`。中继超时要有"改用普通存入"兜底。
+- **跨链路径同样强制费用透明**: Cross-chain stake 的 L3 deposit 步、Redeem to Base 的 redeem 腿与 bridge 腿（含 LZ 折合 ZEN）须在签名前展示 est / max / 净值；实现见 `GaslessFeePanel` + [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md) §5。
 
 ---
 

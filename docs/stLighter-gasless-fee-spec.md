@@ -10,11 +10,12 @@
 
 | 项 | 决策 |
 |----|------|
-| ZEN/ETH 报价 | BFF 拉**外部价**（CEX / 聚合器）；失败或过期回退**运营 floor** |
+| ZEN/ETH 报价 | BFF 默认 **Base Aerodrome Slipstream** ZEN/WETH `slot0`（深池）；失败回退运营 floor；可选 CoinGecko `zencash` |
 | 成本覆盖 | **L3 gas + LZ `nativeFee`** 一并换算为 ZEN，从本次操作产出中扣除 |
 | 定价模型 | `feeZen ≈ costEstimate`；`maxFeeZen = costEstimate × safetyBuffer` |
 | 合约边界 | 保持：`feeZen` 不进签名；`feeZen ≤ maxFeeZen ≤ MAX_GAS_FEE_ZEN`（10 ZEN）；合约**不**引入预言机 |
-| 废弃 | 以本金 `bps` 作为主定价（前端 `MAX_FEE_BPS`、BFF `RELAYER_FEE_BPS`） |
+| 废弃 | 以本金 `bps` 作为**唯一/主**定价（前端 `MAX_FEE_BPS`、BFF `RELAYER_FEE_BPS`） |
+| 利润地板 | env `FEE_PROFIT_BPS`（默认 0）；**代码首期即接入**，运营可配；`>0` 时 UI 标「含服务费」 |
 
 ### 0.1 对上级规范的修订（权威覆盖）
 
@@ -25,7 +26,7 @@
 | `stLighter-station-impl-plan.md`（原生桥费） | LZ fee 由 relayer 垫付，**不从 ZEN credited 扣** | LZ `nativeFee` 折合 ZEN，计入 `feeZen` / `maxFeeZen`，从该腿产出扣 |
 | `stLighter-deploy-checklist.md` / mainnet checklist 同类表述 | 同上 | 同上；垫付 ETH 仍由 relayer `msg.value` 支付，**报销**走 ZEN |
 | `stLighter-PRD.md` §6「前端报价」 | 笼统；实现曾落成百分比 | 明确为 BFF 成本报价 API + 外部 FX + floor |
-| 前端 hooks `MAX_FEE_BPS=100` / `RELAYER_FEE_BPS` | 本金百分比 | 废除主路径；仅可保留可选利润开关（默认关） |
+| 前端 hooks `MAX_FEE_BPS=100` / `RELAYER_FEE_BPS` | 本金百分比主定价 | 废除主路径；利润改由 `FEE_PROFIT_BPS` 地板（默认 0，运营可配，代码首期接线） |
 
 未改动的原则：meaningful gasless、跨链 L3 强制 relayer、`feeZen ≤ maxFeeZen` 用户签名保护、Direct 路径可 `feeZen=0`。
 
@@ -101,7 +102,10 @@ ethCostWei = l3GasWei + lzNativeWei
 
 # zenCost = ethCostWei * zenPerEth / 1e18   （先算商，再 ceil 到 wei ZEN）
 feeZenRaw  = ceil_div(ethCostWei × zenPerEth, 10^18)
-feeZen     = ceil_div(feeZenRaw × (10_000 + marginBps), 10_000)
+feeZenCost = ceil_div(feeZenRaw × (10_000 + marginBps), 10_000)
+# §2.6 利润地板（FEE_PROFIT_BPS）；profitBps=0 时等价于 feeZen = feeZenCost
+profitFloor = (profitBps == 0) ? 0 : (basis × profitBps) / 10_000
+feeZen     = max(feeZenCost, min(profitFloor, MAX_GAS_FEE_ZEN, basis > 0 ? basis - 1 : 0))
 
 maxFeeZen  = min(
                ceil_div(feeZen × (10_000 + bufferBps), 10_000),
@@ -110,7 +114,7 @@ maxFeeZen  = min(
              )
 ```
 
-其中 `ceil_div(a, b) = (a + b - 1) / b`（`a,b > 0`）；`a = 0` 则结果为 0。
+其中 `ceil_div(a, b) = (a + b - 1) / b`（`a,b > 0`）；`a = 0` 则结果为 0。若 `feeZenCost > MAX_GAS_FEE_ZEN`（margin 后、利润地板前）→ 直接 `fee_hits_cap`（§2.7），不要截断后假装可提交。
 
 **不变量（提交时必须成立）**:
 
@@ -154,7 +158,7 @@ feeZen < basis          // 与合约 deposit/redeem/bridge 净额要求一致
 
 ### 2.5 `gasLimit[kind]` 初值表（可运营调）
 
-初值来自本地实测 / forge 量级，**上线前须用测试网/主网实测校准**（含 `_harvest` 冷热路径）。配置项见 §7。
+初值来自本地实测 / forge 量级。**2026-07-29 主网校准**：Horizen tip ~0.002 gwei 时费用对 `gasLimit` 不敏感；`RELAY_GAS_LIMIT_*` **暂保持下表**，后续用 `gasUsed` P95 再收紧。复测见 `ltzen-frontend/scripts/calibrate-fee.ts`。
 
 | kind | 建议 `gasLimit`（初值） | 备注 |
 |------|-------------------------|------|
@@ -167,15 +171,21 @@ feeZen < basis          // 与合约 deposit/redeem/bridge 净额要求一致
 
 Headroom 已含在上表；若实测 P95 超过配置的 80%，应上调配置而非在代码写死百分比。
 
-### 2.6 可选利润开关（默认关）
+### 2.6 可选利润开关（运营可配，默认关）
 
-**禁止**再用本金百分比作为主费。若未来需要利润：
+**禁止**再用本金百分比作为**唯一/主**定价。成本路径始终先算 `feeZenCost`（§2.2）；若运营配置了 `FEE_PROFIT_BPS`，则：
 
 ```
-feeZen = max(costBasedFeeZen, min(basis × profitBps / 10_000, maxFeeZen))
+feeZen = max(feeZenCost, min(basis × profitBps / 10_000, MAX_GAS_FEE_ZEN, basis - 1))
 ```
 
-`profitBps` 默认 `0`；启用须显式 env，并在 UI 标注「含服务费」。本说明书首期 **不启用**。
+（与 §2.2 同一式；`profitBps = 0` 时退化为纯成本。）
+
+- `profitBps` 来自 env **`FEE_PROFIT_BPS`**（默认 `0` = 关）。  
+- **实现首期即接线该配置**（读 env → 进 `cost.ts`），运营后续改 env 即可启用，无需发版改公式。  
+- `FEE_PROFIT_BPS > 0` 时 UI **必须**标注「含服务费」；breakdown 暴露 `profitBps`。  
+- `maxFeeZen` 仍按缓冲后的最终 `feeZen` 计算（§2.2）。  
+- **禁止**将废弃的 `RELAYER_FEE_BPS` 静默映射为 `FEE_PROFIT_BPS`。
 
 ### 2.7 与合约硬顶的关系
 
@@ -184,6 +194,7 @@ feeZen = max(costBasedFeeZen, min(basis × profitBps / 10_000, maxFeeZen))
   - UI 展示「费用触及协议上限」；  
   - 若 `feeZen > maxFeeZen`（截断导致）→ 报价 API 返回不可用 / 建议拆小额或等待 gas 回落。  
 - 若主网常态成本接近或超过 10 ZEN：记为**后续治理议题**（升硬顶需合约升级 + `AUDIT_DELTA`）。
+- **2026-07-29 核算（Aerodrome ≈ 6.5e6 ZEN/ETH）**: 纯 L3 @ Horizen tip(~0.001 gwei) ≈ 数 ZEN，可行；**含 LZ（即便 0.001 ETH）即撞硬顶**。bridge 报销路径上线前必须处理硬顶或临时排除 LZ 进 `feeZen`（见 impl-plan S7）。
 
 ---
 
@@ -217,11 +228,12 @@ interface ZenEthPriceProvider {
 }
 ```
 
-**首期推荐**:
+**首期 / 默认**:
 
-1. **主路径**: CoinGecko（或运营选定聚合器）simple price：`horizen` / 项目配置的 ZEN id vs `eth`。API key 仅 server env（`PRICE_API_KEY` 等）。  
-2. **回退**: `ZEN_PER_ETH_FLOOR`（同缩放约定）。  
-3. **异常钳制**: 若 live 相对 floor 偏离超过 `PRICE_DEVIATION_BPS`（建议默认 3000 = 30%），强制使用 floor 并打告警日志。
+1. **主路径**: Base **Aerodrome Slipstream** ZEN/WETH 深池 `slot0` → `zenPerEth`（viem；`PRICE_PROVIDER=aerodrome`，默认）。见 §3.3.1。  
+2. **可选**: `PRICE_PROVIDER=coingecko`（id=`zencash` + `ethereum`；旧 id `horizen` 常缺失）。  
+3. **回退**: `ZEN_PER_ETH_FLOOR`（同缩放约定）。  
+4. **异常钳制**: 若 live 相对 floor 偏离超过 `PRICE_DEVIATION_BPS`（建议默认 3000 = 30%），强制使用 floor 并打告警日志。
 
 **缓存**: 进程内（或共享）TTL 默认 `QUOTE_TTL_SEC=60`；缓存命中仍返回同一 `asOf`。
 
@@ -231,6 +243,23 @@ interface ZenEthPriceProvider {
 |----|------|
 | `live` | 来自外部价源（可能经缓存） |
 | `floor` | 使用运营 floor（外部失败、过期、或偏离钳制） |
+
+#### 3.3.1 Aerodrome（Base）链上报价（默认 live）
+
+**Base 上 Aerodrome Slipstream CL 池 `slot0.sqrtPriceX96`** 为默认 `ZenEthPriceProvider`（viem `readContract`）。UI 聚合路径常为 ETH→cbBTC→ZEN，与直连 ZEN/WETH 深池 mid 同量级（~450–490 ZEN/ETH）。
+
+| 项 | 值（Base mainnet） |
+|----|-------------------|
+| Pool（默认） | `0x0392b12a1ceb0cd13af5ea448cf5586ea609852d` — **ZEN / WETH 0.15%** Slipstream（深流动性；可用 `AERODROME_ZEN_WETH_POOL` 覆盖） |
+| WETH | `0x4200000000000000000000000000000000000006` |
+| ZEN | `0xf43eb8de897fbc7f2502483b2bef7bb9ea179229` |
+| 读法 | `zenPerEth = sqrtPriceX96² × 1e18 / 2¹⁹²`（当 `token0=WETH`、`token1=ZEN`；代币顺序对调则取倒数） |
+| **禁止** | 薄 vAMM 直连池 `0xB5ff…e928` 的 Router `getAmountsOut` — 储备极浅，会给出 ~10⁶ ZEN/ETH 的假价 |
+| Env | `PRICE_PROVIDER=aerodrome`（默认）、`BASE_PRICE_RPC_URL`、可选 `AERODROME_ZEN_WETH_POOL` / `AERODROME_ZEN_ADDRESS` / `AERODROME_WETH_ADDRESS` |
+
+失败回退 floor + deviation 钳制；池读失败勿阻塞——返回 `quote_unavailable` 或 floor。
+
+**CoinGecko 可选**: `ids=zencash,ethereum`（Horizen 现 id；勿再用 `horizen`）。
 
 ### 3.4 Floor 运营要求
 
@@ -274,7 +303,8 @@ interface ZenEthPriceProvider {
     "effectiveGasPrice": "1500000000",
     "gasLimit": 350000,
     "bufferBps": 1500,
-    "marginBps": 0
+    "marginBps": 0,
+    "profitBps": 0
   },
   "expiresAt": 1710000060
 }
@@ -379,7 +409,8 @@ sequenceDiagram
 2. **上限**: `Max fee you authorize: Y ZEN`（对应签名字段）。  
 3. **次要灰字（可选展开）**: `≈ a ETH gas + b ETH LZ`；`rate: live|floor`。  
 4. **`rateSource=floor`**: 短提示 *Using backup exchange rate*（或中文等价，按 `copy.ts`）。  
-5. 所有预估值标 `≈`；confirmed 后可用实收替换并去掉「预估」语气。
+5. **`profitBps > 0`**: 短提示 *Includes service fee*（`gaslessIncludesServiceFee`）。  
+6. 所有预估值标 `≈`；confirmed 后可用实收替换并去掉「预估」语气。
 
 ### 5.3 交互
 
@@ -400,6 +431,7 @@ sequenceDiagram
 | `gaslessRateFloor` | 备用汇率提示 |
 | `gaslessFeeStale` | 需重新签名 |
 | `gaslessFeeTooHigh` | 触及上限 / 金额过小 |
+| `gaslessIncludesServiceFee` | `FEE_PROFIT_BPS > 0` 时展示「含服务费」 |
 
 ---
 
@@ -425,14 +457,18 @@ sequenceDiagram
 | 变量 | 默认建议 | 说明 |
 |------|----------|------|
 | `ZEN_PER_ETH_FLOOR` | （必填上线） | 1e18 缩放；floor |
-| `PRICE_PROVIDER` | `coingecko` | 可插拔 id |
-| `PRICE_API_KEY` | — | 若价源需要 |
+| `PRICE_PROVIDER` | `aerodrome` | `aerodrome`（默认）或 `coingecko` |
+| `BASE_PRICE_RPC_URL` | `https://mainnet.base.org` | Aerodrome 报价用 Base mainnet RPC |
+| `AERODROME_ZEN_WETH_POOL` | Slipstream 深池 | 可选；默认 `0x0392…852d` |
+| `AERODROME_ZEN_ADDRESS` | Base ZEN | 可选覆盖 |
+| `AERODROME_WETH_ADDRESS` | Base WETH | 可选覆盖 |
+| `PRICE_API_KEY` | — | 仅 coingecko |
 | `PRICE_API_URL` | provider 默认 | 可覆盖 |
 | `QUOTE_TTL_SEC` | `60` | FX + 组合报价缓存 |
 | `PRICE_DEVIATION_BPS` | `3000` | live vs floor |
 | `FEE_BUFFER_BPS` | `1500` | max 相对 fee |
 | `FEE_MARGIN_BPS` | `0` | 成本加成 |
-| `FEE_PROFIT_BPS` | `0` | 可选本金利润；0=关 |
+| `FEE_PROFIT_BPS` | `0` | 本金利润地板（§2.6）；0=关；运营可配，代码首期即读 |
 | `RELAY_GAS_LIMIT_DEPOSIT_WITH_SIG` | `350000` | 见 §2.5 |
 | `RELAY_GAS_LIMIT_DEPOSIT_WITH_SIG_AND_PERMIT` | `420000` | |
 | `RELAY_GAS_LIMIT_REDEEM_WITH_SIG` | `320000` | |
@@ -444,7 +480,7 @@ sequenceDiagram
 
 | 变量 | 处理 |
 |------|------|
-| `RELAYER_FEE_BPS` | **废弃**主定价；保留读取时若 `FEE_PROFIT_BPS` 未设可临时映射并打 deprecation 日志，实现 PR 中从 `env.local.example` / `deploy/.env.example` 删除或标注 deprecated |
+| `RELAYER_FEE_BPS` | **废弃**主定价；**禁止**静默映射为 `FEE_PROFIT_BPS`。实现 PR 中从 example 删除或标 deprecated；利润只用 `FEE_PROFIT_BPS` |
 
 ### 7.3 模板回写
 
@@ -522,31 +558,30 @@ sequenceDiagram
 | [`ZenOftStationBridge.quoteBridgeNativeFee`](../src/stlighter/station/ZenOftStationBridge.sol) | BFF 读取计入 `lzNativeWei` |
 | `StLighter` / `EgressStation` `_enforceGaslessFeeLimits` | 不变 |
 
-## 12. 附录 C — 数值示例（说明用）
+## 12. 附录 C — 数值示例
 
-假设：
+### 12.1 主网校准样例（2026-07-29，权威量级）
 
-- `effectiveGasPrice = 1.5 gwei = 1.5e9`  
-- `gasLimit = 350_000` → `l3GasWei = 5.25e14`  
-- `lzNativeWei = 0`  
-- `zenPerEth = 50_000e18`（1 ETH = 50_000 ZEN）  
-- `marginBps = 0`，`bufferBps = 1500`  
-- `basis = 1000e18`
+| 量 | 值 |
+|----|-----|
+| `zenPerEth` | ≈ **489.4e18**（Aerodrome Slipstream live） |
+| Horizen `effectiveGasPrice` | ≈ **2e6 wei**（~0.002 gwei） |
+| `quoteBridgeNativeFee` | ≈ **2.85e-5 ETH**（与桥接金额大致无关） |
+| `redeemWithSig` `feeZen` | ≈ **3e-4 ZEN** |
+| `bridgeToBase` `feeZen`（含 LZ） | ≈ **0.014 ZEN**；`maxFeeZen` ≈ **0.017 ZEN**（buffer 15%） |
 
-则：
+相对 `MAX_GAS_FEE_ZEN = 10` 余量巨大。复测：`cd ltzen-frontend && npx tsx scripts/calibrate-fee.ts`。
 
-```
-feeZenRaw = 5.25e14 × 50000e18 / 1e18 = 2.625e19 / 1e0 … 
-          = 5.25e14 × 5e4 = 2.625e19  → 26.25 ZEN
-```
+### 12.2 历史高压示例（仅说明硬顶逻辑，非现网）
 
-此例在 10 ZEN 硬顶下会触发 §2.7（成本过高）。说明：
+假设（**过时市价/高 tip，勿作运营校准**）：
 
-- 低 gas L3 或更高 ZEN 单价（更少 ZEN/ETH）时费用落在硬顶内；  
-- 上线前必须用**真实** Horizen gas 与 ZEN/ETH 价重算示例，并校准 floor / gasLimit；  
-- 若真实成本常 > 10 ZEN，必须启动硬顶治理升级，而非恢复百分比定价。
+- `effectiveGasPrice = 1.5 gwei`，`gasLimit = 350_000` → `l3GasWei = 5.25e14`  
+- `zenPerEth = 50_000e18`，`lzNativeWei = 0`，`bufferBps = 1500`
 
-（实现单测应使用可控 fixture，而不是本附录市价。）
+则 `feeZenRaw ≈ 26.25 ZEN` → 触发 §2.7 `fee_hits_cap`。说明：高 tip × 高 ZEN/ETH 时可能撞顶；若真实成本常 > 10 ZEN，启动硬顶治理，**禁止**恢复百分比定价。
+
+（实现单测使用可控 fixture，不以本附录为断言基准。）
 
 ---
 
@@ -555,3 +590,8 @@ feeZenRaw = 5.25e14 × 50000e18 / 1e18 = 2.625e19 / 1e0 …
 | 日期 | 说明 |
 |------|------|
 | 2026-07-28 | 初版：外部报价 + L3/LZ 成本导向；`feeZen`≈成本，`maxFeeZen`=成本×buffer；BFF `fee-quote` 协议与 UI/验收 |
+| 2026-07-28 | §2.6：`FEE_PROFIT_BPS` 改为代码首期即接线、运营 env 可配（默认 0）；UI 在 >0 时标「含服务费」 |
+| 2026-07-28 | §3.3.1：备注 Aerodrome（Base）`getAmountsOut` 作为后续可选 `ZenEthPriceProvider`；首期仍 CoinGecko |
+| 2026-07-29 | §3.3：默认价源改为 Aerodrome；CoinGecko 降为可选（horizen 常缺失） |
+| 2026-07-29 | §3.3.1：改为 Slipstream ZEN/WETH `slot0`（~490）；禁薄 vAMM；CoinGecko id=`zencash` |
+| 2026-07-29 | §12：写入主网校准（LZ≈2.85e-5 ETH，bridge fee≈0.014 ZEN）；旧高压例降为说明 |

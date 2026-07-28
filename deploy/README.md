@@ -94,7 +94,7 @@ docker run --rm --network ltzen_default curlimages/curl:8.5.0 \
   -u "$RRELAYER_AUTH_USERNAME:$RRELAYER_AUTH_PASSWORD" \
   -H 'Content-Type: application/json' \
   -d '{"name":"relayer_horizen"}' \
-  http://rrelayer:8000/relayers/2651420/new
+  http://rrelayer:8000/relayers/26514/new
 ```
 
 2. `make gen-api-key` → paste into `.env` as `RRELAYER_API_KEY`
@@ -102,6 +102,21 @@ docker run --rm --network ltzen_default curlimages/curl:8.5.0 \
 4. `make force-recreate` so rrelayer reloads yaml/env
 
 BFF uses `RRELAYER_SERVER_URL=http://rrelayer:8000` (default in compose).
+
+## Gasless fee env (BFF)
+
+Cost-oriented `maxFeeZen` ([`stLighter-gasless-fee-spec.md`](../docs/stLighter-gasless-fee-spec.md)). Copy from [`.env.example`](./.env.example) into host `.env` before `make release`:
+
+| Var | Suggested |
+|-----|-----------|
+| `ZEN_PER_ETH_FLOOR` | `450000000000000000000` (~450 ZEN/ETH) |
+| `PRICE_PROVIDER` | `aerodrome` (Slipstream ZEN/WETH `slot0` on Base) |
+| `BASE_PRICE_RPC_URL` | `https://mainnet.base.org` (or your Base RPC) |
+| `FEE_BUFFER_BPS` / `FEE_MARGIN_BPS` / `FEE_PROFIT_BPS` | `1500` / `0` / `0` |
+| `GAS_PRICE_PROVIDER_URL` | `http://gas-stub:8787` |
+| `QUOTE_TTL_SEC` | `60` |
+
+Optional: `AERODROME_ZEN_WETH_POOL`. Do **not** use deprecated `RELAYER_FEE_BPS` as primary pricing. After changing fee env: `make force-recreate` (rebuild frontend if `NEXT_PUBLIC_*` also changed → `make release`).
 
 ## Security
 

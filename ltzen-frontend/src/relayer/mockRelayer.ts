@@ -1,14 +1,7 @@
 /**
- * Mock relayer (frontend-plan §2 — used until a real relayer endpoint/protocol exists).
- *
- * Simulates the submit→relaying→confirmed lifecycle with realistic delays so the gasless UI
- * (state machine, fee transparency, timeout fallback) is fully exercisable end-to-end without a
- * backend. It does NOT broadcast anything on-chain — `confirmed` is simulated and carries a fake
- * tx hash. The httpRelayer (real impl) implements the same `Relayer` interface; swapping is a
- * one-line change in index.ts.
- *
- * Timeout behavior is injectable (env `NEXT_PUBLIC_MOCK_RELAYER_TIMEOUT=1`) so the "代付超时 →
- * 改用普通存入" fallback path (uiux §4.3) is testable.
+ * Mock relayer — UI simulation only. Fee is a placeholder ~0.5% of amount (capped by
+ * maxFeeZen), NOT the production cost model in docs/stLighter-gasless-fee-spec.md.
+ * Production uses BFF computeRelayCost via /api/relay.
  */
 
 import type { Relayer, RelayRequest, RelayResult, RelayHandle } from "./types";

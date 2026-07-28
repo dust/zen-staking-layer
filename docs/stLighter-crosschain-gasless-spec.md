@@ -203,7 +203,7 @@ Egress 须按 `owner`（或 `egressId`）记账，使退款入账后仍归属原
 - **强制 relayer 的 L3 写入**:
   - 跨链 stake 的 deposit；
   - **Redeem to Base** 的 redeem 以及完成出桥所必需的 L3 交易（用户 L3 无 ETH 为常态假设）。
-- 费用：从本次 deposit/redeem（及出金若并入同一结算）的 ZEN 中扣除；用户签名中的 `maxFeeZen`（及若拆分的桥费上限）须在 UI 可见、可调。
+- 费用：**成本导向**（L3 gas + 出桥 LZ `nativeFee` 折合 ZEN），见权威 [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)。Relayer 仍垫付 ETH `msg.value`；ZEN 报销从产出扣。用户签名 `maxFeeZen`；UI 签名前可见。`FEE_PROFIT_BPS` 可选利润地板（默认 0）。
 
 ### 3.4 桥选型（开放，约束固定）
 

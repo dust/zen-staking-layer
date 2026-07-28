@@ -166,6 +166,12 @@ export const copy = {
     gaslessSignNote:
       "One signature, no send transaction. On testnet you confirm one final tx; in production a relayer submits for you.",
     gaslessSuccess: "Gasless redeem confirmed.",
+    gaslessRateFloor: "Using backup exchange rate",
+    gaslessFeeStale: "Fee quote expired or rose. Refresh and sign again.",
+    gaslessFeeTooHigh: "Amount is too small to cover the relayer fee, or fee hits the protocol cap.",
+    gaslessIncludesServiceFee: "Includes service fee",
+    gaslessBreakdownGas: "L3 gas (approx.)",
+    gaslessBreakdownLz: "Cross-chain network fee (approx.)",
     signing: "Sign to authorize the redeem…",
     submitting: "Submitting to relayer…",
     relayerWaiting: "Waiting for the relayer to land on-chain…",

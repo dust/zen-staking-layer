@@ -28,6 +28,7 @@ import {
 import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { copy } from "@/lib/copy";
 import { classifyTxError, logTxError } from "@/lib/errors";
+import { FeeQuoteError, fetchFeeQuote, isQuoteExpired } from "@/lib/feeQuote";
 import {
   signBridgeToBase,
   signEgressWithdrawToHorizen,
@@ -40,9 +41,9 @@ import {
 } from "@/lib/oftDust";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
+import { useFeeQuote } from "./useFeeQuote";
 
 const SIG_TTL_SEC = 30 * 60;
-const MAX_FEE_BPS = 100n;
 const TOAST_ID = "redeem-to-base";
 
 export type RedeemToBaseStep =
@@ -182,10 +183,29 @@ export function useRedeemToBase() {
   });
   const baseZenBalance = baseZenBalanceQuery.data as bigint | undefined;
 
-  const maxFeeZen = useMemo(() => {
-    if (previewAssets === undefined) return undefined;
-    return (previewAssets * MAX_FEE_BPS) / 10_000n;
-  }, [previewAssets]);
+  const redeemFeeQuote = useFeeQuote({
+    kind: "redeemAndCredit",
+    amount: sharesWei && sharesWei > 0n ? sharesWei.toString() : undefined,
+    verifyingContract: stLighter,
+    enabled: Boolean(sharesWei && sharesWei > 0n),
+  });
+
+  const maxFeeZen = redeemFeeQuote.maxFeeZen > 0n ? redeemFeeQuote.maxFeeZen : undefined;
+
+  const bridgeAssetsForQuote =
+    creditedBaseReceive && creditedBaseReceive > 0n
+      ? creditedBaseReceive
+      : previewBaseReceive;
+  const bridgeFeeQuote = useFeeQuote({
+    kind: "bridgeToBase",
+    amount:
+      bridgeAssetsForQuote && bridgeAssetsForQuote > 0n
+        ? bridgeAssetsForQuote.toString()
+        : undefined,
+    dest: effectiveDest,
+    extraOptions: buildOftSendLzReceiveOptions(),
+    enabled: Boolean(bridgeAssetsForQuote && bridgeAssetsForQuote > 0n && effectiveDest),
+  });
 
   const baseArrived = useMemo(() => {
     if (baseBalanceBefore === undefined || baseZenBalance === undefined) return false;
@@ -235,18 +255,27 @@ export function useRedeemToBase() {
   );
 
   const relayRedeemAndCredit = useCallback(async () => {
-    if (!account || !stLighter || !egress || !sharesWei || maxFeeZen === undefined) return;
+    if (!account || !stLighter || !egress || !sharesWei) return;
     setError(undefined);
     setPhase("signing");
     push({ id: TOAST_ID, tone: "pending", message: copy.redeemToBase.signingRedeem });
     try {
       await ensureHorizen();
+      const quote = await fetchFeeQuote({
+        kind: "redeemAndCredit",
+        amount: sharesWei.toString(),
+        verifyingContract: stLighter,
+      });
+      if (isQuoteExpired(quote)) {
+        throw new FeeQuoteError("fee_quote_stale", copy.redeem.gaslessFeeStale);
+      }
+      const maxFee = BigInt(quote.maxFeeZen);
       const feeRelayer = resolveGaslessFeeRelayer(account);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const { signature } = await signRedeemWithSig(config, HUB_CHAIN_ID, stLighter, {
         shares: sharesWei,
         receiver: egress,
-        maxFeeZen,
+        maxFeeZen: maxFee,
         relayer: feeRelayer,
         user: account,
         deadline,
@@ -261,7 +290,7 @@ export function useRedeemToBase() {
         user: account,
         receiver: egress,
         amount: sharesWei.toString(),
-        maxFeeZen: maxFeeZen.toString(),
+        maxFeeZen: maxFee.toString(),
         relayer: feeRelayer,
         deadline: Number(deadline),
         signature,
@@ -291,7 +320,8 @@ export function useRedeemToBase() {
     } catch (err) {
       logTxError("redeemToBase.redeemAndCredit", err);
       setPhase("failed");
-      const c = classifyTxError(err);
+      const c =
+        err instanceof FeeQuoteError ? { message: err.message } : classifyTxError(err);
       setError(c.message);
       push({ id: TOAST_ID, tone: "error", message: c.message });
     }
@@ -300,7 +330,6 @@ export function useRedeemToBase() {
     stLighter,
     egress,
     sharesWei,
-    maxFeeZen,
     previewAssets,
     config,
     ensureHorizen,
@@ -318,7 +347,21 @@ export function useRedeemToBase() {
     try {
       await ensureHorizen();
       const feeRelayer = resolveGaslessFeeRelayer(account);
-      const maxFee = (assets * MAX_FEE_BPS) / 10_000n;
+      const extraOptions = buildOftSendLzReceiveOptions();
+      const quoteAssets = truncateOftAmountLD(assets, decimalConversionRate);
+      if (quoteAssets <= 0n) {
+        throw new Error("Amount too small after OFT dust truncation");
+      }
+      const quote = await fetchFeeQuote({
+        kind: "bridgeToBase",
+        amount: quoteAssets.toString(),
+        dest: effectiveDest,
+        extraOptions,
+      });
+      if (isQuoteExpired(quote)) {
+        throw new FeeQuoteError("fee_quote_stale", copy.redeem.gaslessFeeStale);
+      }
+      const maxFee = BigInt(quote.maxFeeZen);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
       const { signature } = await signBridgeToBase(config, HUB_CHAIN_ID, egress, {
         assets,
@@ -328,14 +371,13 @@ export function useRedeemToBase() {
         owner: account,
         deadline,
       });
-      const extraOptions = buildOftSendLzReceiveOptions();
-      const bridgeAmount = assets; // feeZen applied by BFF; Direct uses 0
+      // Deployed Bridge quote may still require dust-free amount until upgrade; match send path.
       const nativeFee = (await readContract(config, {
         chainId: HUB_CHAIN_ID,
         address: bridge,
         abi: abis.zenOftStationBridge,
         functionName: "quoteBridgeNativeFee",
-        args: [bridgeAmount, effectiveDest, extraOptions],
+        args: [quoteAssets, effectiveDest, extraOptions],
       })) as bigint;
 
       if (baseZen) {
@@ -379,7 +421,8 @@ export function useRedeemToBase() {
     } catch (err) {
       logTxError("redeemToBase.bridge", err);
       setPhase("failed");
-      const c = classifyTxError(err);
+      const c =
+        err instanceof FeeQuoteError ? { message: err.message } : classifyTxError(err);
       setError(c.message);
       push({ id: TOAST_ID, tone: "error", message: c.message });
     }
@@ -395,6 +438,7 @@ export function useRedeemToBase() {
     ensureHorizen,
     push,
     queryClient,
+    decimalConversionRate,
   ]);
 
   const withdrawCredit = useCallback(async () => {
@@ -478,6 +522,8 @@ export function useRedeemToBase() {
     previewAssets,
     previewBaseReceive,
     maxFeeZen,
+    redeemFeeQuote,
+    bridgeFeeQuote,
     decimalConversionRate,
     dest: effectiveDest,
     setDest,

@@ -1,9 +1,9 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, type Address, type Hex } from "viem";
 import StLighterAbi from "@/abi/StLighter.json";
 import { horizen } from "@/config/chains";
 import type { RelayRequest } from "@/relayer/types";
-import { rrelayerConfigured, relayerFeeBps, stLighterAddress } from "./config";
-import { computeFeeZen } from "./fee";
+import { rrelayerConfigured, stLighterAddress } from "./config";
+import { computeRelayCost, assertSignedMaxCoversFee } from "./cost";
 import { encodeMetaTx } from "./encode";
 import { createJob, patchJob } from "./jobs";
 import { relayError, relayLog } from "./log";
@@ -29,7 +29,6 @@ async function feeBasisWei(req: RelayRequest): Promise<bigint> {
   ) {
     return BigInt(req.amount);
   }
-  // redeemWithSig / redeemAndCredit: amount is shares
   const client = hubPublicClient();
   const stLighter =
     req.kind === "redeemAndCredit" ? stLighterAddress() : req.verifyingContract;
@@ -56,14 +55,26 @@ export async function queueRelay(req: RelayRequest): Promise<{ id: string; feeZe
   relayLog("assertRequest ok");
 
   const basis = await feeBasisWei(req);
-  const feeZen =
-    req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen"
-      ? 0n
-      : computeFeeZen(BigInt(req.maxFeeZen || "0"), basis, relayerFeeBps());
+  const amount = BigInt(req.amount || "0");
+  const signedMax = BigInt(req.maxFeeZen || "0");
+
+  const cost = await computeRelayCost({
+    kind: req.kind,
+    basis,
+    amount,
+    dest: req.kind === "bridgeToBase" ? (req.receiver as Address) : undefined,
+    extraOptions: req.extraOptions as Hex | undefined,
+  });
+
+  const feeZen = cost.feeZen;
+
+  assertSignedMaxCoversFee(feeZen, signedMax, cost.maxFeeZen);
+
   relayLog("fee computed", {
     basis: basis.toString(),
     feeZen: feeZen.toString(),
     maxFeeZen: req.maxFeeZen,
+    rateSource: cost.breakdown.rateSource,
   });
 
   relayLog("validateRelayRequest start");

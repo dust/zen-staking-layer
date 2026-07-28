@@ -18,6 +18,7 @@ import { copy } from "@/lib/copy";
 import { formatZen, formatZenAmount } from "@/lib/format";
 import { Card } from "@/components/common/Card";
 import { ChainGuide } from "@/components/common/ChainGuide";
+import { GaslessFeePanel } from "@/components/common/GaslessFeePanel";
 import { FaucetButton } from "@/components/stake/FaucetButton";
 
 function parseAmount(input: string): bigint | undefined {
@@ -243,6 +244,13 @@ export function CrossChainStakeWizard() {
       {(x.step === "sign-stake") && x.credited > 0n ? (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-zinc-400">{copy.crossStake.stakeNote}</p>
+          <GaslessFeePanel
+            quote={x.stakeFeeQuote.quote}
+            error={x.stakeFeeQuote.error}
+            loading={x.stakeFeeQuote.loading}
+            grossAssets={x.credited}
+            netLabel="You stake (after fee)"
+          />
           <p className="text-xs text-zinc-500">{copy.crossStake.withdrawNote}</p>
           <button
             type="button"

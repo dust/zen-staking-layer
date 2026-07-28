@@ -74,8 +74,14 @@ RRELAYER_SERVER_URL=http://localhost:8000
 RRELAYER_RELAYER_ID=<uuid-from-rrelayer-list>
 RRELAYER_API_KEY=<api-key>
 
-# 可选：relayer 收取的 ZEN 手续费（bps，默认 50 = 0.5%）
-RELAYER_FEE_BPS=50
+# 可选：成本导向 gasless 费用（见 docs/stLighter-gasless-fee-spec.md）
+# RELAYER_FEE_BPS 已废弃（勿作主定价）
+PRICE_PROVIDER=aerodrome
+BASE_PRICE_RPC_URL=https://mainnet.base.org
+ZEN_PER_ETH_FLOOR=
+FEE_BUFFER_BPS=1500
+FEE_MARGIN_BPS=0
+FEE_PROFIT_BPS=0
 ```
 
 Horizen 合约地址继续用现有 `NEXT_PUBLIC_HORIZEN_*`（BFF 读取 StLighter proxy）。

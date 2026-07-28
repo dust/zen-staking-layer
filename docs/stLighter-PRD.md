@@ -182,7 +182,7 @@ totalAssets() = 协议 deposit 在 ZenStaker 的 balance + 该 deposit 的 uncla
 | 维度 | 决策 |
 |------|------|
 | 架构 | **自建 meta-tx 层**:EIP-712 typed-data 签名 + per-signer nonce + deadline,沿用审计基线 `StakerOnBehalf` 的范式(`SignatureChecker`,兼容 EOA 与 EIP-1271 合约钱包) |
-| 费率定价 | **签名锁定 `maxFeeZen`**:用户在签名里写明本次操作最多愿付多少 ZEN 作 gas 费,relayer 实收 ≤ 该值;前端报价、合约不引入预言机 |
+| 费率定价 | **签名锁定 `maxFeeZen`**:用户在签名里写明本次操作最多愿付多少 ZEN 作 gas 费,relayer 实收 ≤ 该值;**BFF 成本报价**（L3 gas + 出桥 LZ native 折合 ZEN；默认 Base Aerodrome 汇率 + 运营 floor）；**合约不引入预言机**。权威见 [`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md) |
 | relayer 授权 | **无许可**:任何人凭有效用户签名均可代发;费率上限由用户签名的 `maxFeeZen` 保护,无需信任特定 relayer |
 | 首期范围 | **质押类操作**:`depositWithSig` / `redeemWithSig` / `harvest`(harvest 本就 permissionless,天然 gasless);ltZEN 纯转账的 gasless 留待后续(那种场景用户可能只有 ltZEN 无 ZEN,扣费来源不同) |
 
@@ -205,7 +205,7 @@ DepositWithSig(uint256 assets,address receiver,uint256 maxFeeZen,address payer,a
 RedeemWithSig(uint256 shares,address receiver,uint256 maxFeeZen,address user,uint256 nonce,uint256 deadline)
 ```
 
-- `maxFeeZen` 进入签名 → relayer 无法多扣;实收 `fee = min(relayer 申报, maxFeeZen)`,且 `fee` 应有合约级合理上限校验。
+- `maxFeeZen` 进入签名 → relayer 无法多扣;实收 `fee ≤ maxFeeZen`,且 `fee` 应有合约级合理上限校验。运营 BFF 按成本模型计算 `feeZen`（非本金百分比主路径）；可选 `FEE_PROFIT_BPS` 利润地板。
 - `nonce`(per-user,复用 OZ `Nonces`)防重放;`deadline` 防过期签名被延迟提交。
 - `SignatureChecker` 校验,兼容合约钱包(EIP-1271)。
 

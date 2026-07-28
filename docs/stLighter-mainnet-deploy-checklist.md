@@ -10,6 +10,7 @@
 > |------|--------|
 > | **0** | Preflight, ownership, LZ endpoint / ULN discovery |
 > | **1** | Contracts: LtZEN + StLighter + Stations + ltZEN peer/DVN |
+> | **1.5.1** | Optional: Redeploy `ZenOftStationBridge` + `Egress.setBridge` |
 > | **2** | Frontend `NEXT_PUBLIC_*` |
 > | **3** | rrelayer + BFF + gas-provider (`deploy/`) |
 >
@@ -350,7 +351,95 @@ cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
 - [ ] Owners = governance (Egress pending accept if two-step)
 - [ ] Egress / Bridge are plain deploys (not UUPS)
 
-**Funding notes**: relayer pays Horizen native for `bridgeToBase{value}` (quote via `ZenOftStationBridge.quoteBridgeNativeFee`). Excess LZ fee refunds to **EgressStation**, never the relayer EOA.
+**Funding notes**: relayer pays Horizen native for `bridgeToBase{value}` (quote via `ZenOftStationBridge.quoteBridgeNativeFee`). ZEN `feeZen` reimburses L3 gas + LZ cost ([`stLighter-gasless-fee-spec.md`](./stLighter-gasless-fee-spec.md)). Excess LZ fee refunds to **EgressStation**, never the relayer EOA. Configure `PRICE_PROVIDER=aerodrome`, `ZEN_PER_ETH_FLOOR`, `FEE_*` on the frontend BFF.
+
+### 1.5.1 Redeploy ZenOftStationBridge (Horizen mainnet)
+
+Bridge is **not UUPS**. Logic changes (e.g. `quoteBridgeNativeFee` OFT dust truncation matching `bridgeZen` — see [`AUDIT_DELTA.md`](../AUDIT_DELTA.md)) require **new deploy + `Egress.setBridge`**. Script: [`RedeployZenOftStationBridge.s.sol`](../script/RedeployZenOftStationBridge.s.sol).
+
+**When required**
+
+| Scenario | Need redeploy? |
+|---------|----------------|
+| Only BFF/frontend `truncateOftAmountLD` before quote | No (already mitigates `SlippageExceeded` on dusty amounts) |
+| On-chain `quoteBridgeNativeFee` must match `bridgeZen`; direct `cast` / third-party callers | **Yes** |
+| `Egress.pendingTotal() > 0` | Wait until zero, then cut over |
+
+**Impact**
+
+| Surface | Effect |
+|---------|--------|
+| `EgressStation` address / accounting / EIP-712 | **Unchanged** (signatures bind Egress, not Bridge) |
+| ZenTokenOFT peers / DVN / Inbound / StLighter / ltZEN | **Unchanged** |
+| Bridge address | **New**; update env + address book |
+| `Egress.bridge()` | Must point at new Bridge in the same cutover window |
+| ABI (`quoteBridgeNativeFee`) | Signature unchanged; view behavior fixes dust |
+
+**Live anchors (as of 2026-07-29)**
+
+| Role | Address |
+|------|---------|
+| EgressStation | `0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9` |
+| Current Bridge (pre-redeploy) | `0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225` |
+| Owner (Egress + Bridge) | `0x916652bcFF1fB63af6A5D55482e03139ebAD3578` (**EOA** — no Timelock bytecode at this address yet) |
+| ZenTokenOFT | `0x57da2D504bf8b83Ef304759d9f2648522D7a9280` |
+| `dstEid` | `30184` |
+
+Confirm before broadcast: `pendingTotal == 0`, old Bridge ZEN/native balances `0`, `owner() ==` governance EOA that holds `PRIVATE_KEY`.
+
+**Steps**
+
+```bash
+export HORIZEN_RPC=https://horizen.calderachain.xyz/http
+export HORIZE_VERIFY=https://horizen.calderaexplorer.xyz/api/
+export EGRESS_STATION_ADDRESS=0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
+export ZEN_TOKEN_ADDRESS=0x57da2D504bf8b83Ef304759d9f2648522D7a9280
+export BASE_EID=30184
+export GOVERNANCE_ADDRESS=0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+# PRIVATE_KEY = GOVERNANCE_ADDRESS (must be Egress.owner for setBridge)
+export OLD_BR=0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
+
+cast call $EGRESS_STATION_ADDRESS 'owner()(address)' --rpc-url $HORIZEN_RPC
+cast call $EGRESS_STATION_ADDRESS 'pendingTotal()(uint256)' --rpc-url $HORIZEN_RPC
+cast call $EGRESS_STATION_ADDRESS 'bridge()(address)' --rpc-url $HORIZEN_RPC
+forge test --match-contract ZenOftStationBridgeTest
+
+# Optional short window
+cast send $EGRESS_STATION_ADDRESS 'pause()' \
+  --rpc-url $HORIZEN_RPC --private-key $PRIVATE_KEY
+
+forge script script/RedeployZenOftStationBridge.s.sol \
+  --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
+# → export NEW_BR=<logged ZenOftStationBridge>
+
+cast call $EGRESS_STATION_ADDRESS 'bridge()(address)' --rpc-url $HORIZEN_RPC   # == NEW_BR
+cast call $NEW_BR 'egress()(address)' --rpc-url $HORIZEN_RPC                  # == EGRESS
+cast call $NEW_BR 'oft()(address)' --rpc-url $HORIZEN_RPC                     # == ZEN_TOKEN
+cast call $NEW_BR 'dstEid()(uint32)' --rpc-url $HORIZEN_RPC                   # == 30184
+cast call $NEW_BR 'owner()(address)' --rpc-url $HORIZEN_RPC                   # == GOVERNANCE
+
+# Dusty amount must not SlippageExceeded
+cast call $NEW_BR \
+  $(cast calldata "quoteBridgeNativeFee(uint256,address,bytes)" \
+    20002137373474450433 0x7e89c7Bc6C1223337a8CeDA8EF84696F3d4B7EfB \
+    0x00030100110100000000000000000000000000030d40) \
+  --rpc-url $HORIZEN_RPC
+
+forge verify-contract --rpc-url $HORIZEN_RPC \
+  --verifier blockscout --verifier-url $HORIZE_VERIFY \
+  $NEW_BR src/stlighter/station/ZenOftStationBridge.sol:ZenOftStationBridge
+# Pass constructor args: (oft, egress, dstEid, owner) per verifier.
+
+cast send $EGRESS_STATION_ADDRESS 'unpause()' \
+  --rpc-url $HORIZEN_RPC --private-key $PRIVATE_KEY
+```
+
+**Config follow-up (same release window)**
+
+- [ ] Set `NEXT_PUBLIC_HORIZEN_ZEN_OFT_STATION_BRIDGE_ADDRESS=$NEW_BR` in frontend + [`deploy/.env`](../deploy/.env.example); rebuild image / restart BFF
+- [ ] Update address book below (`ZenOftStationBridge` row)
+- [ ] Keep `OLD_BR` for archaeology only; no sweep needed if balances were zero
+- [ ] Smoke: dusty `GET /api/relay/fee-quote?kind=bridgeToBase&…` → 200; small Wave B `bridgeToBase` → Base ZEN at B1
 
 ### 1.6 Smoke (operator)
 
@@ -362,7 +451,7 @@ cast call $BR 'zen()(address)' --rpc-url $HORIZEN_RPC
 | S3 Wave A | Adapter `send(to=InboundStation, compose)` → credit → `depositWithSig(payer=Station)` → ltZEN |
 | S4 Wave A escape | `withdrawToHorizen` without stake |
 | S5 ltZEN OFT | Hub ↔ Base round-trip; `issuedShares` / exchange rate unchanged by bridge |
-| S6 Wave B | `redeemAndCredit` → `bridgeToBase` → Base ZEN at signed B1 (mind OFT dust) |
+| S6 Wave B | ✅ 2026-07-29 `bridgeToBase` via BFF: [`0x3973…beb2`](https://horizen.calderaexplorer.xyz/tx/0x3973e302afe96c27f11b429f0980045cc1d64aa08380c19a448fe753bdb9beb2) — `from`=relayer, dusty ~20 ZEN, `feeZen`≈0.015 / `maxFeeZen`≈0.017, `msg.value`≈2.97e-5 ETH |
 | S7 Wave B escape | After credit, `withdrawToHorizen` instead of bridge |
 
 Use DirectContractRelayer first if needed; BFF after Part 3.
@@ -375,23 +464,24 @@ Use DirectContractRelayer first if needed; BFF after Part 3.
 |------|-------|---------|
 | ZenTokenOFT (ZEN) | Horizen | `0x57da2D504bf8b83Ef304759d9f2648522D7a9280` |
 | ZenStaker | Horizen | `0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31` |
-| LtZEN hub | Horizen | |
-| StLighter proxy | Horizen | |
-| StLighter impl | Horizen | |
-| InboundStation | Horizen | |
-| EgressStation | Horizen | |
-| ZenOftStationBridge | Horizen | |
+| LtZEN hub | Horizen | `0xDf33Ef2073a1b7205BFFC393521Fb2f46b464B7E` |
+| StLighter proxy | Horizen | `0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59` |
+| StLighter impl | Horizen | `0x2762dFCACbc952cA987497f01D71B8D5f52D4Dfd` |
+| InboundStation | Horizen | `0xe2721EA4955D4d4E7C060ff9a934BE4353ed87d0` |
+| EgressStation | Horizen | `0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9` |
+| ZenOftStationBridge | Horizen | `0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225` _(replace after §1.5.1 redeploy)_ |
 | ZEN ERC20 | Base | `0xf43eB8De897Fbc7F2502483B2Bef7Bb9EA179229` |
 | ZenTokenOFTAdapter | Base | `0x57da2D504bf8b83Ef304759d9f2648522D7a9280` |
-| LtZEN spoke | Base | |
+| LtZEN spoke | Base | `0xDDA46A46F6E162Cde0Dbc36c18fE832Bca59EF8F` |
 | LZ Endpoint | Horizen | _(from `endpoint()`)_ |
 | LZ Endpoint | Base | _(from `endpoint()`)_ |
 | Horizen eid | — | `30399` |
 | Base eid | — | `30184` |
-| Governance / owner (stage-1) | — | |
-| Timelock / multisig (later) | — | |
+| Governance / owner (stage-1) | — | `0x916652bcFF1fB63af6A5D55482e03139ebAD3578` (EOA) |
+| Timelock / multisig (later) | — | _(not yet deployed as TimelockController)_ |
 
 - [ ] Later: transfer ownership to Timelock / multisig and document the cutover tx
+- [ ] After §1.5.1: overwrite `ZenOftStationBridge` row with `NEW_BR`
 
 ---
 
@@ -491,15 +581,17 @@ docker compose exec rrelayer wget -qO- http://gas-stub:8787/26514
 
 ### 3.4 Acceptance
 
-- [ ] User with **no** Horizen ETH completes Wave A / Wave B via BFF (meaningful gasless on L3 legs)
-- [ ] `tx.from` on explorer = relayer EOA; Base receipt = signed B1, not relayer
+- [x] User with **no** Horizen ETH completes Wave B `bridgeToBase` via BFF — [`0x3973…beb2`](https://horizen.calderaexplorer.xyz/tx/0x3973e302afe96c27f11b429f0980045cc1d64aa08380c19a448fe753bdb9beb2) (2026-07-29); cost-oriented `feeZen`≈0.015 ZEN, `msg.value`≈2.97e-5 ETH
+- [x] `tx.from` on explorer = relayer EOA `0x250b…8A83`; dest B1 = signed `0x7e89…7EfB`
 - [ ] Monitor relayer native balance; rotate API keys as needed
+- [ ] Wave A (Inbound compose → `depositWithSig`) reconfirm on mainnet if not already logged elsewhere
 
 ---
 
 ## Known gaps / deferred
 
-- Timelock + multisig hard-cutover (stage-1 may keep EOA owner)
+- Timelock + multisig hard-cutover (stage-1 owner is EOA `0x9166…3578`; address may be labeled “Timelock” in older notes but has **no contract code**)
+- Optional Bridge redeploy for on-chain dust-safe `quoteBridgeNativeFee` — §1.5.1 (BFF already truncates)
 - Post-send LZ failure / partial refund on egress path: ops escalation only ([ADR §2](./stLighter-station-compose-adr.md))
 - `composeCaller` assumed = Horizen LZ Endpoint; if MessagingComposer differs, set via InboundStation owner
 - rrelayer yaml in repo may still default to testnet `2651420` — update for mainnet host before go-live

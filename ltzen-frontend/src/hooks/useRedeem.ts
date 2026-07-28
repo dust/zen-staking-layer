@@ -4,18 +4,10 @@
  * useRedeem — the Redeem write closure (uiux §5.1).
  *
  * Standard path:  validate → redeem(shares, receiver) → wait → success.
- * Gasless path:   validate → sign RedeemWithSig → relayer.submit → track → success.
- *
- * Unlike deposit, redeem needs NO approve and NO ERC20 permit: the contract burns the user's
- * ltZEN shares directly (`_ltZen.burn(owner, shares)` — internal accounting). The relayer fee is
- * taken from the redeemed ZEN, so `maxFeeZen` is sized off the previewed assets (the contract
- * reverts if `gasFee >= assets`).
- *
- * M3 testnet: with no relayer endpoint, DirectContractRelayer broadcasts `redeemWithSig` from the
- * connected wallet (one tx, user pays gas). Production swaps to HttpRelayer for true gasless.
+ * Gasless path:   fee-quote → sign RedeemWithSig(maxFeeZen) → relayer.submit → track → success.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAccount, useConfig, useReadContract } from "wagmi";
 import { writeContract } from "wagmi/actions";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,23 +16,21 @@ import { HUB_CHAIN_ID, horizen } from "@/config/chains";
 import { abis, horizenAddress } from "@/config/contracts";
 import { copy } from "@/lib/copy";
 import { classifyTxError, RelayerTimeoutError } from "@/lib/errors";
+import { FeeQuoteError, isQuoteExpired } from "@/lib/feeQuote";
 import { signRedeemWithSig } from "@/lib/eip712";
 import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
+import { useFeeQuote } from "./useFeeQuote";
 import { useTxLifecycle } from "./useTxLifecycle";
 
 const GASLESS_TOAST_ID = "gasless-redeem";
+const SIG_TTL_SEC = 30 * 60;
 
 function horizenTxUrl(hash: Hex): string | undefined {
   const base = horizen.blockExplorers?.default?.url;
   return base ? `${base.replace(/\/$/, "")}/tx/${hash}` : undefined;
 }
-
-/** How long the signature stays valid (seconds). */
-const SIG_TTL_SEC = 30 * 60;
-/** Max relayer fee the user authorizes, as a fraction of the redeemed ZEN (1%). */
-const MAX_FEE_BPS = 100n;
 
 export type GaslessRedeemPhase =
   | "idle"
@@ -52,11 +42,12 @@ export type GaslessRedeemPhase =
   | "failed";
 
 export interface UseRedeemArgs {
-  /** ltZEN shares to redeem (wei). */
   sharesWei: bigint | undefined;
+  /** Fetch fee quote when gasless UI is enabled. */
+  gaslessEnabled?: boolean;
 }
 
-export function useRedeem({ sharesWei }: UseRedeemArgs) {
+export function useRedeem({ sharesWei, gaslessEnabled = false }: UseRedeemArgs) {
   const { address: account } = useAccount();
   const config = useConfig();
   const queryClient = useQueryClient();
@@ -91,22 +82,21 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
   });
   const previewAssets = previewQuery.data as bigint | undefined;
 
-  const insufficientShares = useMemo(() => {
-    if (sharesWei === undefined || shareBalance === undefined) return false;
-    return sharesWei > shareBalance;
-  }, [sharesWei, shareBalance]);
+  const feeQuote = useFeeQuote({
+    kind: "redeemWithSig",
+    amount: sharesWei && sharesWei > 0n ? sharesWei.toString() : undefined,
+    verifyingContract: stLighter,
+    enabled: gaslessEnabled && Boolean(sharesWei && sharesWei > 0n),
+  });
 
-  /** Redeeming the user's whole ltZEN balance clears their position (uiux §5.1). */
-  const isFullRedeem = useMemo(() => {
-    if (sharesWei === undefined || shareBalance === undefined || shareBalance === 0n) return false;
-    return sharesWei === shareBalance;
-  }, [sharesWei, shareBalance]);
+  const insufficientShares =
+    sharesWei !== undefined && shareBalance !== undefined && sharesWei > shareBalance;
 
-  // Fee is charged on the redeemed ZEN; size maxFeeZen off the preview (contract: gasFee < assets).
-  const maxFeeZen = useMemo(
-    () => (previewAssets !== undefined ? (previewAssets * MAX_FEE_BPS) / 10_000n : 0n),
-    [previewAssets],
-  );
+  const isFullRedeem =
+    sharesWei !== undefined &&
+    shareBalance !== undefined &&
+    shareBalance !== 0n &&
+    sharesWei === shareBalance;
 
   const redeem = useCallback(async () => {
     if (!account || !stLighter || !sharesWei) return;
@@ -131,16 +121,23 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
 
   const redeemGasless = useCallback(async () => {
     if (!account || !stLighter || !sharesWei) return;
+    if (!feeQuote.quote || feeQuote.error) {
+      throw feeQuote.error ?? new FeeQuoteError("quote_unavailable", "fee quote required");
+    }
+    if (isQuoteExpired(feeQuote.quote)) {
+      throw new FeeQuoteError("fee_quote_stale", copy.redeem.gaslessFeeStale);
+    }
+
+    const maxFeeZen = BigInt(feeQuote.quote.maxFeeZen);
     const relayer = createRelayer(config);
 
     try {
       setGaslessPhase("signing");
-      setGaslessFeeZen(undefined);
+      setGaslessFeeZen(BigInt(feeQuote.quote.feeZen));
       setGaslessTxHash(undefined);
       push({ id: GASLESS_TOAST_ID, tone: "pending", message: copy.redeem.signing });
 
       const deadline = BigInt(Math.floor(Date.now() / 1000) + SIG_TTL_SEC);
-
       const feeRelayer = resolveGaslessFeeRelayer(account);
       const { signature } = await signRedeemWithSig(config, HUB_CHAIN_ID, stLighter, {
         shares: sharesWei,
@@ -177,7 +174,7 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
             try {
               setGaslessFeeZen(BigInt(r.feeZen));
             } catch {
-              /* ignore malformed fee */
+              /* ignore */
             }
           }
           if (r.txHash) setGaslessTxHash(r.txHash);
@@ -212,16 +209,22 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
     } catch (err) {
       if (!(err instanceof RelayerTimeoutError)) {
         setGaslessPhase("failed");
-        const classified = classifyTxError(err);
+        const msg =
+          err instanceof FeeQuoteError
+            ? err.code === "fee_quote_stale"
+              ? copy.redeem.gaslessFeeStale
+              : err.message
+            : classifyTxError(err).message;
+        const classified = err instanceof FeeQuoteError ? null : classifyTxError(err);
         push({
           id: GASLESS_TOAST_ID,
-          tone: classified.tone === "neutral" ? "neutral" : "error",
-          message: classified.message,
+          tone: classified?.tone === "neutral" ? "neutral" : "error",
+          message: msg,
         });
       }
       throw err;
     }
-  }, [account, stLighter, sharesWei, maxFeeZen, config, queryClient, push]);
+  }, [account, stLighter, sharesWei, feeQuote.quote, feeQuote.error, config, queryClient, push]);
 
   const resetGasless = useCallback(() => {
     setGaslessPhase("idle");
@@ -235,13 +238,14 @@ export function useRedeem({ sharesWei }: UseRedeemArgs) {
     isPreviewLoading: previewQuery.isLoading,
     insufficientShares,
     isFullRedeem,
-    maxFeeZen,
+    maxFeeZen: feeQuote.maxFeeZen,
+    feeQuote,
     state: lifecycle.state,
     isBusy: lifecycle.isBusy,
     redeem,
     redeemGasless,
     gaslessPhase,
-    gaslessFeeZen,
+    gaslessFeeZen: gaslessFeeZen ?? feeQuote.feeZen,
     gaslessTxHash,
     resetGasless,
     isConfigured,

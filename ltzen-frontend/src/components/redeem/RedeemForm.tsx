@@ -18,6 +18,7 @@ import { copy } from "@/lib/copy";
 import { approx, formatShares, formatZen, formatZenAmount } from "@/lib/format";
 import { horizen } from "@/config/chains";
 import { Card } from "@/components/common/Card";
+import { GaslessFeePanel } from "@/components/common/GaslessFeePanel";
 import { InfoTooltip } from "@/components/common/InfoTooltip";
 
 type InputMode = "shares" | "zen";
@@ -56,7 +57,7 @@ export function RedeemForm() {
     return (rawWei * 10n ** 18n) / rate;
   }, [rawWei, mode, rate]);
 
-  const r = useRedeem({ sharesWei });
+  const r = useRedeem({ sharesWei, gaslessEnabled: gasless && gaslessSupported });
 
   const useGasless = gasless && gaslessSupported;
 
@@ -69,12 +70,15 @@ export function RedeemForm() {
 
   const busy = r.isBusy || gaslessBusy;
 
+  const feeReady = !useGasless || (r.feeQuote.ready && !r.feeQuote.error);
+
   const canSubmit =
     Boolean(sharesWei) &&
     r.isConnected &&
     r.isConfigured &&
     !r.insufficientShares &&
-    !busy;
+    !busy &&
+    feeReady;
 
   const onMax = () => {
     if (r.shareBalance === undefined) return;
@@ -206,25 +210,13 @@ export function RedeemForm() {
           <p className="mt-1.5 text-xs text-zinc-500">{copy.redeem.gaslessUnavailable}</p>
         )}
 
-        {useGasless && sharesWei && r.previewAssets !== undefined && (
-          <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.12] bg-white/[0.02] px-3 py-2.5 text-xs">
-            <div className="flex justify-between text-zinc-400">
-              <span>{copy.redeem.gaslessMaxFee}</span>
-              <span className="font-mono tabular-nums">{formatZenAmount(r.maxFeeZen, 4)}</span>
-            </div>
-            {r.gaslessFeeZen !== undefined && r.gaslessFeeZen > 0n && (
-              <div className="flex justify-between text-zinc-400">
-                <span>{copy.redeem.gaslessEstFee}</span>
-                <span className="font-mono tabular-nums">{approx(formatZenAmount(r.gaslessFeeZen, 4))}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-zinc-200">
-              <span>{copy.redeem.gaslessNetReceive}</span>
-              <span className="font-mono tabular-nums">
-                {approx(formatZenAmount(r.previewAssets - (r.gaslessFeeZen ?? 0n), 4))}
-              </span>
-            </div>
-          </div>
+        {useGasless && sharesWei && (
+          <GaslessFeePanel
+            quote={r.feeQuote.quote}
+            error={r.feeQuote.error}
+            loading={r.feeQuote.loading}
+            grossAssets={r.previewAssets}
+          />
         )}
       </div>
 

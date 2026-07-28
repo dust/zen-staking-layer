@@ -197,6 +197,18 @@ export function classifyTxError(err: unknown): ClassifiedTxError {
     return { kind: "rpc", message: copy.errors.rpc, tone: "error", retryable: true };
   }
 
+  if (
+    text.includes("fee_quote_stale") ||
+    text.includes("rose above your signed max")
+  ) {
+    return {
+      kind: "rate-moved",
+      message: copy.redeem.gaslessFeeStale,
+      tone: "error",
+      retryable: true,
+    };
+  }
+
   // Prefer the wallet/viem short message over a opaque generic — needed for OFT/LZ debugging.
   const trimmed = detail.trim();
   if (trimmed && trimmed.toLowerCase() !== "error" && !trimmed.toLowerCase().startsWith("unknown")) {

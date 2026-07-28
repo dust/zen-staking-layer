@@ -66,3 +66,32 @@ P0-A 下 gasless deposit（`DirectContractRelayer`，用户代发一笔 tx）仍
 | 错误 chainId | `chainId` ≠ Horizen hub |
 
 可选复测（P0-A 同样适用）：拒签、末位全额赎回、`maxFeeZen` 过低导致 fee 为 0 等边界。
+
+## 成本导向费用（`stLighter-gasless-fee-spec.md`）
+
+前置：`.env.local` 配置 `ZEN_PER_ETH_FLOOR=450e18`、`PRICE_PROVIDER=aerodrome`；BFF 开启。  
+离线复测成本量级：`npx tsx scripts/calibrate-fee.ts`（期望 bridge `feeZen` ≈ 0.01–0.02 ZEN，L3-only ≪ 0.001 ZEN）。
+
+| 用例 | 期望 | 状态 |
+|------|------|------|
+| 签名前展示 | Redeem / Cross-chain stake / Redeem-to-Base 显示 est + max / 净值 | [x] 主网 E2E 2026-07-29 |
+| `GET /api/relay/fee-quote` | 返回 breakdown；`rateSource` live 或 floor | [x] 引擎 + 主网 bridge quote |
+| 小额 | `amount_too_small` / UI 禁用提交 | [ ] 可选 |
+| quote stale | 签名后费用上涨 → `409 fee_quote_stale`，可重签 | [x] 单测 `assertSignedMaxCoversFee`；浏览器故意抬价可选 |
+| floor | 断价源或拔 RPC 时 `rateSource=floor` + UI 提示 | [ ] 可选 |
+| `FEE_PROFIT_BPS>0` | fee ≥ max(cost, basis×bps)；UI「含服务费」 | [x] 单测 |
+| withdraw* | max/fee 为 0 | [x] 单测 |
+| bridge 腿 | `feeZen` 含 LZ；relayer 付 `msg.value`；dusty amount 可过 | [x] 主网 E2E |
+
+### 主网 E2E（2026-07-29）— Wave B `bridgeToBase`（成本导向 fee）
+
+| 项 | 值 |
+|----|-----|
+| Tx | [`0x3973…beb2`](https://horizen.calderaexplorer.xyz/tx/0x3973e302afe96c27f11b429f0980045cc1d64aa08380c19a448fe753bdb9beb2) |
+| `from`（relayer） | `0x250b24259C714B681616f13a23014914e5bD8A83` |
+| `to` | EgressStation `0xc849…45D9` |
+| Method | `bridgeToBase`（selector `0xdf572015`） |
+| `assets` | ≈ 20.002 ZEN（含 OFT dust 余数） |
+| `feeZen` / `maxFeeZen` | ≈ **0.0150 / 0.0173 ZEN**（成本导向，≪ 10 硬顶） |
+| `msg.value` | ≈ **2.97e-5 ETH**（LZ native） |
+| Status | success；`gasUsed` ≈ 519k |

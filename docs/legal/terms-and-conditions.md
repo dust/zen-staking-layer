@@ -115,7 +115,7 @@ You are solely responsible for the security of your wallet and keys, for verifyi
 ## 9. Fees
 
 - **Protocol fee.** The Protocol includes a configurable fee that is **set to zero at launch**. Governance may adjust it, subject to a hard cap of **2000 basis points (20%)**. Any change is subject to the timelock described in Section 13, giving you a window to exit.
-- **Gasless (meta-transaction) fee.** If you use a gasless flow, a Relayer pays the network gas (in the network's native asset) and is reimbursed in **ZEN**, deducted from your deposit or redemption proceeds. **You cap this fee** by signing a `maxFeeZen` value; the Relayer cannot charge more than that amount, and the Protocol applies its own additional cap.
+- **Gasless (meta-transaction) fee.** If you use a gasless flow, a Relayer pays the network gas (in the network's native asset) and, where applicable, cross-chain messaging fees, and is reimbursed in **ZEN**, deducted from your deposit, redemption, or bridge proceeds. **You cap this fee** by signing a `maxFeeZen` value; the Relayer cannot charge more than that amount, and the Protocol applies its own additional cap. Fee estimates shown before you sign are indicative and may change if network conditions move before submission.
 - **Network (gas) fees.** Standard on-chain transactions require you to pay network gas directly. Fee estimates shown in the Interface are indicative and not guaranteed.
 
 You are responsible for reviewing all fees and signed values before approving any transaction.

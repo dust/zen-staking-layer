@@ -125,12 +125,16 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
   }
 
   /// @notice Quote native fee for a bridge (relayer UX).
+  /// @dev Mirrors `bridgeZen` dust truncation so quoteSend sees the same SendParam as send.
   function quoteBridgeNativeFee(uint256 amount, address destOnBase, bytes calldata extraOptions)
     external
     view
     returns (uint256 nativeFee)
   {
-    return oft.quoteSend(_buildSendParam(amount, destOnBase, extraOptions), false).nativeFee;
+    uint256 dust = amount % decimalConversionRate;
+    uint256 sendAmount = amount - dust;
+    if (sendAmount == 0) revert ZenOftStationBridge__ZeroAmount();
+    return oft.quoteSend(_buildSendParam(sendAmount, destOnBase, extraOptions), false).nativeFee;
   }
 
   /// @dev Caller passes dust-truncated `amount`; minAmountLD matches (rejects future OFT fee haircuts).
