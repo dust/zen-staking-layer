@@ -1,0 +1,44 @@
+== Return ==
+ltZen: contract LtZEN 0xDf33Ef2073a1b7205BFFC393521Fb2f46b464B7E
+protocol: contract StLighter 0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59
+implementation: contract StLighter 0x2762dFCACbc952cA987497f01D71B8D5f52D4Dfd
+
+== Logs ==
+  LtZEN:          0xDf33Ef2073a1b7205BFFC393521Fb2f46b464B7E
+  Implementation: 0x2762dFCACbc952cA987497f01D71B8D5f52D4Dfd
+  StLighter proxy: 0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59
+  ZEN:            0x57da2D504bf8b83Ef304759d9f2648522D7a9280
+  ZenStaker:      0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31
+  Timelock:       0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+  NOTE: wire OFT peers/DVN (WireStLighterOFT) before mainnet launch.
+
+== Return ==
+station: contract InboundStation 0xe2721EA4955D4d4E7C060ff9a934BE4353ed87d0
+
+== Logs ==
+  InboundStation:  0xe2721EA4955D4d4E7C060ff9a934BE4353ed87d0
+  zen / zenOft:    0x57da2D504bf8b83Ef304759d9f2648522D7a9280
+  stLighter:       0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59
+  composeCaller:   0x6F475642a6e85809B1c36Fa62763669b1b48DD5B
+  allowedSrcEid:   30184
+  owner:           0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+
+## Setting up 1 EVM.
+
+== Return ==
+station: contract EgressStation 0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
+bridge: contract ZenOftStationBridge 0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
+
+== Logs ==
+  EgressStation:          0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
+  ZenOftStationBridge:    0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
+  stLighter:              0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59
+  zen / oft:              0x57da2D504bf8b83Ef304759d9f2648522D7a9280
+  dstEid (Base):          30184
+  bridge.egress:          0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
+  egress.bridge:          0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
+  egress owner (current): 0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+  bridge owner:           0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+
+  
+
