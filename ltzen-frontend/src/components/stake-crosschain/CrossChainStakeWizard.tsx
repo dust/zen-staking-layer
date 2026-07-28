@@ -12,6 +12,7 @@ import {
   useCrossChainStake,
   type CrossStakeStep,
 } from "@/hooks/useCrossChainStake";
+import { BASE_SEPOLIA_CHAIN_ID, IS_TESTNET_ENV } from "@/config/chains";
 import { isActionAvailable } from "@/lib/chainGating";
 import { copy } from "@/lib/copy";
 import { formatZen, formatZenAmount } from "@/lib/format";
@@ -83,6 +84,11 @@ export function CrossChainStakeWizard() {
 
   const amountWei = useMemo(() => parseAmount(input), [input]);
   const available = isActionAvailable("crossChainStake", chainId);
+  const showFaucetButton =
+    IS_TESTNET_ENV &&
+    chainId === BASE_SEPOLIA_CHAIN_ID &&
+    (x.step === "amount" || x.step === "sign-credit") &&
+    x.credited === 0n;
 
   if (!x.isConfigured) {
     return (
@@ -169,7 +175,7 @@ export function CrossChainStakeWizard() {
       </h1>
       <p className="mt-1 text-sm text-zinc-400">{copy.crossStake.subtitle}</p>
 
-      {(x.step === "amount" || x.step === "sign-credit") && x.credited === 0n ? (
+      {showFaucetButton ? (
         <div className="mt-4">
           <FaucetButton />
         </div>

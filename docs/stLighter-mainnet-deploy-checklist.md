@@ -94,6 +94,7 @@ flowchart TB
 
 ```bash
 export HORIZEN_RPC=https://horizen.calderachain.xyz/http
+export HORIZE_VERIFY=https://horizen.calderaexplorer.xyz/api/
 export BASE_RPC=https://base-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY
 # Explorers: https://horizen.calderaexplorer.xyz/ · https://base.blockscout.com/
 
@@ -128,10 +129,11 @@ Copy send/receive libs + ULN from **Horizen ZenTokenOFT** (and Base Adapter for 
 
 ```bash
 # Example — Horizen ZenTokenOFT toward Base eid
-cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
-  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC
-cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
-  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC
+export LZ_SEND_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
+  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC)
+export LZ_RECEIVE_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
+  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC | awk 'NR==1')
+
 cast call $LZ_ENDPOINT_HORIZEN "getConfig(address,address,uint32,uint32)(bytes)" \
   $ZEN_TOKEN_ADDRESS $LZ_SEND_LIB $BASE_EID 2 --rpc-url $HORIZEN_RPC
 # Decode confirmations + requiredDVNs → LZ_CONFIRMATIONS, DVN_ADDRESSES
@@ -167,10 +169,28 @@ forge script script/DeployStLighterHorizen.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 
 # → set:
-export LT_ZEN_HORIZEN=0x…   # printed LtZEN
-export STLIGHTER_PROXY_ADDRESS=0x…   # printed proxy
+export LT_ZEN_HORIZEN=0xDf33Ef2073a1b7205BFFC393521Fb2f46b464B7E
+export STLIGHTER_PROXY_ADDRESS=0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59
+export ST_LIGHTER_IMPL=0x2762dFCACbc952cA987497f01D71B8D5f52D4Dfd
+export TIMELOCK=0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+
 export ST_LIGHTER=$STLIGHTER_PROXY_ADDRESS
 export LT_ZEN=$LT_ZEN_HORIZEN
+
+
+forge verify-contract \
+  --rpc-url $HORIZEN_RPC \
+  --verifier blockscout \
+  --verifier-url $HORIZE_VERIFY \
+  $ST_LIGHTER_IMPL \
+  src/stlighter/StLighter.sol:StLighter
+
+forge verify-contract \
+  --rpc-url $HORIZEN_RPC \
+  --verifier blockscout \
+  --verifier-url $HORIZE_VERIFY \
+  $LT_ZEN_HORIZEN \
+  src/stlighter/LtZEN.sol:LtZEN
 ```
 
 - [ ] `ltZen.minter() == STLIGHTER_PROXY_ADDRESS`
@@ -187,9 +207,16 @@ cast call $LT_ZEN_HORIZEN 'owner()(address)' --rpc-url $HORIZEN_RPC
 ```bash
 forge script script/DeployInboundStation.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
-# → set INBOUND_STATION_ADDRESS
-export INBOUND_STATION_ADDRESS=0x…
+
+
+export INBOUND_STATION_ADDRESS=0xe2721EA4955D4d4E7C060ff9a934BE4353ed87d0
 export IN_STATION=$INBOUND_STATION_ADDRESS
+forge verify-contract \
+  --rpc-url $HORIZEN_RPC \
+  --verifier blockscout \
+  --verifier-url $HORIZE_VERIFY \
+  $IN_STATION \
+  src/stlighter/station/InboundStation.sol:InboundStation
 ```
 
 - [ ] `zen()` / `zenOft()` = ZenTokenOFT
@@ -282,10 +309,24 @@ Requires ZEN OFT path live (project) and Part 1.1 complete. Circular deploy orde
 forge script script/DeployEgressStation.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 
-export EGRESS_STATION_ADDRESS=0x…
-export ZEN_OFT_STATION_BRIDGE_ADDRESS=0x…
+export EGRESS_STATION_ADDRESS=0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
+export ZEN_OFT_STATION_BRIDGE_ADDRESS=0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
 export EG=$EGRESS_STATION_ADDRESS
 export BR=$ZEN_OFT_STATION_BRIDGE_ADDRESS
+
+forge verify-contract \
+  --rpc-url $HORIZEN_RPC \
+  --verifier blockscout \
+  --verifier-url $HORIZE_VERIFY \
+  $EG \
+  src/stlighter/station/EgressStation.sol:EgressStation
+forge verify-contract \
+  --rpc-url $HORIZEN_RPC \
+  --verifier blockscout \
+  --verifier-url $HORIZE_VERIFY \
+  $BR \
+  src/stlighter/station/ZenOftStationBridge.sol:ZenOftStationBridge
+
 ```
 
 If `GOVERNANCE_ADDRESS ≠ $DEPLOYER`, accept Ownable2Step on Egress after broadcast.

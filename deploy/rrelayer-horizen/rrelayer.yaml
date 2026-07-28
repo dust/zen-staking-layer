@@ -16,10 +16,51 @@ networks:
     super_fast: 2
   max_gas_price_multiplier: 4
   gas_provider: CUSTOM
+  api_keys:
+    - relayer: "${RRELAYER_EOA_ADDRESS}"
+      keys:
+        - "${RRELAYER_API_KEY}"
+  permissions:
+      - relayers:
+          - "${RRELAYER_EOA_ADDRESS}" 
+        allowlist:
+          - "${NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS}"
+          - "${NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS}"
+          - "${NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS}"
+        disable_native_transfer: false
+        disable_personal_sign: true
+        disable_typed_data_sign: true
+- name: horize_mainnet
+  chain_id: 26514
+  provider_urls:
+  - https://horizen.calderachain.xyz/http
+  block_explorer_url: https://horizen.calderaexplorer.xyz/
+  enable_sending_blobs: true
+  gas_bump_blocks_every:
+    slow: 10
+    medium: 6
+    fast: 4
+    super_fast: 2
+  max_gas_price_multiplier: 4
+  gas_provider: CUSTOM
+  api_keys:
+    - relayer: "${RRELAYER_EOA_ADDRESS}"
+      keys:
+        - "${RRELAYER_API_KEY}"
+  permissions:
+      - relayers:
+          - "${RRELAYER_EOA_ADDRESS}" 
+        allowlist:
+          - "${NEXT_PUBLIC_HORIZEN_STLIGHTER_ADDRESS}"
+          - "${NEXT_PUBLIC_HORIZEN_INBOUND_STATION_ADDRESS}"
+          - "${NEXT_PUBLIC_HORIZEN_EGRESS_STATION_ADDRESS}"
+        disable_native_transfer: false
+        disable_personal_sign: true
+        disable_typed_data_sign: true
 gas_providers:
   custom:
     endpoint: "http://gas-stub:8787"
-    supported_chains: [2651420]
+    supported_chains: [2651420,26514]
 
 api_config:
   port: 8000
