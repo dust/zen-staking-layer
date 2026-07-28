@@ -611,6 +611,8 @@ Add to `ltzen-frontend/env.local.example` when Wave B UI lands — **done**.
 
 ## Appendix — Mainnet delta
 
+**Full mainnet checklist** (stLighter-only; skip MockZEN / fresh ZEN OFT): [`stLighter-mainnet-deploy-checklist.md`](./stLighter-mainnet-deploy-checklist.md).
+
 When promoting to mainnet:
 
 - Prefer Timelock for StLighter / ltZEN / OFT / Station / Bridge ownership ([`DeployStLighterTimelock.s.sol`](../script/DeployStLighterTimelock.s.sol))
