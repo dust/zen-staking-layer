@@ -34,6 +34,10 @@ import {
   signRedeemWithSig,
 } from "@/lib/eip712";
 import { buildOftSendLzReceiveOptions } from "@/lib/stationCompose";
+import {
+  DEFAULT_OFT_DECIMAL_CONVERSION_RATE,
+  truncateOftAmountLD,
+} from "@/lib/oftDust";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 
@@ -143,6 +147,27 @@ export function useRedeemToBase() {
     query: { enabled: Boolean(account && egress), refetchInterval: 5_000 },
   });
   const credited = (creditedQuery.data as bigint | undefined) ?? 0n;
+
+  const decimalConversionRateQuery = useReadContract({
+    chainId: HUB_CHAIN_ID,
+    address: bridge,
+    abi: abis.zenOftStationBridge,
+    functionName: "decimalConversionRate",
+    query: { enabled: Boolean(bridge) },
+  });
+  const decimalConversionRate =
+    (decimalConversionRateQuery.data as bigint | undefined) ??
+    DEFAULT_OFT_DECIMAL_CONVERSION_RATE;
+
+  const previewBaseReceive = useMemo(() => {
+    if (previewAssets === undefined) return undefined;
+    return truncateOftAmountLD(previewAssets, decimalConversionRate);
+  }, [previewAssets, decimalConversionRate]);
+
+  const creditedBaseReceive = useMemo(() => {
+    if (credited <= 0n) return undefined;
+    return truncateOftAmountLD(credited, decimalConversionRate);
+  }, [credited, decimalConversionRate]);
 
   const baseZenBalanceQuery = useReadContract({
     chainId: SPOKE_CHAIN_ID,
@@ -451,12 +476,15 @@ export function useRedeemToBase() {
     setSharesWei,
     ltBalance,
     previewAssets,
+    previewBaseReceive,
     maxFeeZen,
+    decimalConversionRate,
     dest: effectiveDest,
     setDest,
     destConfirmed,
     confirmDest,
     credited,
+    creditedBaseReceive,
     netAssets,
     redeemTxHash,
     bridgeTxHash,

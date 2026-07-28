@@ -88,11 +88,20 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
     if (destOnBase == address(0)) revert ZenOftStationBridge__ZeroAddress();
     if (zen.balanceOf(address(this)) < amount) revert ZenOftStationBridge__InsufficientBalance();
 
-    if (oft.approvalRequired()) {
-      zen.forceApprove(address(oft), amount);
+    uint256 dust = amount % decimalConversionRate;
+    uint256 sendAmount = amount - dust;
+    if (sendAmount == 0) revert ZenOftStationBridge__ZeroAmount();
+
+    if (dust != 0) {
+      zen.safeTransfer(egress, dust);
+      EgressStation(payable(egress)).onBridgeDust(bridgeId, dust);
     }
 
-    SendParam memory sendParam = _buildSendParam(amount, destOnBase, extraOptions);
+    if (oft.approvalRequired()) {
+      zen.forceApprove(address(oft), sendAmount);
+    }
+
+    SendParam memory sendParam = _buildSendParam(sendAmount, destOnBase, extraOptions);
 
     MessagingFee memory fee = oft.quoteSend(sendParam, false);
     if (msg.value < fee.nativeFee) revert ZenOftStationBridge__InsufficientNativeFee();
@@ -124,18 +133,17 @@ contract ZenOftStationBridge is IStationBridge, Ownable2Step, ReentrancyGuard {
     return oft.quoteSend(_buildSendParam(amount, destOnBase, extraOptions), false).nativeFee;
   }
 
-  /// @dev minAmountLD = amount minus sub-sharedDecimals dust only (rejects future OFT fee haircuts).
+  /// @dev Caller passes dust-truncated `amount`; minAmountLD matches (rejects future OFT fee haircuts).
   function _buildSendParam(uint256 amount, address destOnBase, bytes calldata extraOptions)
     internal
     view
     returns (SendParam memory)
   {
-    uint256 minAmountLD = amount - (amount % decimalConversionRate);
     return SendParam({
       dstEid: dstEid,
       to: bytes32(uint256(uint160(destOnBase))),
       amountLD: amount,
-      minAmountLD: minAmountLD,
+      minAmountLD: amount,
       extraOptions: extraOptions,
       composeMsg: bytes(""),
       oftCmd: bytes("")

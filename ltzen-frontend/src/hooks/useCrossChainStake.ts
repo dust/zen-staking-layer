@@ -43,6 +43,7 @@ import {
   buildOftSendComposeOptions,
   encodeStationComposePayloadV1,
 } from "@/lib/stationCompose";
+import { truncateOftAmountLD } from "@/lib/oftDust";
 import { resolveGaslessFeeRelayer } from "@/config/relayer";
 import { createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
@@ -295,11 +296,12 @@ export function useCrossChainStake() {
         signature: creditSig!,
       });
       const extraOptions = buildOftSendComposeOptions();
+      const bridgeAmountLD = truncateOftAmountLD(amountWei!);
       const sendParam = {
         dstEid: dstEid!,
         to: addressToBytes32(inboundStation!),
         amountLD: amountWei!,
-        minAmountLD: amountWei!,
+        minAmountLD: bridgeAmountLD,
         extraOptions,
         composeMsg,
         oftCmd: "0x" as Hex,

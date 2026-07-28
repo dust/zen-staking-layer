@@ -36,6 +36,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
   bytes32 private constant REASON_REDEEM = keccak256("REDEEM");
   bytes32 private constant REASON_BRIDGE = keccak256("BRIDGE");
   bytes32 private constant REASON_REFUND = keccak256("REFUND");
+  bytes32 private constant REASON_BRIDGE_DUST = keccak256("BRIDGE_DUST");
   bytes32 private constant REASON_WITHDRAW = keccak256("WITHDRAW");
 
   struct BridgePending {
@@ -66,6 +67,7 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
     uint256 feeZen
   );
   event BridgeRefunded(bytes32 indexed bridgeId, address indexed owner, uint256 amount);
+  event BridgeDustReturned(bytes32 indexed bridgeId, address indexed owner, uint256 dust);
   event BridgeCompleted(bytes32 indexed bridgeId, address indexed owner, uint256 amount);
   event WithdrawToHorizen(address indexed owner, address indexed to, uint256 assets);
   event NativeSwept(address indexed to, uint256 amount);
@@ -194,6 +196,18 @@ contract EgressStation is Ownable2Step, Pausable, ReentrancyGuard, EIP712, Nonce
     // Adapter must have transferred ZEN back to this station before calling.
     _credit(owner, amount, REASON_REFUND);
     emit BridgeRefunded(bridgeId, owner, amount);
+  }
+
+  /// @notice Credit OFT dust returned by the bridge adapter (sub–shared-decimal wei).
+  function onBridgeDust(bytes32 bridgeId, uint256 dust) external {
+    if (msg.sender != address(bridge)) revert EgressStation__UnauthorizedBridge();
+    if (dust == 0) revert EgressStation__ZeroAmount();
+    BridgePending storage p = pending[bridgeId];
+    if (!p.active) revert EgressStation__UnknownBridgeId();
+
+    address owner = p.owner;
+    _credit(owner, dust, REASON_BRIDGE_DUST);
+    emit BridgeDustReturned(bridgeId, owner, dust);
   }
 
   function onBridgeComplete(bytes32 bridgeId) external {

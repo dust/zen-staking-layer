@@ -190,7 +190,7 @@ export const copy = {
     stepDone: "Done",
     amountLabel: "Amount (ltZEN)",
     holdings: "You hold",
-    youReceiveEst: "Est. ZEN (before fee)",
+    youReceiveEst: "Est. ZEN on Base (6 dp OFT precision, before fee)",
     destLabel: "Base destination (B1)",
     destNote:
       "ZEN unlocks on Base to this address only. Changing it requires a new signature. Double-check before continuing.",

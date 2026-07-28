@@ -171,15 +171,19 @@ contract ZenOftStationBridgeTest is Test {
     bytes memory sig = _sign(structHash);
 
     uint256 rate = bridge.decimalConversionRate();
-    uint256 expectedMin = assets - (assets % rate);
+    uint256 dust = assets % rate;
+    uint256 sendAmount = assets - dust;
     uint256 fee = bridge.quoteBridgeNativeFee(assets, dest, "");
     vm.deal(relayer, fee);
 
     vm.prank(relayer);
     station.bridgeToBase{value: fee}(assets, dest, 0, 0, relayer, owner, deadline, sig, "");
 
-    assertEq(oft.lastMinAmount(), expectedMin);
+    assertEq(oft.lastAmount(), sendAmount);
+    assertEq(oft.lastMinAmount(), sendAmount);
+    assertEq(station.credited(owner), dust);
     assertEq(station.pendingTotal(), 0);
+    assertEq(oft.balanceOf(address(bridge)), 0);
   }
 
   function test_BridgeRevertsWhenOftFeeHaircutBelowMin() public {

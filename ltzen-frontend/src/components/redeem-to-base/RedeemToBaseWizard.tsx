@@ -180,6 +180,14 @@ export function RedeemToBaseWizard() {
           <span className="font-mono text-brand-green">
             {formatZenAmount(x.credited, 4)} {copy.units.zen}
           </span>
+          {x.creditedBaseReceive !== undefined && x.creditedBaseReceive < x.credited ? (
+            <p className="mt-1 text-xs text-zinc-400">
+              {copy.redeemToBase.youReceiveEst}:{" "}
+              <span className="font-mono text-zinc-200">
+                {formatZenAmount(x.creditedBaseReceive, 6)}
+              </span>
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -217,8 +225,8 @@ export function RedeemToBaseWizard() {
             </div>
             <p className="mt-2 text-xs text-zinc-500">
               {copy.redeemToBase.youReceiveEst}:{" "}
-              {x.previewAssets !== undefined
-                ? `${formatZenAmount(x.previewAssets, 4)} ${copy.units.zen}`
+              {x.previewBaseReceive !== undefined
+                ? `${formatZenAmount(x.previewBaseReceive, 6)}`
                 : "—"}
             </p>
           </div>
