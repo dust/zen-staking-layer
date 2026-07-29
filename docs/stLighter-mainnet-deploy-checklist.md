@@ -134,12 +134,21 @@ Copy send/receive libs + ULN from **Horizen ZenTokenOFT** (and Base Adapter for 
 export HORIZEN_LZ_SEND_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
   $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC)
 
+# NR==1 keeps the address; the dropped second value is `isDefault` — read it unpiped when you
+# need to know whether the OApp pinned the lib or is riding the pathway default.
 export HORIZEN_LZ_RECEIVE_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
   $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC | awk 'NR==1')
 
 cast call $LZ_ENDPOINT_HORIZEN "getConfig(address,address,uint32,uint32)(bytes)" \
   $ZEN_TOKEN_ADDRESS $HORIZEN_LZ_SEND_LIB $BASE_EID 2 --rpc-url $HORIZEN_RPC
 # Decode confirmations + requiredDVNs → LZ_CONFIRMATIONS, DVN_ADDRESSES
+# Endpoint getters return the *effective* value (falling back to the pathway default), so they
+# never reveal whether the OApp actually pinned anything. Check the override directly:
+cast call $LZ_ENDPOINT_HORIZEN "isDefaultSendLibrary(address,uint32)(bool)" \
+  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC   # false ⇒ ZEN pinned its own send lib
+cast call $HORIZEN_LZ_SEND_LIB \
+  "getAppUlnConfig(address,uint32)((uint64,uint8,uint8,uint8,address[],address[]))" \
+  $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC   # non-zero ⇒ real override, safe to copy
 export HORIZEN_LZ_CONFIRMATIONS=3
 export HORIZEN_DVN_ADDRESSES=0x282b3386571f7f794450d5789911a9804fa346b4,0x84a410a8a912e333b957680998a76e526f98e207,0xdd7b5e1db4aafd5c8ec3b764efb8ed265aa5445b
 
@@ -172,7 +181,7 @@ These values are applied only to **new ltZEN** OApps in Part 1 (ZEN OApps alread
 | [`DeployInboundStation.s.sol`](../script/DeployInboundStation.s.sol) | Horizen | Wave A Station |
 | [`DeployStLighterBase.s.sol`](../script/DeployStLighterBase.s.sol) | Base | LtZEN spoke |
 | [`WireStLighterOFT.s.sol`](../script/WireStLighterOFT.s.sol) | both | ltZEN `setPeer` |
-| [`ConfigureStLighterOFTDVN.s.sol`](../script/ConfigureStLighterOFTDVN.s.sol) | both | ULN for ltZEN |
+| [`ConfigureStLighterOFTDVN.s.sol`](../script/ConfigureStLighterOFTDVN.s.sol) | both | Pin MessageLibs + ULN for ltZEN |
 | [`DeployEgressStation.s.sol`](../script/DeployEgressStation.s.sol) | Horizen | Egress + ZenOftStationBridge + `setBridge` |
 
 **Skip on mainnet**: `DeployZenTokenOFT`, `DeployZenStaker`, `DeployMockZEN`, `DeployZenTokenOFTAdapter`, `WireZenOft`.
@@ -294,6 +303,10 @@ cast call $LT_ZEN_BASE "peers(uint32)(bytes32)" $HORIZEN_EID --rpc-url $BASE_RPC
 
 **ULN** — reuse Part 0 values from ZenTokenOFT / Adapter; only change `OAPP_LOCAL` to local ltZEN.
 
+ZEN OFT / Adapter **pin their own ULN** — verified on-chain 2026-07-29: `isDefaultSendLibrary($ZEN_TOKEN_ADDRESS, $BASE_EID) == false`, and `getAppUlnConfig` equals `getUlnConfig` on both chains. So §0.3's `HORIZEN_DVN_ADDRESSES` / `BASE_DVN_ADDRESSES` are genuine per-OApp overrides, not pathway defaults, and ltZEN must be pinned to the **same** sets on **both** chains. DVN verification requires the source send set and the destination receive set to be the same operators — a half-configured pathway (one chain pinned, the other on defaults) stalls messages pending ULN in **both** directions, because a DVN the destination requires is never assigned or paid on the source.
+
+> LayerZero Scan's *OApp Configuration* panel is **not reliable on Horizen**: it renders `sendLibrary: []` plus a DVN set containing `0x6268950b…`, which is a Horizen **default**-set member that ZEN deliberately does not use. Trust `cast` (`isDefaultSendLibrary` / `getAppUlnConfig`), not the panel.
+
 ```bash
 # Base ltZEN
 # LZ_SEND_LIB / LZ_RECEIVE_LIB / LZ_CONFIRMATIONS / LZ_CONFIRMATIONS = Base Adapter 
@@ -317,14 +330,62 @@ export LZ_SEND_LIB=$HORIZEN_LZ_SEND_LIB
 export LZ_RECEIVE_LIB=$HORIZEN_LZ_RECEIVE_LIB
 export LZ_CONFIRMATIONS=$HORIZEN_LZ_CONFIRMATIONS
 export DVN_ADDRESSES=$HORIZEN_DVN_ADDRESSES
-###  未rvrf **不能执行**， 因为 ZenTokenOFT & USDF 都没有设置 LZ_SEND_LIB
 
+# Pre-flight — script pins libs (idempotent) then setConfig. LZ_SEND_LIB was read from ZEN's
+# custom override; if the pathway default lib differs, confirm targets before broadcast.
+cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
+  $LT_ZEN_HORIZEN $BASE_EID --rpc-url $HORIZEN_RPC   # must equal $HORIZEN_LZ_SEND_LIB
+cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
+  $LT_ZEN_HORIZEN $BASE_EID --rpc-url $HORIZEN_RPC   # address must equal $HORIZEN_LZ_RECEIVE_LIB
+
+# Simulate first (no --broadcast): surfaces LZ_Unauthorized / LZ_ULN_Unsorted before spending gas.
+# Re-check the exports above — the Base block left DVN_ADDRESSES / LZ_ENDPOINT on Base values.
 forge script script/ConfigureStLighterOFTDVN.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 ```
 
+Verified 2026-07-29 on Horizen: pathway **defaults equal the libs ZEN pinned** — SendUln302
+`0xC39161c743D0307EB9BCc9FEF03eeb9Dc4802de7`, ReceiveUln302 `0xe1844c5D63a9543023008D332Bd3d2e6f1FE1043`
+— so ULN written via `ConfigureStLighterOFTDVN` applied while ltZEN still rode the default.
+Same day: `setSendLibrary` / `setReceiveLibrary` (gracePeriod `0`) on **both** chains pinned ltZEN to
+those same addresses — `isDefault == false`, matching ZEN. Future MessageLib upgrades are manual.
+
+**Verify the writes landed on both chains** — `getAppUlnConfig` (raw override, not merged) must be
+non-zero and match the chain's DVN set; all-zero means the config went to the wrong library.
+
+```bash
+export ULN_SIG="getAppUlnConfig(address,uint32)((uint64,uint8,uint8,uint8,address[],address[]))"
+
+cast call $HORIZEN_LZ_SEND_LIB "$ULN_SIG" $LT_ZEN_HORIZEN $BASE_EID --rpc-url $HORIZEN_RPC
+cast call $HORIZEN_LZ_RECEIVE_LIB "$ULN_SIG" $LT_ZEN_HORIZEN $BASE_EID --rpc-url $HORIZEN_RPC
+cast call $BASE_LZ_SEND_LIB "$ULN_SIG" $LT_ZEN_BASE $HORIZEN_EID --rpc-url $BASE_RPC
+cast call $BASE_LZ_RECEIVE_LIB "$ULN_SIG" $LT_ZEN_BASE $HORIZEN_EID --rpc-url $BASE_RPC
+```
+
+**Who may call `setConfig`** — the endpoint authorizes the OApp itself or its **delegate**, not its
+owner (`EndpointV2._assertAuthorized`). `LtZEN` is constructed with `_owner = deployer`, which makes
+the deployer the delegate (`OAppCore` calls `endpoint.setDelegate`), and the later
+`transferOwnership(governance)` does **not** move the delegate. So `ConfigureStLighterOFTDVN` runs
+fine from `$PRIVATE_KEY` even after governance handover — and the deployer EOA keeps LayerZero
+authority (libraries, DVN set, plus `skip` / `nilify` / `burn` / `clear` on inbound nonces)
+indefinitely. Hand it over **after** the ULN config is verified, since `setDelegate` is `onlyOwner`
+and every later DVN change must then be routed through governance:
+
+```bash
+cast call $LT_ZEN_HORIZEN 'owner()(address)' --rpc-url $HORIZEN_RPC
+cast call $LZ_ENDPOINT_HORIZEN 'delegates(address)(address)' $LT_ZEN_HORIZEN --rpc-url $HORIZEN_RPC
+# then, from the owner: ltZen.setDelegate(<governance>) on each chain
+```
+
 - [ ] Peers non-zero both ways
-- [ ] After first ltZEN bridge smoke: [LayerZero Scan](https://layerzeroscan.com/) Delivered (not waiting on ULN)
+- [x] Horizen ltZEN libs == ULN write target (`0xC39161c7…` / `0xe1844c5D…`) — ✅ 2026-07-29
+- [x] Base ltZEN libs == `$BASE_LZ_SEND_LIB` / `$BASE_LZ_RECEIVE_LIB` — ✅ 2026-07-29
+- [x] `getAppUlnConfig` non-zero on all four libs; `confirmations == 3`, `requiredDVNCount == 3`, no optional DVNs — ✅ 2026-07-29
+- [x] Horizen set == `$HORIZEN_DVN_ADDRESSES`, Base set == `$BASE_DVN_ADDRESSES` (same operators as ZEN's proven pathway) — ✅ 2026-07-29
+- [x] Both chains ULN pinned — **never leave one pinned and the other on defaults**, asymmetric DVN sets stall messages pending ULN
+- [x] `setSendLibrary` / `setReceiveLibrary` on both chains (gracePeriod `0`) — `isDefaultSendLibrary` / receive `isDefault` == **false**; same lib addresses as before; ULN overrides still present — ✅ 2026-07-29 (aligned with ZEN; pathway-default library migration no longer drops ULN)
+- [ ] After first ltZEN bridge smoke: [LayerZero Scan](https://layerzeroscan.com/) Delivered (not waiting on ULN) — do **not** judge config from Scan's OApp panel on Horizen
+- [ ] Post-config: ltZEN LayerZero delegate moved from the deployer EOA to governance (both chains)
 
 ### 1.5 EgressStation + ZenOftStationBridge
 
@@ -623,6 +684,8 @@ docker compose exec rrelayer wget -qO- http://gas-stub:8787/26514
 
 - Timelock + multisig hard-cutover (stage-1 owner is EOA `0x9166…3578`; address may be labeled “Timelock” in older notes but has **no contract code**)
 - Optional Bridge redeploy for on-chain dust-safe `quoteBridgeNativeFee` — §1.5.1 (BFF already truncates)
+- ltZEN LayerZero **delegate is still the deployer EOA** on both chains (`transferOwnership` does not move it) — retains library / DVN config plus inbound `skip` / `nilify` / `burn` / `clear`; hand to the owner EOA via `setDelegate` — §1.4
+- After pin: future MessageLib upgrades for ltZEN are **manual** (`setSendLibrary` / `setReceiveLibrary` + grace period) — same ops model as ZenTokenOFT; no longer auto-follow pathway default library
 - Post-send LZ failure / partial refund on egress path: ops escalation only ([ADR §2](./stLighter-station-compose-adr.md))
 - `composeCaller` assumed = Horizen LZ Endpoint; if MessagingComposer differs, set via InboundStation owner
 - rrelayer yaml in repo may still default to testnet `2651420` — update for mainnet host before go-live

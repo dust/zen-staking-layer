@@ -10,10 +10,19 @@ import {
   ILayerZeroEndpointV2
 } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 
-/// @notice Configures LayerZero ULN (DVN + confirmations) for an OApp (ltZEN or ZEN OFT/adapter).
+/// @notice Pins MessageLibs + configures LayerZero ULN (DVN + confirmations) for an OApp
+/// (ltZEN or ZEN OFT/adapter).
+///
+/// Order in one broadcast session (separate txs, not one atomic tx):
+///   1. `setSendLibrary` / `setReceiveLibrary` — pin libs so pathway-default migrations cannot
+///      silently drop the ULN override written below (`isDefault` → false).
+///   2. `setConfig` on send + receive libs — ULN for `PEER_EID`.
+///
+/// Lib pin is idempotent: skipped when already set to the target address (avoids `LZ_SameValue`).
+/// From pathway default → concrete lib, receive grace period must be `0`.
 ///
 /// Copy values from a live Horizen ↔ Base OFT path — see `docs/stLighter-oft-reference.md`
-/// (testnet table + `getConfig` commands) and `docs/stLighter-deploy-checklist.md` §1 / §C1.
+/// and `docs/stLighter-deploy-checklist.md` §1 / §C1.
 ///
 /// Required env vars:
 ///   OAPP_LOCAL         — OApp to configure (preferred); falls back to `LT_ZEN_LOCAL`
@@ -23,11 +32,13 @@ import {
 ///   LZ_RECEIVE_LIB     — receive library (e.g. ReceiveUln302) — must be THIS chain's lib
 ///   LZ_CONFIRMATIONS   — block confirmations (uint64)
 ///   DVN_ADDRESSES      — comma-separated required DVN addresses (sorted ascending)
-///   PRIVATE_KEY        — OApp owner (timelock executor / governance)
+///   PRIVATE_KEY        — Endpoint delegate for the OApp (often deployer EOA; not Ownable owner)
 ///
 /// Optional:
 ///   DVN_OPTIONAL_ADDRESSES — comma-separated optional DVNs (default empty)
 ///   DVN_OPTIONAL_THRESHOLD — optional DVN threshold (default 0)
+///   LZ_RECEIVE_LIB_GRACE   — blocks of grace when switching between two non-default receive libs
+///                            (default 0). Ignored when leaving pathway default (must be 0).
 contract ConfigureStLighterOFTDVN is Script {
   uint32 internal constant CONFIG_TYPE_ULN = 2;
 
@@ -44,6 +55,7 @@ contract ConfigureStLighterOFTDVN is Script {
     address[] memory optionalDvns =
       _parseAddressList(vm.envOr("DVN_OPTIONAL_ADDRESSES", string("")));
     uint8 optionalThreshold = uint8(vm.envOr("DVN_OPTIONAL_THRESHOLD", uint256(0)));
+    uint256 receiveGrace = vm.envOr("LZ_RECEIVE_LIB_GRACE", uint256(0));
     uint256 ownerKey = vm.envUint("PRIVATE_KEY");
 
     UlnConfig memory ulnConfig = UlnConfig({
@@ -63,13 +75,28 @@ contract ConfigureStLighterOFTDVN is Script {
 
     ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(endpointAddr);
 
+    bool pinSend = endpoint.isDefaultSendLibrary(oapp, peerEid)
+      || endpoint.getSendLibrary(oapp, peerEid) != sendLib;
+    (address currentReceiveLib, bool receiveIsDefault) = endpoint.getReceiveLibrary(oapp, peerEid);
+    bool pinReceive = receiveIsDefault || currentReceiveLib != receiveLib;
+    // Pathway default → concrete lib: Endpoint requires gracePeriod == 0.
+    uint256 grace = receiveIsDefault ? 0 : receiveGrace;
+
     vm.startBroadcast(ownerKey);
+    if (pinSend) {
+      endpoint.setSendLibrary(oapp, peerEid, sendLib);
+    }
+    if (pinReceive) {
+      endpoint.setReceiveLibrary(oapp, peerEid, receiveLib, grace);
+    }
     endpoint.setConfig(oapp, sendLib, sendParams);
     endpoint.setConfig(oapp, receiveLib, receiveParams);
     vm.stopBroadcast();
 
-    console2.log("ULN configured for OApp:", oapp);
+    console2.log("Configured OApp:      ", oapp);
     console2.log("Peer eid:             ", peerEid);
+    console2.log("Send lib pinned:      ", pinSend);
+    console2.log("Receive lib pinned:   ", pinReceive);
     console2.log("Confirmations:        ", confirmations);
     console2.log("Required DVNs:        ", requiredDvns.length);
   }
