@@ -80,7 +80,7 @@ P0-A 下 gasless deposit（`DirectContractRelayer`，用户代发一笔 tx）仍
 | quote stale | 签名后费用上涨 → `409 fee_quote_stale`，可重签 | [x] 单测 `assertSignedMaxCoversFee`；浏览器故意抬价可选 |
 | floor | 断价源或拔 RPC 时 `rateSource=floor` + UI 提示 | [ ] 可选 |
 | `FEE_PROFIT_BPS>0` | fee ≥ max(cost, basis×bps)；UI「含服务费」 | [x] 单测 |
-| withdraw* | max/fee 为 0 | [x] 单测 |
+| withdraw* | max/fee 为 0；**Direct only**（BFF 拒绝） | [x] 产品路径；BFF 已拒 |
 | bridge 腿 | `feeZen` 含 LZ；relayer 付 `msg.value`；dusty amount 可过 | [x] 主网 E2E |
 
 ### 主网 E2E（2026-07-29）— Wave B `bridgeToBase`（成本导向 fee）

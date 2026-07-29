@@ -7,7 +7,6 @@ import {
   BRIDGE_TO_BASE_TYPES,
   DEPOSIT_WITH_SIG_TYPES,
   REDEEM_WITH_SIG_TYPES,
-  WITHDRAW_TO_HORIZEN_TYPES,
 } from "@/lib/eip712";
 import type { RelayRequest } from "@/relayer/types";
 import {
@@ -36,8 +35,12 @@ const SUPPORTED_KINDS = new Set<RelayRequest["kind"]>([
   "depositWithSig",
   "redeemWithSig",
   "redeemAndCredit",
-  "withdrawToHorizen",
   "bridgeToBase",
+]);
+
+/** Station escape hatches — Direct only; BFF/rrelayer does not serve them. */
+const DIRECT_ONLY_KINDS = new Set<RelayRequest["kind"]>([
+  "withdrawToHorizen",
   "egressWithdrawToHorizen",
 ]);
 
@@ -80,20 +83,15 @@ function assertAddress(label: string, value: string): asserts value is Address {
   if (!isAddress(value)) throw new Error(`invalid ${label}`);
 }
 
-function assertZeroMaxFee(req: RelayRequest): void {
-  if (req.maxFeeZen !== "0" && req.maxFeeZen !== "") {
-    try {
-      if (BigInt(req.maxFeeZen) !== 0n) throw new Error("maxFeeZen must be 0");
-    } catch {
-      throw new Error("maxFeeZen must be 0 for this kind");
-    }
-  }
-}
-
 /** Sync request guards (chain, contract, shape). */
 export function assertRequest(req: RelayRequest): void {
   if (req.chainId !== HUB_CHAIN_ID) {
     throw new Error(`unsupported chainId ${req.chainId}`);
+  }
+  if (DIRECT_ONLY_KINDS.has(req.kind)) {
+    throw new Error(
+      `${req.kind} is not served by BFF/rrelayer — use Direct wallet submit for the escape hatch`,
+    );
   }
   if (!SUPPORTED_KINDS.has(req.kind)) {
     throw new Error(`unsupported relay kind: ${req.kind}`);
@@ -108,12 +106,7 @@ export function assertRequest(req: RelayRequest): void {
   assertAddress("relayer", req.relayer);
 
   parsePositiveBigInt("amount", req.amount);
-
-  if (req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen") {
-    assertZeroMaxFee(req);
-  } else {
-    parsePositiveBigInt("maxFeeZen", req.maxFeeZen);
-  }
+  parsePositiveBigInt("maxFeeZen", req.maxFeeZen);
 
   if (!Number.isFinite(req.deadline) || req.deadline <= 0) {
     throw new Error("invalid deadline");
@@ -156,18 +149,7 @@ export function assertRequest(req: RelayRequest): void {
     }
   }
 
-  if (req.kind === "withdrawToHorizen") {
-    const configured = inboundStationAddress();
-    if (configured && req.verifyingContract.toLowerCase() !== configured.toLowerCase()) {
-      throw new Error("verifyingContract mismatch (InboundStation)");
-    }
-  }
-
-  if (
-    req.kind === "redeemAndCredit" ||
-    req.kind === "bridgeToBase" ||
-    req.kind === "egressWithdrawToHorizen"
-  ) {
+  if (req.kind === "redeemAndCredit" || req.kind === "bridgeToBase") {
     const configured = egressStationAddress();
     if (configured && req.verifyingContract.toLowerCase() !== configured.toLowerCase()) {
       throw new Error("verifyingContract mismatch (EgressStation)");
@@ -215,58 +197,6 @@ async function verifySignature(
   const assetsOrShares = BigInt(req.amount);
   const maxFeeZen = BigInt(req.maxFeeZen || "0");
   const deadline = BigInt(req.deadline);
-
-  if (req.kind === "withdrawToHorizen") {
-    const domain = await readEip712Domain(client, req.verifyingContract, InboundStationAbi);
-    const chainNonce = (await client.readContract({
-      address: req.verifyingContract,
-      abi: InboundStationAbi,
-      functionName: "nonces",
-      args: [req.user],
-    })) as bigint;
-    const valid = await verifyTypedData({
-      address: req.user,
-      domain,
-      types: WITHDRAW_TO_HORIZEN_TYPES,
-      primaryType: "WithdrawToHorizen",
-      message: {
-        assets: assetsOrShares,
-        to: req.receiver,
-        owner: req.user,
-        nonce: chainNonce,
-        deadline,
-      },
-      signature: req.signature,
-    });
-    if (!valid) throw new Error("invalid WithdrawToHorizen signature");
-    return;
-  }
-
-  if (req.kind === "egressWithdrawToHorizen") {
-    const domain = await readEip712Domain(client, req.verifyingContract, EgressStationAbi);
-    const chainNonce = (await client.readContract({
-      address: req.verifyingContract,
-      abi: EgressStationAbi,
-      functionName: "nonces",
-      args: [req.user],
-    })) as bigint;
-    const valid = await verifyTypedData({
-      address: req.user,
-      domain,
-      types: WITHDRAW_TO_HORIZEN_TYPES,
-      primaryType: "WithdrawToHorizen",
-      message: {
-        assets: assetsOrShares,
-        to: req.receiver,
-        owner: req.user,
-        nonce: chainNonce,
-        deadline,
-      },
-      signature: req.signature,
-    });
-    if (!valid) throw new Error("invalid Egress WithdrawToHorizen signature");
-    return;
-  }
 
   if (req.kind === "bridgeToBase") {
     const domain = await readEip712Domain(client, req.verifyingContract, EgressStationAbi);
@@ -373,30 +303,6 @@ async function assertChainState(
   const now = (await client.getBlock()).timestamp;
   if (BigInt(req.deadline) < now) throw new Error("signature deadline expired");
 
-  if (req.kind === "withdrawToHorizen") {
-    if (feeZen !== 0n) throw new Error("withdraw feeZen must be 0");
-    const credited = (await client.readContract({
-      address: req.verifyingContract,
-      abi: InboundStationAbi,
-      functionName: "credited",
-      args: [req.user],
-    })) as bigint;
-    if (credited < BigInt(req.amount)) throw new Error("insufficient station credit");
-    return;
-  }
-
-  if (req.kind === "egressWithdrawToHorizen") {
-    if (feeZen !== 0n) throw new Error("withdraw feeZen must be 0");
-    const credited = (await client.readContract({
-      address: req.verifyingContract,
-      abi: EgressStationAbi,
-      functionName: "credited",
-      args: [req.user],
-    })) as bigint;
-    if (credited < BigInt(req.amount)) throw new Error("insufficient egress credit");
-    return;
-  }
-
   if (req.kind === "bridgeToBase") {
     assertFeeLimits(feeZen, BigInt(req.maxFeeZen), basis);
     const credited = (await client.readContract({
@@ -457,12 +363,7 @@ async function simulateMetaTx(
 ): Promise<void> {
   const { publicClient } = await getRrelayerClients();
   const call = metaTxContractCall(req, feeZen);
-  const abi =
-    call.target === "stLighter"
-      ? StLighterAbi
-      : call.target === "inboundStation"
-        ? InboundStationAbi
-        : EgressStationAbi;
+  const abi = call.target === "stLighter" ? StLighterAbi : EgressStationAbi;
   try {
     await publicClient.simulateContract({
       address: req.verifyingContract,

@@ -46,7 +46,7 @@ import {
 } from "@/lib/stationCompose";
 import { truncateOftAmountLD } from "@/lib/oftDust";
 import { resolveGaslessFeeRelayer } from "@/config/relayer";
-import { createRelayer, type RelayResult } from "@/relayer";
+import { createDirectRelayer, createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 import { useFeeQuote } from "./useFeeQuote";
 
@@ -489,7 +489,7 @@ export function useCrossChainStake() {
         inboundStation,
         { assets: credited, to: account, owner: account, deadline },
       );
-      const relayer = createRelayer(config);
+      const relayer = createDirectRelayer(config);
       const handle = await relayer.submit({
         kind: "withdrawToHorizen",
         chainId: HUB_CHAIN_ID,
@@ -498,7 +498,8 @@ export function useCrossChainStake() {
         receiver: account,
         amount: credited.toString(),
         maxFeeZen: "0",
-        relayer: resolveGaslessFeeRelayer(account),
+        // EIP-712 WithdrawToHorizen does not bind relayer; placeholder for RelayRequest shape.
+        relayer: account,
         deadline: Number(deadline),
         signature,
       });

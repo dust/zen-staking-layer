@@ -39,7 +39,7 @@ import {
   DEFAULT_OFT_DECIMAL_CONVERSION_RATE,
   truncateOftAmountLD,
 } from "@/lib/oftDust";
-import { createRelayer, type RelayResult } from "@/relayer";
+import { createDirectRelayer, createRelayer, type RelayResult } from "@/relayer";
 import { useToast } from "@/components/common/Toast";
 import { useFeeQuote } from "./useFeeQuote";
 
@@ -216,7 +216,10 @@ export function useRedeemToBase() {
     if (!isConfigured) return "configure";
     if (phase === "confirmed" || baseArrived) return "done";
     if (bridgeTxHash && phase === "waiting") return "wait-base";
-    if (credited > 0n) {
+    // Bridge only when credit exceeds OFT dust floor. After send, ZenOftStationBridge
+    // re-credits sub–shared-decimal dust via EgressStation.onBridgeDust — that alone
+    // must not keep the wizard on "bridge".
+    if ((creditedBaseReceive ?? 0n) > 0n) {
       if (bridgeTxHash) return "wait-base";
       return "bridge";
     }
@@ -228,7 +231,7 @@ export function useRedeemToBase() {
     phase,
     baseArrived,
     bridgeTxHash,
-    credited,
+    creditedBaseReceive,
     redeemTxHash,
     destConfirmed,
     sharesWei,
@@ -455,7 +458,7 @@ export function useRedeemToBase() {
         owner: account,
         deadline,
       });
-      const relayer = createRelayer(config);
+      const relayer = createDirectRelayer(config);
       const handle = await relayer.submit({
         kind: "egressWithdrawToHorizen",
         chainId: HUB_CHAIN_ID,
@@ -464,7 +467,8 @@ export function useRedeemToBase() {
         receiver: account,
         amount: credited.toString(),
         maxFeeZen: "0",
-        relayer: resolveGaslessFeeRelayer(account),
+        // EIP-712 WithdrawToHorizen does not bind relayer; placeholder for RelayRequest shape.
+        relayer: account,
         deadline: Number(deadline),
         signature,
       });

@@ -113,9 +113,10 @@ export const copy = {
       "Polling Horizen for Station credit. Keep this tab open, or come back later — credited balance resumes at stake.",
     stakeNote:
       "Stake uses your Station credit as the ZEN payer. You sign DepositWithSig; a relayer submits on Horizen — you are not paying Horizen gas for this stake.",
-    withdrawNote: "Don't want to stake? Withdraw credited ZEN to your Horizen wallet.",
+    withdrawNote:
+      "Don't want to stake? Withdraw credited ZEN to your Horizen wallet (you pay gas — not gasless).",
     withdrawCta: "Withdraw credited ZEN",
-    signingWithdraw: "Sign to withdraw credited ZEN…",
+    signingWithdraw: "Confirm wallet tx to withdraw credited ZEN…",
     withdrawConfirmed: "Credited ZEN withdrawn to Horizen.",
     signingCredit: "Switch to Horizen if needed, then sign credit authorization…",
     creditSigned: "Credit authorization signed.",
@@ -204,9 +205,9 @@ export const copy = {
     destChangeWarn: "You changed the Base destination — confirm again before bridging.",
     creditedLabel: "Credited on Egress Station",
     recoverableNote:
-      "Funds are held in the protocol Egress Station. Retry the bridge, or withdraw ZEN to your Horizen wallet.",
+      "Funds are held in the protocol Egress Station. Retry the bridge, or withdraw ZEN to your Horizen wallet (you pay gas — not gasless).",
     withdrawCta: "Withdraw to Horizen instead",
-    signingWithdraw: "Sign to withdraw credited ZEN…",
+    signingWithdraw: "Confirm wallet tx to withdraw credited ZEN…",
     withdrawConfirmed: "Credited ZEN withdrawn to Horizen.",
     signingRedeem: "Sign RedeemWithSig (receiver = Egress)…",
     relayingRedeem: "Relayer submitting redeemAndCredit on Horizen…",

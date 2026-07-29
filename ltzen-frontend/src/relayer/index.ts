@@ -40,3 +40,12 @@ export function createRelayer(config: Config): Relayer {
   relayClientLog("createRelayer → DirectContractRelayer");
   return new DirectContractRelayer(config);
 }
+
+/**
+ * Station escape hatch (`withdrawToHorizen` / `egressWithdrawToHorizen`):
+ * always user-wallet Direct — never BFF/rrelayer.
+ */
+export function createDirectRelayer(config: Config): Relayer {
+  relayClientLog("createDirectRelayer → DirectContractRelayer");
+  return new DirectContractRelayer(config);
+}

@@ -29,8 +29,8 @@ export interface RelayRequest {
   /**
    * Contract to call:
    * - StLighter proxy for deposit/redeem
-   * - InboundStation for withdrawToHorizen
-   * - EgressStation for redeemAndCredit / bridgeToBase / egressWithdrawToHorizen
+   * - EgressStation for redeemAndCredit / bridgeToBase
+   * - Inbound/Egress Station withdraw* are Direct-only (not BFF)
    */
   verifyingContract: Address;
   user: Address;

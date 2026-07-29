@@ -1,5 +1,7 @@
 /**
- * Direct contract relayer (M2/M3 testnet — no backend relayer required).
+ * Direct contract relayer — user wallet broadcasts (no BFF/rrelayer).
+ * Used for testnet gasless paths when BFF is off, and always for Station
+ * escape-hatch withdraws (`withdrawToHorizen` / `egressWithdrawToHorizen`).
  */
 
 import { waitForTransactionReceipt, writeContract } from "wagmi/actions";

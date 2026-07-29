@@ -113,7 +113,7 @@ Gasless = 用户不为 L3 stake tx 付 gas。
 |------|--------|------|
 | `lzCompose` / 入金适配 | LZ executor + owner EIP-712 | **仅** `credit`；payload 含 compose 签名；**禁止** stake |
 | `payForDeposit` | **仅** StLighter | Station 扣贷记并转 ZEN；由 `depositWithSig` 触发 |
-| `withdrawToHorizen` | relayer（推荐）+ owner EIP-712 | 未 stake 贷记提到 `to`（默认 owner） |
+| `withdrawToHorizen` | owner EIP-712 + **用户钱包 Direct**（非 BFF/rrelayer） | 未 stake 贷记提到 `to`（默认 owner）；用户付 Horizen gas |
 
 ### 4.2 EgressStation
 
@@ -123,7 +123,7 @@ Gasless = 用户不为 L3 stake tx 付 gas。
 | `bridgeToBase` | relayer + owner EIP-712（含 `relayer`） | 扣 credited；fee → 签名 `relayer` |
 | `bridgeToBase` | relayer + owner EIP-712 | 出桥；Station 为桥调用方 |
 | `retryBridgeToBase` | 同 `BridgeToBase` 类型再签 | recoverable 后重试 / 改 dest |
-| `withdrawToHorizen` | relayer + owner EIP-712 | 放弃出桥，提到 Horizen |
+| `withdrawToHorizen` | owner EIP-712 + **用户钱包 Direct**（非 BFF/rrelayer） | 放弃出桥，提到 Horizen；用户付 gas |
 | 桥退款入账 | 桥 / 适配器 | 增加对应用户 `credited`，进入 `recoverable_hold` |
 
 ---

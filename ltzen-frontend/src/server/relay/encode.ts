@@ -1,6 +1,5 @@
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import StLighterAbi from "@/abi/StLighter.json";
-import InboundStationAbi from "@/abi/InboundStation.json";
 import EgressStationAbi from "@/abi/EgressStation.json";
 import type { RelayRequest } from "@/relayer/types";
 
@@ -13,8 +12,7 @@ export interface EncodedMetaTx {
 }
 
 type StLighterFn = "depositWithSigAndPermit" | "depositWithSig" | "redeemWithSig";
-type StationFn = "withdrawToHorizen";
-type EgressFn = "redeemAndCredit" | "bridgeToBase" | "withdrawToHorizen";
+type EgressFn = "redeemAndCredit" | "bridgeToBase";
 
 /** Args passed to meta-tx entrypoints (shared by encode + simulate). */
 export function metaTxContractCall(
@@ -22,7 +20,6 @@ export function metaTxContractCall(
   feeZen: bigint,
 ):
   | { target: "stLighter"; functionName: StLighterFn; args: readonly unknown[]; value: bigint }
-  | { target: "inboundStation"; functionName: StationFn; args: readonly unknown[]; value: bigint }
   | { target: "egressStation"; functionName: EgressFn; args: readonly unknown[]; value: bigint } {
   if (req.kind === "redeemWithSig") {
     return {
@@ -106,21 +103,6 @@ export function metaTxContractCall(
     };
   }
 
-  if (req.kind === "withdrawToHorizen") {
-    return {
-      target: "inboundStation",
-      functionName: "withdrawToHorizen",
-      args: [
-        BigInt(req.amount),
-        req.receiver,
-        req.user,
-        BigInt(req.deadline),
-        req.signature,
-      ],
-      value: 0n,
-    };
-  }
-
   if (req.kind === "bridgeToBase") {
     const value = BigInt(req.nativeValue ?? "0");
     if (value <= 0n) throw new Error("bridgeToBase requires nativeValue > 0");
@@ -143,30 +125,15 @@ export function metaTxContractCall(
     };
   }
 
-  if (req.kind === "egressWithdrawToHorizen") {
-    return {
-      target: "egressStation",
-      functionName: "withdrawToHorizen",
-      args: [
-        BigInt(req.amount),
-        req.receiver,
-        req.user,
-        BigInt(req.deadline),
-        req.signature,
-      ],
-      value: 0n,
-    };
-  }
-
-  throw new Error(`unsupported relay kind: ${req.kind}`);
+  throw new Error(
+    req.kind === "withdrawToHorizen" || req.kind === "egressWithdrawToHorizen"
+      ? `${req.kind} is Direct-only (not encoded by BFF)`
+      : `unsupported relay kind: ${req.kind}`,
+  );
 }
 
-function abiForTarget(
-  target: "stLighter" | "inboundStation" | "egressStation",
-): typeof StLighterAbi | typeof InboundStationAbi | typeof EgressStationAbi {
-  if (target === "stLighter") return StLighterAbi;
-  if (target === "inboundStation") return InboundStationAbi;
-  return EgressStationAbi;
+function abiForTarget(target: "stLighter" | "egressStation"): typeof StLighterAbi | typeof EgressStationAbi {
+  return target === "stLighter" ? StLighterAbi : EgressStationAbi;
 }
 
 /** Build calldata + relayer-chosen feeZen (+ optional native value). */

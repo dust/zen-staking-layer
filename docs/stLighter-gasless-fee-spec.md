@@ -143,7 +143,7 @@ feeZen < basis          // 与合约 deposit/redeem/bridge 净额要求一致
 | `redeemWithSig` | ✓ | 0 | 成本导向 |
 | `redeemAndCredit` | ✓ | 0 | 成本导向 |
 | `bridgeToBase` | ✓ | ✓ `quoteBridgeNativeFee` | 成本导向（含 LZ） |
-| `withdrawToHorizen` / `egressWithdrawToHorizen` | — | — | **强制 0 / 0**（产品：免费撤回入站/出站 credit） |
+| `withdrawToHorizen` / `egressWithdrawToHorizen` | — | — | **强制 0 / 0**；**不经 BFF/rrelayer**（产品逃逸口：用户钱包 Direct 提交，自付 gas） |
 | `bridge`（纯 OFT，BFF 不支持） | n/a | n/a | 不在本 BFF 范围 |
 
 **Redeem to Base 两腿**:
@@ -595,3 +595,4 @@ sequenceDiagram
 | 2026-07-29 | §3.3：默认价源改为 Aerodrome；CoinGecko 降为可选（horizen 常缺失） |
 | 2026-07-29 | §3.3.1：改为 Slipstream ZEN/WETH `slot0`（~490）；禁薄 vAMM；CoinGecko id=`zencash` |
 | 2026-07-29 | §12：写入主网校准（LZ≈2.85e-5 ETH，bridge fee≈0.014 ZEN）；旧高压例降为说明 |
+| 2026-07-29 | Station 逃逸口 `withdraw*`：**不经 BFF/rrelayer**，仅用户钱包 Direct（自付 gas） |

@@ -23,9 +23,7 @@ async function feeBasisWei(req: RelayRequest): Promise<bigint> {
   if (
     req.kind === "depositWithSigAndPermit" ||
     req.kind === "depositWithSig" ||
-    req.kind === "withdrawToHorizen" ||
-    req.kind === "bridgeToBase" ||
-    req.kind === "egressWithdrawToHorizen"
+    req.kind === "bridgeToBase"
   ) {
     return BigInt(req.amount);
   }

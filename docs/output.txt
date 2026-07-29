@@ -41,4 +41,10 @@ bridge: contract ZenOftStationBridge 0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
   bridge owner:           0x916652bcFF1fB63af6A5D55482e03139ebAD3578
 
   
+== Return ==
+ltZen: contract LtZEN 0x3f38dF9b1912B45d001f15D4237C97331FD5fd6f
 
+== Logs ==
+  LtZEN (Base spoke): 0x3f38dF9b1912B45d001f15D4237C97331FD5fd6f
+  Timelock:   0x916652bcFF1fB63af6A5D55482e03139ebAD3578
+  NOTE: run WireStLighterOFT to connect Horizen <-> Base peers and DVN config.

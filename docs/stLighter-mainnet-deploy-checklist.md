@@ -129,15 +129,35 @@ export LZ_ENDPOINT_BASE=$(cast call $BASE_ZEN_ADAPTER "endpoint()(address)" --rp
 Copy send/receive libs + ULN from **Horizen ZenTokenOFT** (and Base Adapter for the Base side) using the recipe in [`stLighter-oft-reference.md`](./stLighter-oft-reference.md) §「从已知 OApp 复制配置」:
 
 ```bash
+# horizen side
 # Example — Horizen ZenTokenOFT toward Base eid
-export LZ_SEND_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
+export HORIZEN_LZ_SEND_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getSendLibrary(address,uint32)(address)" \
   $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC)
-export LZ_RECEIVE_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
+
+export HORIZEN_LZ_RECEIVE_LIB=$(cast call $LZ_ENDPOINT_HORIZEN "getReceiveLibrary(address,uint32)(address,bool)" \
   $ZEN_TOKEN_ADDRESS $BASE_EID --rpc-url $HORIZEN_RPC | awk 'NR==1')
 
 cast call $LZ_ENDPOINT_HORIZEN "getConfig(address,address,uint32,uint32)(bytes)" \
-  $ZEN_TOKEN_ADDRESS $LZ_SEND_LIB $BASE_EID 2 --rpc-url $HORIZEN_RPC
+  $ZEN_TOKEN_ADDRESS $HORIZEN_LZ_SEND_LIB $BASE_EID 2 --rpc-url $HORIZEN_RPC
 # Decode confirmations + requiredDVNs → LZ_CONFIRMATIONS, DVN_ADDRESSES
+export HORIZEN_LZ_CONFIRMATIONS=3
+export HORIZEN_DVN_ADDRESSES=0x282b3386571f7f794450d5789911a9804fa346b4,0x84a410a8a912e333b957680998a76e526f98e207,0xdd7b5e1db4aafd5c8ec3b764efb8ed265aa5445b
+
+
+# base side
+export BASE_LZ_SEND_LIB=$(cast call $LZ_ENDPOINT_BASE "getSendLibrary(address,uint32)(address)" \
+  $BASE_ZEN_ADAPTER $HORIZEN_EID --rpc-url $BASE_RPC)
+
+export BASE_LZ_RECEIVE_LIB=$(cast call $LZ_ENDPOINT_BASE "getReceiveLibrary(address,uint32)(address,bool)" \
+  $BASE_ZEN_ADAPTER $HORIZEN_EID --rpc-url $BASE_RPC | awk 'NR==1')
+
+cast call $LZ_ENDPOINT_BASE "getConfig(address,address,uint32,uint32)(bytes)" \
+  $BASE_ZEN_ADAPTER $BASE_LZ_SEND_LIB $HORIZEN_EID 2 --rpc-url $BASE_RPC
+# Decode confirmations + requiredDVNs → LZ_CONFIRMATIONS, DVN_ADDRESSES
+export BASE_LZ_CONFIRMATIONS=3
+export BASE_DVN_ADDRESSES=0x9e059a54699a285714207b43b055483e78faac25,0xa7b5189bca84cd304d8553977c7c614329750d99,0xcd37ca043f8479064e10635020c65ffc005d36f6
+
+# base
 ```
 
 Repeat on Base for `$BASE_ZEN_ADAPTER` with `PEER_EID=$HORIZEN_EID`. Fill `LZ_SEND_LIB` / `LZ_RECEIVE_LIB` / `LZ_CONFIRMATIONS` / `DVN_ADDRESSES` **per chain** — do **not** cross-copy libs across chains.
@@ -239,7 +259,7 @@ cast call $IN_STATION 'allowedSrcEid()(uint32)' --rpc-url $HORIZEN_RPC
 forge script script/DeployStLighterBase.s.sol \
   --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 # → set LT_ZEN_BASE
-export LT_ZEN_BASE=0x…
+export LT_ZEN_BASE=0x3f38dF9b1912B45d001f15D4237C97331FD5fd6f
 ```
 
 - [ ] `minter() == address(0)`
@@ -276,10 +296,15 @@ cast call $LT_ZEN_BASE "peers(uint32)(bytes32)" $HORIZEN_EID --rpc-url $BASE_RPC
 
 ```bash
 # Base ltZEN
+# LZ_SEND_LIB / LZ_RECEIVE_LIB / LZ_CONFIRMATIONS / LZ_CONFIRMATIONS = Base Adapter 
 export OAPP_LOCAL=$LT_ZEN_BASE
 export PEER_EID=$HORIZEN_EID
 export LZ_ENDPOINT=$LZ_ENDPOINT_BASE
-# LZ_SEND_LIB / LZ_RECEIVE_LIB / LZ_CONFIRMATIONS / DVN_ADDRESSES = Base Adapter snapshot
+export LZ_SEND_LIB=$BASE_LZ_SEND_LIB
+export LZ_RECEIVE_LIB=$BASE_LZ_RECEIVE_LIB
+export LZ_CONFIRMATIONS=$BASE_LZ_CONFIRMATIONS
+export DVN_ADDRESSES=$BASE_DVN_ADDRESSES
+
 forge script script/ConfigureStLighterOFTDVN.s.sol \
   --rpc-url $BASE_RPC --broadcast --private-key $PRIVATE_KEY
 
@@ -287,7 +312,13 @@ forge script script/ConfigureStLighterOFTDVN.s.sol \
 export OAPP_LOCAL=$LT_ZEN_HORIZEN
 export PEER_EID=$BASE_EID
 export LZ_ENDPOINT=$LZ_ENDPOINT_HORIZEN
-# libs / DVN = Horizen ZenTokenOFT snapshot
+
+export LZ_SEND_LIB=$HORIZEN_LZ_SEND_LIB
+export LZ_RECEIVE_LIB=$HORIZEN_LZ_RECEIVE_LIB
+export LZ_CONFIRMATIONS=$HORIZEN_LZ_CONFIRMATIONS
+export DVN_ADDRESSES=$HORIZEN_DVN_ADDRESSES
+###  未rvrf **不能执行**， 因为 ZenTokenOFT & USDF 都没有设置 LZ_SEND_LIB
+
 forge script script/ConfigureStLighterOFTDVN.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 ```
@@ -311,7 +342,7 @@ forge script script/DeployEgressStation.s.sol \
   --rpc-url $HORIZEN_RPC --broadcast --private-key $PRIVATE_KEY
 
 export EGRESS_STATION_ADDRESS=0xc8493175ae5EF314bC6934A8D18cD4E49F1145D9
-export ZEN_OFT_STATION_BRIDGE_ADDRESS=0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225
+export ZEN_OFT_STATION_BRIDGE_ADDRESS=0xCd09D52983e0986952cF0da9a6099eC053e5Db66
 export EG=$EGRESS_STATION_ADDRESS
 export BR=$ZEN_OFT_STATION_BRIDGE_ADDRESS
 
@@ -472,7 +503,7 @@ Use DirectContractRelayer first if needed; BFF after Part 3.
 | ZenOftStationBridge | Horizen | `0x329C63b6e0692EdAB5D149ba1EFAa214FfEf2225` _(replace after §1.5.1 redeploy)_ |
 | ZEN ERC20 | Base | `0xf43eB8De897Fbc7F2502483B2Bef7Bb9EA179229` |
 | ZenTokenOFTAdapter | Base | `0x57da2D504bf8b83Ef304759d9f2648522D7a9280` |
-| LtZEN spoke | Base | `0xDDA46A46F6E162Cde0Dbc36c18fE832Bca59EF8F` |
+| LtZEN spoke | Base | `0x3f38dF9b1912B45d001f15D4237C97331FD5fd6f` |
 | LZ Endpoint | Horizen | _(from `endpoint()`)_ |
 | LZ Endpoint | Base | _(from `endpoint()`)_ |
 | Horizen eid | — | `30399` |

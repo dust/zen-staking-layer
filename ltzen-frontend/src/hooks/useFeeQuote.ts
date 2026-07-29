@@ -29,11 +29,13 @@ export function useFeeQuote(args: UseFeeQuoteArgs) {
   const [fetchKey, setFetchKey] = useState("");
 
   const enabled = args.enabled !== false;
+  // Escape-hatch withdraws are Direct-only and never quoted via BFF.
   const isWithdraw =
     args.kind === "withdrawToHorizen" || args.kind === "egressWithdrawToHorizen";
   const needsAmount = !isWithdraw;
   const canFetch =
     enabled &&
+    !isWithdraw &&
     (!needsAmount || (Boolean(args.amount) && args.amount !== "0")) &&
     (args.kind !== "bridgeToBase" || Boolean(args.dest));
 

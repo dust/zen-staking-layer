@@ -192,7 +192,8 @@ export function RedeemToBaseWizard() {
         </div>
       ) : null}
 
-      {(x.step === "amount" || x.step === "confirm-dest") && x.credited === 0n ? (
+      {(x.step === "amount" || x.step === "confirm-dest") &&
+      (x.creditedBaseReceive ?? 0n) === 0n ? (
         <div className="mt-5 space-y-4">
           <div>
             <div className="flex items-center justify-between text-sm text-zinc-400">

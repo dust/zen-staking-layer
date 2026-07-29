@@ -18,9 +18,7 @@ const KINDS = new Set<RelayKind>([
   "depositWithSig",
   "redeemWithSig",
   "redeemAndCredit",
-  "withdrawToHorizen",
   "bridgeToBase",
-  "egressWithdrawToHorizen",
 ]);
 
 function hubPublicClient() {
@@ -32,15 +30,13 @@ function hubPublicClient() {
   });
 }
 
-async function resolveBasis(kind: RelayKind, amount: bigint, verifying?: Address): Promise<bigint> {
+function resolveBasis(kind: RelayKind, amount: bigint, verifying?: Address): Promise<bigint> {
   if (
     kind === "depositWithSig" ||
     kind === "depositWithSigAndPermit" ||
-    kind === "withdrawToHorizen" ||
-    kind === "bridgeToBase" ||
-    kind === "egressWithdrawToHorizen"
+    kind === "bridgeToBase"
   ) {
-    return amount;
+    return Promise.resolve(amount);
   }
   const stLighter = verifying ?? stLighterAddress();
   if (!stLighter) throw new RelayCostError("invalid_params", "StLighter address not configured");
@@ -67,20 +63,17 @@ export async function GET(request: Request) {
     }
 
     const amountRaw = url.searchParams.get("amount");
-    const isWithdraw = kind === "withdrawToHorizen" || kind === "egressWithdrawToHorizen";
+    if (!amountRaw) {
+      return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
+    }
     let amount = 0n;
-    if (!isWithdraw) {
-      if (!amountRaw) {
-        return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
-      }
-      try {
-        amount = BigInt(amountRaw);
-      } catch {
-        return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
-      }
-      if (amount <= 0n) {
-        return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
-      }
+    try {
+      amount = BigInt(amountRaw);
+    } catch {
+      return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
+    }
+    if (amount <= 0n) {
+      return NextResponse.json({ error: "invalid_params", code: "invalid_params" }, { status: 400 });
     }
 
     const destRaw = url.searchParams.get("dest");
@@ -97,7 +90,7 @@ export async function GET(request: Request) {
     const verifying =
       verifyingRaw && isAddress(verifyingRaw) ? (verifyingRaw as Address) : undefined;
 
-    const basis = isWithdraw ? 0n : await resolveBasis(kind, amount, verifying);
+    const basis = await resolveBasis(kind, amount, verifying);
     const cost = await computeRelayCost({
       kind,
       basis,
