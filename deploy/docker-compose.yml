@@ -118,6 +118,7 @@ services:
         NEXT_PUBLIC_BASE_EID: ${NEXT_PUBLIC_BASE_EID:-}
         NEXT_PUBLIC_RELAYER_FEE_ADDRESS: ${NEXT_PUBLIC_RELAYER_FEE_ADDRESS:-}
         NEXT_PUBLIC_HERO_RATE_UNITS: ${NEXT_PUBLIC_HERO_RATE_UNITS:-1000}
+        NEXT_PUBLIC_SUBGRAPH_URL: ${NEXT_PUBLIC_SUBGRAPH_URL:-}
     image: ltzen-frontend:${IMAGE_TAG:-latest}
     container_name: ltzen-frontend
     restart: unless-stopped
