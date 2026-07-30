@@ -25,6 +25,9 @@ sensible testnet defaults; two things you actually need to set:
 - Contract addresses (`NEXT_PUBLIC_HORIZEN_*_ADDRESS`, `NEXT_PUBLIC_BASE_LTZEN_ADDRESS`) —
   bind to **proxy** addresses. Until filled, the UI shows a "not configured" state rather than
   crashing.
+- `NEXT_PUBLIC_SUBGRAPH_URL` — Goldsky GraphQL endpoint for CompoundChart rate history and
+  Transparency harvest history. When unset, the chart falls back to session sampling and
+  harvest history stays empty.
 
 ## Gasless (meta-tx)
 

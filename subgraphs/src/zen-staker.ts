@@ -17,7 +17,7 @@ import {
   RewardNotifiedEvent as RewardNotifiedEntity,
 } from "../generated/schema";
 import { Address, BigInt, Bytes, ethereum } from "@graphprotocol/graph-ts";
-import { sampleRate, loadMeta, STLIGHTER } from "./shared";
+import { sampleRate, loadMeta, stlighterAddress } from "./shared";
 
 // Records a unified Activity row for the chronological history feed, alongside
 // the per-type event entities, so the merged timeline can be queried from a
@@ -214,10 +214,11 @@ export function handleRewardNotified(event: RewardNotifiedEvent): void {
   entity.save();
 
   // Reward injection is the source of net-value growth: accrue the cumulative
-  // total, then sample the vault rate (this block is when the growth slope changes).
+  // total before sampling so a try_* revert (e.g. StLighter not yet live) still
+  // records the notified amount. Pass zero into sampleRate to avoid double-count.
   let meta = loadMeta();
   meta.cumulativeRewardNotified = meta.cumulativeRewardNotified.plus(event.params.amount);
   meta.save();
 
-  sampleRate(event, "reward", STLIGHTER);
+  sampleRate(event, "reward", stlighterAddress(), BigInt.zero());
 }

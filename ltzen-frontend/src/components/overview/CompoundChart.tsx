@@ -5,35 +5,50 @@ import { copy } from "@/lib/copy";
 import { Card } from "@/components/common/Card";
 
 /**
- * CompoundChart (design §2/§4, uiux §3.3). Plots the session-sampled `convertToAssets` line.
+ * CompoundChart (design §2/§4, uiux §3.3). Plots convertToAssets history from Goldsky
+ * rateSnapshots when configured; otherwise session-sampled points.
  *
  * Rules honored:
  *   - < 2 points → "accumulating" message, NOT a misleading straight line (uiux §3.3).
  *   - The line is smooth and only rises; harvest is never drawn as a vertical step (design §0).
- *   - Harvest markers + the dashed "no-compound" comparison line are STUBBED for later — they
- *     need event/Goldsky data (design §2, §5.3).
+ *   - Harvest markers + the dashed "no-compound" comparison line are STUBBED for later.
  *
  * Rendered as an inline SVG sparkline to avoid pulling in a chart dependency at this stage.
  */
 export function CompoundChart() {
-  const { points, hasEnoughData } = useRateHistory();
+  const { points, hasEnoughData, status, source } = useRateHistory();
+
+  const note =
+    source === "subgraph" && status === "ready"
+      ? copy.states.eventHistoryNote
+      : status === "error"
+        ? copy.states.loadError
+        : copy.states.sessionSampleNote;
+
+  const body =
+    status === "loading" && source === "subgraph" && !hasEnoughData ? (
+      <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">
+        {copy.states.chartAccumulating}
+      </div>
+    ) : hasEnoughData ? (
+      <Sparkline
+        values={points.map((p) => Number(p.rate) / 1e18)}
+        historical={source === "subgraph"}
+      />
+    ) : (
+      <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">
+        {copy.states.chartAccumulating}
+      </div>
+    );
 
   return (
     <Card>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-sm font-semibold tracking-tight text-white">Compounding</h2>
-        <span className="text-xs text-zinc-500">{copy.states.sessionSampleNote}</span>
+        <span className="text-xs text-zinc-500">{note}</span>
       </div>
 
-      <div className="mt-4 h-40">
-        {hasEnoughData ? (
-          <Sparkline values={points.map((p) => Number(p.rate) / 1e18)} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-center text-sm text-zinc-500">
-            {copy.states.chartAccumulating}
-          </div>
-        )}
-      </div>
+      <div className="mt-4 h-40">{body}</div>
 
       <p className="mt-3 text-xs leading-relaxed text-zinc-500">
         {copy.microcopy.compounding}
@@ -42,7 +57,13 @@ export function CompoundChart() {
   );
 }
 
-function Sparkline({ values }: { values: number[] }) {
+function Sparkline({
+  values,
+  historical,
+}: {
+  values: number[];
+  historical: boolean;
+}) {
   const W = 600;
   const H = 160;
   const PAD = 4;
@@ -57,7 +78,6 @@ function Sparkline({ values }: { values: number[] }) {
   });
 
   const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  // Close the path down to the baseline for a low-opacity area fill under the curve.
   const area = `${PAD},${H - PAD} ${line} ${W - PAD},${H - PAD}`;
 
   return (
@@ -66,7 +86,11 @@ function Sparkline({ values }: { values: number[] }) {
       preserveAspectRatio="none"
       className="h-full w-full"
       role="img"
-      aria-label="Exchange rate over this session — trending up as rewards compound."
+      aria-label={
+        historical
+          ? "Exchange rate over indexed on-chain events — trending up as rewards compound."
+          : "Exchange rate over this session — trending up as rewards compound."
+      }
     >
       <defs>
         <linearGradient id="compound-line" x1="0" y1="0" x2="1" y2="0">

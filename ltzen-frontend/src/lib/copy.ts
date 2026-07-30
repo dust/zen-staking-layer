@@ -53,6 +53,7 @@ export const copy = {
     connectToView: "Connect your wallet to view your position.",
     noPosition: "You don't hold any ltZEN yet.",
     sessionSampleNote: "Sampled this session — full history coming soon.",
+    eventHistoryNote: "On-chain event history",
   },
 
   cta: {
@@ -241,6 +242,15 @@ export const copy = {
     harvestHeading: "Harvest history",
     harvestPlaceholder:
       "Harvest events will appear here once the indexer is live. Harvests compound rewards into the pool and never move the exchange rate.",
+    harvestEmpty:
+      "No harvests indexed yet. Harvests compound rewards into the pool and never move the exchange rate.",
+    harvestNotConfigured:
+      "Harvest history needs NEXT_PUBLIC_SUBGRAPH_URL. Harvests compound rewards into the pool and never move the exchange rate.",
+    harvestColTime: "Time",
+    harvestColClaimed: "Claimed",
+    harvestColFee: "Fee",
+    harvestColRestaked: "Restaked",
+    harvestColTx: "Tx",
     verifyHint: "Frontend display only — independently verifiable on-chain.",
     copy: "Copy",
     copied: "Copied",

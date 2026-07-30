@@ -4,12 +4,15 @@ import { RateSnapshot, ProtocolDayData, ProtocolMeta } from "../generated/schema
 
 // StLighter UUPS proxy — same address used by the StLighter data source and by
 // handleRewardNotified (ZenStaker) to sample the vault rate.
-export const STLIGHTER = Address.fromString(
-  "0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59"
-);
-
-const ONE = BigInt.fromString("1000000000000000000"); // 1e18
-const DAY = BigInt.fromI32(86400);
+//
+// IMPORTANT: do NOT hoist Address.fromString / BigInt.fromString to module scope.
+// A module-level const adds a wasm start/init routine that interferes with
+// graph-ts's entity type-id registration, which makes graph-node fail every
+// store.set with "Attempted to set undefined fields … for the entity type
+// `StLighterDeposit`" (empty / garbled field names). Keep these local.
+export function stlighterAddress(): Address {
+  return Address.fromString("0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59");
+}
 
 // Loads (or lazily creates) the global running-totals singleton.
 export function loadMeta(): ProtocolMeta {
@@ -38,9 +41,10 @@ export function sampleRate(
   stlighter: Address,
   rewardAccrued: BigInt
 ): void {
+  let one = BigInt.fromString("1000000000000000000"); // 1e18
   let c = StLighter.bind(stlighter);
 
-  let rateRes = c.try_convertToAssets(ONE);
+  let rateRes = c.try_convertToAssets(one);
   let taRes = c.try_totalAssets();
   let isRes = c.try_issuedShares();
   if (rateRes.reverted || taRes.reverted || isRes.reverted) return;
@@ -69,6 +73,7 @@ function updateDay(
   is: BigInt,
   rewardAccrued: BigInt
 ): void {
+  let daySecs = BigInt.fromI32(86400);
   let meta = loadMeta();
   meta.cumulativeRewardNotified = meta.cumulativeRewardNotified.plus(rewardAccrued);
   meta.lastRate = rate;
@@ -76,12 +81,12 @@ function updateDay(
   meta.lastIssuedShares = is;
   meta.save();
 
-  let dayId = ts.div(DAY);
+  let dayId = ts.div(daySecs);
   let id = dayId.toString();
   let day = ProtocolDayData.load(id);
   if (day == null) {
     day = new ProtocolDayData(id);
-    day.date = dayId.times(DAY).toI32();
+    day.date = dayId.times(daySecs).toI32();
     day.rateOpen = rate;
   }
   day.rateClose = rate;
