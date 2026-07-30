@@ -6,7 +6,7 @@ schema:
 dataSources:
   - kind: ethereum/contract
     name: StLighter
-    network: horizen-mainnet
+    network: horizen
     source:
       # StLighter UUPS proxy (index the proxy, not the implementation).
       address: "0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59"
