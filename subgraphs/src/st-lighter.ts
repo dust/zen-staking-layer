@@ -8,7 +8,7 @@ import {
   StLighterRedeem,
   HarvestEvent,
 } from "../generated/schema";
-import { dataSource } from "@graphprotocol/graph-ts";
+import { dataSource, BigInt } from "@graphprotocol/graph-ts";
 import { sampleRate } from "./shared";
 
 export function handleDeposited(event: DepositedEvent): void {
@@ -24,7 +24,7 @@ export function handleDeposited(event: DepositedEvent): void {
   e.transactionHash = event.transaction.hash;
   e.save();
 
-  sampleRate(event, "deposit", dataSource.address());
+  sampleRate(event, "deposit", dataSource.address(), BigInt.zero());
 }
 
 export function handleRedeemed(event: RedeemedEvent): void {
@@ -40,7 +40,7 @@ export function handleRedeemed(event: RedeemedEvent): void {
   e.transactionHash = event.transaction.hash;
   e.save();
 
-  sampleRate(event, "redeem", dataSource.address());
+  sampleRate(event, "redeem", dataSource.address(), BigInt.zero());
 }
 
 export function handleHarvested(event: HarvestedEvent): void {
@@ -55,5 +55,5 @@ export function handleHarvested(event: HarvestedEvent): void {
   e.transactionHash = event.transaction.hash;
   e.save();
 
-  sampleRate(event, "harvest", dataSource.address());
+  sampleRate(event, "harvest", dataSource.address(), event.params.rewardClaimed);
 }

@@ -28,10 +28,15 @@ export function loadMeta(): ProtocolMeta {
 // current block and writes a RateSnapshot + rolls the daily aggregate. Uses try_*
 // so a revert (e.g. before the first deposit) skips the point without halting the
 // whole index.
+//
+// `rewardAccrued` is the reward compounded at this event (StLighter Harvested
+// `rewardClaimed`); it is added to the running cumulative total. Pass BigInt.zero()
+// for deposit/redeem, which do not compound rewards.
 export function sampleRate(
   event: ethereum.Event,
   trigger: string,
-  stlighter: Address
+  stlighter: Address,
+  rewardAccrued: BigInt
 ): void {
   let c = StLighter.bind(stlighter);
 
@@ -52,17 +57,20 @@ export function sampleRate(
   snap.transactionHash = event.transaction.hash;
   snap.save();
 
-  updateDay(event.block.timestamp, rateRes.value, taRes.value, isRes.value);
+  updateDay(event.block.timestamp, rateRes.value, taRes.value, isRes.value, rewardAccrued);
 }
 
 // Rolls the per-day aggregate (open/close rate, latest totals, cumulative reward).
+// `rewardAccrued` is added to the running cumulative-compounded-reward total.
 function updateDay(
   ts: BigInt,
   rate: BigInt,
   ta: BigInt,
-  is: BigInt
+  is: BigInt,
+  rewardAccrued: BigInt
 ): void {
   let meta = loadMeta();
+  meta.cumulativeRewardNotified = meta.cumulativeRewardNotified.plus(rewardAccrued);
   meta.lastRate = rate;
   meta.lastTotalAssets = ta;
   meta.lastIssuedShares = is;

@@ -5,52 +5,8 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum/contract
-    name: ZenStaker
-    network: horizen
-    source:
-      address: "0x6BF7CF29a8bcE11Aa62Cf593d165C244fA4d3E31"
-      abi: ZenStaker
-      startBlock: 21318408
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.9
-      language: wasm/assemblyscript
-      entities:
-        - Deposit
-        - StakeDepositedEvent
-        - StakeWithdrawnEvent
-        - RewardClaimedEvent
-        - DelegateeAlteredEvent
-        - ClaimerAlteredEvent
-        - RewardNotifiedEvent
-        - RateSnapshot
-        - ProtocolDayData
-        - ProtocolMeta
-      abis:
-        - name: ZenStaker
-          file: ./abis/ZenStaker.json
-        # StLighter ABI needed here so handleRewardNotified can eth_call the vault
-        # (convertToAssets / totalAssets / issuedShares) to sample the rate.
-        - name: StLighter
-          file: ./abis/StLighter.json
-      eventHandlers:
-        - event: StakeDeposited(indexed address,indexed uint256,uint256,uint256,uint256)
-          handler: handleStakeDeposited
-        - event: StakeWithdrawn(indexed address,indexed uint256,uint256,uint256,uint256)
-          handler: handleStakeWithdrawn
-        - event: RewardClaimed(indexed uint256,indexed address,uint256,uint256)
-          handler: handleRewardClaimed
-        - event: DelegateeAltered(indexed uint256,address,address,uint256)
-          handler: handleDelegateeAltered
-        - event: ClaimerAltered(indexed uint256,indexed address,indexed address,uint256)
-          handler: handleClaimerAltered
-        - event: RewardNotified(uint256,address)
-          handler: handleRewardNotified
-      file: ./src/zen-staker.ts
-
-  - kind: ethereum/contract
     name: StLighter
-    network: horizen
+    network: horizen-mainnet
     source:
       # StLighter UUPS proxy (index the proxy, not the implementation).
       address: "0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59"
