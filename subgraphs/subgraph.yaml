@@ -23,9 +23,16 @@ dataSources:
         - DelegateeAlteredEvent
         - ClaimerAlteredEvent
         - RewardNotifiedEvent
+        - RateSnapshot
+        - ProtocolDayData
+        - ProtocolMeta
       abis:
         - name: ZenStaker
           file: ./abis/ZenStaker.json
+        # StLighter ABI needed here so handleRewardNotified can eth_call the vault
+        # (convertToAssets / totalAssets / issuedShares) to sample the rate.
+        - name: StLighter
+          file: ./abis/StLighter.json
       eventHandlers:
         - event: StakeDeposited(indexed address,indexed uint256,uint256,uint256,uint256)
           handler: handleStakeDeposited
@@ -40,3 +47,35 @@ dataSources:
         - event: RewardNotified(uint256,address)
           handler: handleRewardNotified
       file: ./src/zen-staker.ts
+
+  - kind: ethereum/contract
+    name: StLighter
+    network: horizen-mainnet
+    source:
+      # StLighter UUPS proxy (index the proxy, not the implementation).
+      address: "0x92E0940f6dAE6e14f004bb411A7fE222EbCE4E59"
+      abi: StLighter
+      # StLighter proxy deployment block (tx 0x4e901f05…fb1077).
+      startBlock: 21831971
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - RateSnapshot
+        - HarvestEvent
+        - StLighterDeposit
+        - StLighterRedeem
+        - ProtocolDayData
+        - ProtocolMeta
+      abis:
+        - name: StLighter
+          file: ./abis/StLighter.json
+      eventHandlers:
+        - event: Deposited(indexed address,indexed address,uint256,uint256)
+          handler: handleDeposited
+        - event: Redeemed(indexed address,indexed address,uint256,uint256)
+          handler: handleRedeemed
+        - event: Harvested(uint256,uint256,uint256)
+          handler: handleHarvested
+      file: ./src/st-lighter.ts

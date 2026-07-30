@@ -93,3 +93,78 @@ type Activity @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+# ---------------------------------------------------------------------------
+# StLighter liquid-staking layer (Compounding / Harvest / net-value charts).
+# Appended after the ZenStaker entities so existing schema positions are stable.
+# ---------------------------------------------------------------------------
+
+# Exchange-rate snapshot — the CompoundChart data source. One point per triggering
+# event (deposit/redeem/harvest/reward). `rate` = convertToAssets(1e18), sampled via
+# eth_call at the event's block since the chain stores no historical rate.
+type RateSnapshot @entity(immutable: true) {
+  id: Bytes!
+  rate: BigInt!
+  totalAssets: BigInt!
+  issuedShares: BigInt!
+  trigger: String! # "deposit" | "redeem" | "harvest" | "reward"
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# Compounding history — the HarvestHistory data source.
+type HarvestEvent @entity(immutable: true) {
+  id: Bytes!
+  rewardClaimed: BigInt!
+  feeTaken: BigInt!
+  restaked: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# StLighter deposit / redeem detail (reconciliation + per-user history).
+type StLighterDeposit @entity(immutable: true) {
+  id: Bytes!
+  caller: Bytes!
+  receiver: Bytes!
+  assets: BigInt!
+  shares: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type StLighterRedeem @entity(immutable: true) {
+  id: Bytes!
+  caller: Bytes!
+  receiver: Bytes!
+  shares: BigInt!
+  assets: BigInt!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+# Per-day aggregate for long-range net-value charts (cheap to query).
+# id = dayId (floor(timestamp / 86400)).
+type ProtocolDayData @entity(immutable: false) {
+  id: String!
+  date: Int!
+  rateOpen: BigInt!
+  rateClose: BigInt!
+  totalAssets: BigInt!
+  issuedShares: BigInt!
+  cumulativeRewardNotified: BigInt!
+  aggregateStakedBalance: BigInt!
+}
+
+# Global singleton (id = "1") holding running totals.
+type ProtocolMeta @entity(immutable: false) {
+  id: String!
+  cumulativeRewardNotified: BigInt!
+  lastRate: BigInt!
+  lastTotalAssets: BigInt!
+  lastIssuedShares: BigInt!
+}
