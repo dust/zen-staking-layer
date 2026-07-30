@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { parseEther } from "viem";
+import { formatUnits, parseEther } from "viem";
 import { useRedeem } from "@/hooks/useRedeem";
 import { useExchangeRate } from "@/hooks/useExchangeRate";
 import { gaslessSupported } from "@/relayer";
@@ -83,7 +83,8 @@ export function RedeemForm() {
   const onMax = () => {
     if (r.shareBalance === undefined) return;
     if (mode === "shares") {
-      setInput(formatShares(r.shareBalance).replace(/[^\d.]/g, ""));
+      // Full precision — formatShares() truncates to integers and would leave dust.
+      setInput(formatUnits(r.shareBalance, 18));
     } else if (rate !== undefined) {
       // Target the full ZEN value of the balance.
       const zenValue = (r.shareBalance * rate) / 10n ** 18n;
