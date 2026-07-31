@@ -16,6 +16,7 @@ import { BASE_SEPOLIA_CHAIN_ID, IS_TESTNET_ENV } from "@/config/chains";
 import { isActionAvailable } from "@/lib/chainGating";
 import { copy } from "@/lib/copy";
 import { formatZen, formatZenAmount } from "@/lib/format";
+import { truncateOftAmountLD } from "@/lib/oftDust";
 import { Card } from "@/components/common/Card";
 import { ChainGuide } from "@/components/common/ChainGuide";
 import { GaslessFeePanel } from "@/components/common/GaslessFeePanel";
@@ -108,11 +109,14 @@ export function CrossChainStakeWizard() {
   }
 
   const onMax = () => {
-    if (x.baseBalance !== undefined) {
-      const s = formatZen(x.baseBalance, 18).replace(/,/g, "");
-      setInput(s);
-      x.setAmountWei(parseAmount(s));
-    }
+    if (x.baseBalance === undefined) return;
+    // Prefill OFT-sendable amount (sharedDecimals dust stripped). signCredit /
+    // bridgeFromBase still truncate defensively.
+    const maxSend = truncateOftAmountLD(x.baseBalance);
+    if (maxSend === 0n) return;
+    const s = formatZen(maxSend, 18).replace(/,/g, "");
+    setInput(s);
+    x.setAmountWei(maxSend);
   };
 
   const canPrimary =
