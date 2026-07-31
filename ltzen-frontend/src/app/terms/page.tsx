@@ -91,7 +91,7 @@ export default function TermsPage() {
           These Terms &amp; Conditions (<Strong>&ldquo;Terms&rdquo;</Strong>) form a binding
           agreement between you (<Strong>&ldquo;you&rdquo;</Strong>,{" "}
           <Strong>&ldquo;your&rdquo;</Strong>, or <Strong>&ldquo;User&rdquo;</Strong>) and{" "}
-          <Strong>[Operator Legal Entity]</Strong> (<Strong>&ldquo;we&rdquo;</Strong>,{" "}
+          <Strong>Lighter.IM Protocol</Strong> (<Strong>&ldquo;we&rdquo;</Strong>,{" "}
           <Strong>&ldquo;us&rdquo;</Strong>, <Strong>&ldquo;our&rdquo;</Strong>, or the{" "}
           <Strong>&ldquo;Operator&rdquo;</Strong>) governing your access to and use of:
         </P>
