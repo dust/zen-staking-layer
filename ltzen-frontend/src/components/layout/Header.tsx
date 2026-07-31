@@ -3,7 +3,7 @@ import Image from "next/image";
 import { ChainSwitcher } from "./ChainSwitcher";
 import { WalletButton } from "./WalletButton";
 import { TxBadge } from "./TxBadge";
-import { NAV_ITEMS } from "./nav";
+import { HeaderNav } from "./HeaderNav";
 
 /**
  * Top bar (uiux §2.1): logo + primary nav + ChainSwitcher + WalletButton.
@@ -22,17 +22,7 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:text-white"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <HeaderNav />
 
         <div className="ml-auto flex items-center gap-3">
           <TxBadge />

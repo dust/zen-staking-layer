@@ -13,7 +13,7 @@ import {
 } from "@/hooks/useRedeemToBase";
 import { isActionAvailable } from "@/lib/chainGating";
 import { copy } from "@/lib/copy";
-import { formatZen, formatZenAmount } from "@/lib/format";
+import { formatZen, formatZenAmount, formatShares } from "@/lib/format";
 import { Card } from "@/components/common/Card";
 import { ChainGuide } from "@/components/common/ChainGuide";
 import { GaslessFeePanel } from "@/components/common/GaslessFeePanel";
@@ -179,7 +179,7 @@ export function RedeemToBaseWizard() {
         <div className="mt-4 rounded-lg border border-brand-green/20 bg-brand-green/[0.06] px-3 py-2 text-sm text-zinc-200">
           {copy.redeemToBase.creditedLabel}:{" "}
           <span className="font-mono text-brand-green">
-            {formatZenAmount(x.credited, 4)} {copy.units.zen}
+            {formatZenAmount(x.credited, 4)}
           </span>
           {x.creditedBaseReceive !== undefined && x.creditedBaseReceive < x.credited ? (
             <p className="mt-1 text-xs text-zinc-400">
@@ -200,7 +200,7 @@ export function RedeemToBaseWizard() {
               <span>{copy.redeemToBase.amountLabel}</span>
               <span>
                 {copy.redeemToBase.holdings}:{" "}
-                {x.ltBalance !== undefined ? formatZenAmount(x.ltBalance, 4) : "—"}
+                {x.ltBalance !== undefined ? formatShares(x.ltBalance) : "—"}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-white/[0.12] bg-white/[0.02] px-3 py-2.5 focus-within:border-brand-green/50">

@@ -188,7 +188,7 @@ export function CrossChainStakeWizard() {
         <div className="mt-4 rounded-lg border border-brand-green/20 bg-brand-green/[0.06] px-3 py-2 text-sm text-zinc-200">
           {copy.crossStake.creditedLabel}:{" "}
           <span className="font-mono text-brand-green">
-            {formatZenAmount(x.credited, 4)} {copy.units.zen}
+            {formatZenAmount(x.credited, 4)}
           </span>
         </div>
       ) : null}
