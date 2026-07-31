@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "./nav";
+import { NAV_ITEMS, isNavActive } from "./nav";
 
 /**
  * Desktop primary nav (≥md). Active tab uses weight + brand underline (not color alone),
@@ -14,8 +14,7 @@ export function HeaderNav() {
   return (
     <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
       {NAV_ITEMS.map((item) => {
-        const active =
-          item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        const active = isNavActive(pathname, item.href);
         return (
           <Link
             key={item.href}

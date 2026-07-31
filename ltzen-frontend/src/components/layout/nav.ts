@@ -13,3 +13,15 @@ export const NAV_ITEMS = [
   { href: "/redeem-to-base", label: "To Base" },
   { href: "/transparency", label: "Transparency" },
 ] as const;
+
+/**
+ * Active-route check shared by HeaderNav + BottomTabBar.
+ *
+ * Do NOT use bare `pathname.startsWith(href)` — `/stake-crosschain` would light up
+ * both Stake and From Base, and `/redeem-to-base` both Redeem and To Base.
+ * Exact match, or a true nested path under `href/` (e.g. `/stake/foo`).
+ */
+export function isNavActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}

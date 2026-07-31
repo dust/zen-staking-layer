@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_ITEMS } from "./nav";
+import { NAV_ITEMS, isNavActive } from "./nav";
 
 /**
  * BottomTabBar (uiux §9) — mobile-only (<md) bottom navigation. Fixed, safe-area aware, with
@@ -31,8 +31,7 @@ export function BottomTabBar() {
     >
       <ul className="mx-auto flex max-w-md items-stretch justify-between px-1">
         {NAV_ITEMS.map((item) => {
-          const active =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = isNavActive(pathname, item.href);
           return (
             <li key={item.href} className="flex-1">
               <Link
