@@ -203,7 +203,11 @@ export function useCrossChainStake() {
 
   const signCredit = useCallback(
     async (assetsOverride?: bigint) => {
-      const assets = assetsOverride ?? amountWei;
+      const raw = assetsOverride ?? amountWei;
+      // OFT sharedDecimals=6 drops sub-1e12 wei; InboundStation requires
+      // compose `assets` == OFTComposeMsgCodec.amountLD (post-dust). Sign the
+      // truncated amount so EIP-712 / compose / adapter.send stay aligned.
+      const assets = raw !== undefined ? truncateOftAmountLD(raw) : undefined;
       if (!account || !inboundStation || !assets) return;
       setAmountWei(assets);
       setError(undefined);
@@ -297,19 +301,29 @@ export function useCrossChainStake() {
 
       setPhase("bridging");
       push({ id: TOAST_ID, tone: "pending", message: copy.crossStake.bridging });
+      // Must match CreditFromCompose.assets (already truncated in signCredit).
+      const bridgeAmountLD = truncateOftAmountLD(amountWei!);
+      if (bridgeAmountLD === 0n) {
+        throw new Error("amount too small after OFT dust truncation");
+      }
+      if (bridgeAmountLD !== amountWei) {
+        // Stale signature from a pre-fix dusty amount — force re-sign.
+        throw new Error(
+          "amount has OFT dust vs signed credit; re-sign CreditFromCompose",
+        );
+      }
       const composeMsg = encodeStationComposePayloadV1({
         owner: account!,
-        assets: amountWei!,
+        assets: bridgeAmountLD,
         nonce: creditNonce!,
         deadline: creditDeadline!,
         signature: creditSig!,
       });
       const extraOptions = buildOftSendComposeOptions();
-      const bridgeAmountLD = truncateOftAmountLD(amountWei!);
       const sendParam = {
         dstEid: dstEid!,
         to: addressToBytes32(inboundStation!),
-        amountLD: amountWei!,
+        amountLD: bridgeAmountLD,
         minAmountLD: bridgeAmountLD,
         extraOptions,
         composeMsg,
