@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 // Fill these in before public launch (see docs/legal/terms-and-conditions.md).
-const LAST_UPDATED = "[DATE]";
+const LAST_UPDATED = "2026-08-01";
 const VERSION = "1.0 (Phase 1 — Horizen hub + Base spoke)";
 
 function H2({ children }: { children: React.ReactNode }) {
@@ -75,14 +75,6 @@ export default function TermsPage() {
         <p className="mt-2 text-xs text-zinc-500">
           Last updated: {LAST_UPDATED} · Version {VERSION}
         </p>
-        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-relaxed text-amber-200/80">
-          These Terms are a starting template pending legal review and are not legal advice. They
-          reflect the stLighter / ltZEN protocol and align with the{" "}
-          <ExtLink href="https://horizen.io/staking-terms">
-            Horizen Foundation&apos;s ZEN Staking Terms
-          </ExtLink>
-          , on top of which this protocol is built.
-        </div>
       </header>
 
       <div className="pb-4">
