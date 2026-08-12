@@ -174,7 +174,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Run Slither
-        uses: crytic/slither-action@6ef3a33e56de4e8f59488cf60858b5c1bf4967c0 # v0.3.0
+        uses: crytic/slither-action@b52cc1cbfee9ca3e8722dd5224299d16c9a6b80f # v0.4.2
         id: slither # Required to reference this step in the next step.
         with:
           fail-on: none # Required to avoid failing the CI run regardless of findings.
