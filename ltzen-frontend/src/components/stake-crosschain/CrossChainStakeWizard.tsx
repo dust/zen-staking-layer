@@ -103,8 +103,20 @@ export function CrossChainStakeWizard() {
     );
   }
 
-  // On Horizen with no credit yet: show guide. With credit, allow stake/withdraw without forcing Base.
-  if (!available && x.credited === 0n) {
+  // Cold visit on Horizen → guide to Base. Mid-flow (esp. EIP-712 on Horizen) keeps the wizard so
+  // we don't show "Switch to Base" over the wallet Confirm Sign prompt.
+  const midFlow =
+    x.credited > 0n ||
+    x.amountWei !== undefined ||
+    Boolean(x.creditSig) ||
+    Boolean(x.bridgeTxHash) ||
+    x.phase === "signing" ||
+    x.phase === "approving" ||
+    x.phase === "bridging" ||
+    x.phase === "waiting" ||
+    x.phase === "staking" ||
+    x.phase === "withdrawing";
+  if (!available && !midFlow) {
     return <ChainGuide action="crossChainStake" />;
   }
 
@@ -229,6 +241,11 @@ export function CrossChainStakeWizard() {
             </button>
           </div>
           <p className="mt-2 text-xs text-zinc-500">{copy.crossStake.creditNote}</p>
+          {x.phase === "signing" ? (
+            <p className="mt-2 text-sm text-brand-green/90">
+              {copy.crossStake.confirmWalletSign}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

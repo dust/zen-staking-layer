@@ -85,7 +85,7 @@ export const copy = {
     pausedBanner: "Deposits are temporarily paused. Redeeming and viewing are unaffected.",
     stakeFromBaseCta: "Stake from Base instead →",
     noFaucetOnHorizen:
-      "Horizen ZEN is a native OFT — there's no faucet here. Mint test ZEN on Base, then stake via From Base (or bridge ZEN to Horizen first).",
+      "Horizen ZEN is a native OFT —  you can bridge ZEN to Horizen on Base, then stake via From Base (or bridge ZEN to Horizen first).",
   },
 
   // Cross-chain stake (Base ERC20 ZEN → OFTAdapter → InboundStation → StLighter). Path B; Wave A.
@@ -120,6 +120,8 @@ export const copy = {
     signingWithdraw: "Confirm wallet tx to withdraw credited ZEN…",
     withdrawConfirmed: "Credited ZEN withdrawn to Horizen.",
     signingCredit: "Switch to Horizen if needed, then sign credit authorization…",
+    confirmWalletSign:
+      "Confirm the credit signature in your wallet (Horizen). Stay on Horizen until the prompt completes — do not switch to Base yet.",
     creditSigned: "Credit authorization signed.",
     approvingAdapter: "Approve ZEN for the OFT adapter…",
     bridging: "Sending ZEN via OFT adapter…",
